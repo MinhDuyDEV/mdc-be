@@ -10,7 +10,9 @@ export const redisProvider = {
   inject: [ConfigService],
   useFactory: (configService: ConfigService<AppConfig, true>): RedisClient => {
     const redisUrl = configService.get('redisUrl', { infer: true });
-    const commandTimeout = configService.get('healthRedisTimeoutMs', { infer: true });
+    const commandTimeout = configService.get('healthRedisTimeoutMs', {
+      infer: true,
+    });
     const options: RedisOptions = {
       lazyConnect: true,
       enableOfflineQueue: false,

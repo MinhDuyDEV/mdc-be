@@ -1,7 +1,12 @@
 import { BadRequestException, HttpStatus } from '@nestjs/common';
 import { of, lastValueFrom } from 'rxjs';
 import { ApiExceptionFilter } from './errors';
-import { CursorPaginationQueryDto, createApiResponse, Public, IS_PUBLIC_ROUTE } from './index';
+import {
+  CursorPaginationQueryDto,
+  createApiResponse,
+  Public,
+  IS_PUBLIC_ROUTE,
+} from './index';
 import { ApiResponseInterceptor } from './response';
 
 describe('CommonModule primitives', () => {
@@ -20,7 +25,9 @@ describe('CommonModule primitives', () => {
         getRequest: () => ({ path: '/api/v1/example' }),
       }),
     } as never;
-    const result = await lastValueFrom(interceptor.intercept(context, { handle: () => of({ ok: true }) }));
+    const result = await lastValueFrom(
+      interceptor.intercept(context, { handle: () => of({ ok: true }) }),
+    );
 
     expect(result).toEqual({ data: { ok: true } });
   });
@@ -32,7 +39,9 @@ describe('CommonModule primitives', () => {
         getRequest: () => ({ path: '/' }),
       }),
     } as never;
-    const result = await lastValueFrom(interceptor.intercept(context, { handle: () => of('Hello World!') }));
+    const result = await lastValueFrom(
+      interceptor.intercept(context, { handle: () => of('Hello World!') }),
+    );
 
     expect(result).toBe('Hello World!');
   });
@@ -48,7 +57,13 @@ describe('CommonModule primitives', () => {
       }),
     } as never;
 
-    filter.catch(new BadRequestException({ message: 'Invalid input', details: { field: 'email' } }), host);
+    filter.catch(
+      new BadRequestException({
+        message: 'Invalid input',
+        details: { field: 'email' },
+      }),
+      host,
+    );
 
     expect(status).toHaveBeenCalledWith(HttpStatus.BAD_REQUEST);
     expect(json).toHaveBeenCalledWith({

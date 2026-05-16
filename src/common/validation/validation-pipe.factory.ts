@@ -1,4 +1,8 @@
-import { BadRequestException, ValidationPipe, type ValidationPipeOptions } from '@nestjs/common';
+import {
+  BadRequestException,
+  ValidationPipe,
+  type ValidationPipeOptions,
+} from '@nestjs/common';
 import { type ValidationError } from 'class-validator';
 
 export const defaultValidationPipeOptions: ValidationPipeOptions = {
@@ -17,7 +21,9 @@ export const defaultValidationPipeOptions: ValidationPipeOptions = {
     }),
 };
 
-export function createValidationPipe(options: ValidationPipeOptions = {}): ValidationPipe {
+export function createValidationPipe(
+  options: ValidationPipeOptions = {},
+): ValidationPipe {
   return new ValidationPipe({
     ...defaultValidationPipeOptions,
     ...options,

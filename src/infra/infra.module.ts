@@ -16,6 +16,12 @@ import { RedisHealthService, redisProvider } from './redis';
   ],
   controllers: [HealthController],
   providers: [PrismaService, redisProvider, RedisHealthService, HealthService],
-  exports: [ConfigModule, PrismaService, redisProvider, RedisHealthService, HealthService],
+  exports: [
+    ConfigModule,
+    PrismaService,
+    redisProvider,
+    RedisHealthService,
+    HealthService,
+  ],
 })
 export class InfraModule {}

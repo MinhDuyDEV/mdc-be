@@ -78,3 +78,14 @@ Started: 2026-05-16
   - `npm run typecheck`: PASS.
   - `npm run build`: PASS.
   - `curl -fsS http://localhost:3000/`: PENDING until Docker-backed dependencies allow the app to start.
+
+## testing-1 — 2026-05-16
+
+- Expanded e2e coverage for root compatibility, health live/ready with overridden providers, Helmet header, `/api/v1` prefix behavior, success envelope, validation error envelope, and body limit rejection.
+- Fixed error filter to preserve custom validation error code/details and map HTTP parser status errors.
+- Verification:
+  - `npm test`: PASS (18/18 tests).
+  - `npm run test:e2e`: PASS (7/7 tests).
+  - `npm run lint`: PASS after autofix.
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.

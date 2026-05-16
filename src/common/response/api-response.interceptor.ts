@@ -1,18 +1,24 @@
 import {
-  CallHandler,
-  ExecutionContext,
+  type CallHandler,
+  type ExecutionContext,
   Injectable,
-  NestInterceptor,
+  type NestInterceptor,
 } from '@nestjs/common';
-import { Observable, map } from 'rxjs';
-import { createApiResponse, isApiSuccessResponse, type ApiSuccessResponse } from './api-response.types';
+import { map, type Observable } from 'rxjs';
+import {
+  type ApiSuccessResponse,
+  createApiResponse,
+  isApiSuccessResponse,
+} from './api-response.types';
 
 const BYPASS_PATHS = new Set(['/', '/health/live', '/health/ready']);
 
 @Injectable()
 export class ApiResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
-    const request = context.switchToHttp().getRequest<{ url?: string; path?: string }>();
+    const request = context
+      .switchToHttp()
+      .getRequest<{ url?: string; path?: string }>();
     const requestPath = request.path ?? request.url?.split('?')[0] ?? '';
 
     if (BYPASS_PATHS.has(requestPath)) {
@@ -20,7 +26,7 @@ export class ApiResponseInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      map((value: unknown): ApiSuccessResponse | unknown => {
+      map((value: unknown): ApiSuccessResponse => {
         if (isApiSuccessResponse(value)) {
           return value;
         }

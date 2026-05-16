@@ -68,7 +68,10 @@ export function validateEnv(env: RawEnv): AppConfig {
     bodyUrlencodedLimit: parseBodyLimit(env, 'BODY_URLENCODED_LIMIT'),
     databaseUrl: requireString(env, 'DATABASE_URL'),
     redisUrl: requireString(env, 'REDIS_URL'),
-    healthDatabaseTimeoutMs: parsePositiveInteger(env, 'HEALTH_DATABASE_TIMEOUT_MS'),
+    healthDatabaseTimeoutMs: parsePositiveInteger(
+      env,
+      'HEALTH_DATABASE_TIMEOUT_MS',
+    ),
     healthRedisTimeoutMs: parsePositiveInteger(env, 'HEALTH_REDIS_TIMEOUT_MS'),
   };
 }

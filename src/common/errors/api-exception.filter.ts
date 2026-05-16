@@ -1,11 +1,11 @@
 import {
-  ArgumentsHost,
+  type ArgumentsHost,
   Catch,
-  ExceptionFilter,
+  type ExceptionFilter,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
-import { type ApiErrorResponse } from './error-response.types';
+import type { ApiErrorResponse } from './error-response.types';
 
 interface ErrorResponseRequest {
   headers?: Record<string, string | string[] | undefined>;
@@ -17,7 +17,11 @@ interface ErrorResponseReply {
   json(body: ApiErrorResponse): void;
 }
 
-function normalizeDetails(response: string | object): { message: string; details?: unknown; code?: string } {
+function normalizeDetails(response: string | object): {
+  message: string;
+  details?: unknown;
+  code?: string;
+} {
   if (typeof response === 'string') {
     return { message: response };
   }
@@ -30,12 +34,38 @@ function normalizeDetails(response: string | object): { message: string; details
       ? rawMessage
       : 'Request failed';
   const rawError = responseRecord.error;
+  const rawCode = responseRecord.code;
 
   return {
     message,
-    details: responseRecord,
-    code: typeof rawError === 'string' ? rawError.toUpperCase().replaceAll(' ', '_') : undefined,
+    details:
+      typeof rawCode === 'string' ? responseRecord.details : responseRecord,
+    code:
+      typeof rawCode === 'string'
+        ? rawCode
+        : typeof rawError === 'string'
+          ? rawError.toUpperCase().replaceAll(' ', '_')
+          : undefined,
   };
+}
+
+function isHttpErrorLike(
+  exception: unknown,
+): exception is { status?: number; statusCode?: number; message?: string } {
+  return (
+    typeof exception === 'object' &&
+    exception !== null &&
+    ('status' in exception || 'statusCode' in exception)
+  );
+}
+
+function getHttpErrorStatus(exception: {
+  status?: number;
+  statusCode?: number;
+}): number {
+  return (
+    exception.statusCode ?? exception.status ?? HttpStatus.INTERNAL_SERVER_ERROR
+  );
 }
 
 function getRequestId(request: ErrorResponseRequest): string | undefined {
@@ -54,20 +84,33 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const response = http.getResponse<ErrorResponseReply>();
     const request = http.getRequest<ErrorResponseRequest>();
 
-    const status = exception instanceof HttpException
-      ? exception.getStatus()
-      : HttpStatus.INTERNAL_SERVER_ERROR;
+    const status =
+      exception instanceof HttpException
+        ? exception.getStatus()
+        : isHttpErrorLike(exception)
+          ? getHttpErrorStatus(exception)
+          : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const normalized = exception instanceof HttpException
-      ? normalizeDetails(exception.getResponse())
-      : { message: 'Internal server error' };
+    const normalized =
+      exception instanceof HttpException
+        ? normalizeDetails(exception.getResponse())
+        : isHttpErrorLike(exception)
+          ? {
+              code: HttpStatus[status] ?? 'HTTP_ERROR',
+              message: exception.message ?? 'Request failed',
+            }
+          : { message: 'Internal server error' };
 
     const body: ApiErrorResponse = {
       error: {
         code: normalized.code ?? HttpStatus[status] ?? 'INTERNAL_SERVER_ERROR',
         message: normalized.message,
-        ...(normalized.details === undefined ? {} : { details: normalized.details }),
-        ...(getRequestId(request) === undefined ? {} : { requestId: getRequestId(request) }),
+        ...(normalized.details === undefined
+          ? {}
+          : { details: normalized.details }),
+        ...(getRequestId(request) === undefined
+          ? {}
+          : { requestId: getRequestId(request) }),
       },
     };
 
