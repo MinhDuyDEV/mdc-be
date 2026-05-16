@@ -1,0 +1,105 @@
+# Progress Log
+
+Bead: mdc-be-fj0
+Started: 2026-05-16
+
+## Codebase Patterns
+
+- Current repo is a bare NestJS 11 starter.
+- Root smoke route lives in src/app.controller.ts and src/app.service.ts.
+- App wiring starts in src/app.module.ts; bootstrap is src/main.ts.
+
+---
+
+<!-- Task logs below - APPEND ONLY -->
+
+## dependencies-1 — 2026-05-16
+
+- Approved dependency checkpoint: @nestjs/config, @nestjs/terminus, @prisma/client, ioredis, helmet, class-validator, class-transformer, prisma.
+- Added package scripts: typecheck, prisma:validate, prisma:generate, prisma:migrate, prisma:migrate:deploy, db:reset.
+- Verification:
+  - RED `npm run typecheck`: failed before script existed as expected.
+  - GREEN `npm run typecheck`: PASS.
+  - `npm run prisma:validate`: expected BLOCKED until prisma/schema.prisma exists.
+  - `npm run prisma:generate`: expected BLOCKED until prisma/schema.prisma exists.
+- Note: `npm install -D prisma` reported 3 moderate npm audit vulnerabilities; not remediated in Phase 0A because `npm audit fix` may alter dependencies beyond approved scope.
+
+## tooling-1 — 2026-05-16
+
+- Enabled `noImplicitAny` and `strictBindCallApply` in `tsconfig.json`.
+- Verification:
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
+
+## infra-1 — 2026-05-16
+
+- Added safe `.env.example` and Docker Compose services for Postgres and Redis only.
+- Verification:
+  - RED `docker compose config`: failed before compose file existed as expected.
+  - GREEN `docker compose config`: PASS.
+  - `docker compose up -d postgres redis && docker compose ps postgres redis`: BLOCKED because Docker daemon is not running at `/Users/minhduydev/.docker/run/docker.sock`.
+
+## common-1 — 2026-05-16
+
+- Added CommonModule primitives for response envelopes, error envelopes, pagination DTO/meta, validation pipe factory, auth placeholders, and policy contracts.
+- Verification:
+  - `npm test -- common.spec.ts`: PASS (5/5 tests).
+  - `npm run typecheck`: PASS.
+  - `npm test`: PASS (6/6 tests).
+
+## database-1 — 2026-05-16
+
+- Added Prisma schema for exactly six foundational model families: users, refresh tokens, audit logs, outbox events, outbox dead letters, and idempotency keys.
+- Added baseline migration SQL generated via `prisma migrate diff --from-empty --to-schema-datamodel`.
+- Applied deviation Rule 3: pinned `prisma` and `@prisma/client` to 6.19.3 because Prisma 7.8 rejects datasource URLs in `schema.prisma` and would require unapproved driver-adapter dependencies.
+- Verification:
+  - Initial `prisma validate`/`generate`: failed under Prisma 7.8 due removed datasource URL support.
+  - `DATABASE_URL=... npm run prisma:validate`: PASS after Prisma 6.19.3 pin.
+  - `DATABASE_URL=... npm run prisma:generate`: PASS after Prisma 6.19.3 pin.
+  - `DATABASE_URL=... npm run prisma:migrate -- --name init_baseline`: BLOCKED because Postgres is unreachable while Docker daemon is not running.
+  - `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`: PASS and migration file synced to generated diff.
+
+## infra-2 — 2026-05-16
+
+- Added InfraModule with typed ConfigModule validation, Prisma lifecycle service, Redis provider/health service, and health controller/service.
+- Wired InfraModule and CommonModule into AppModule.
+- Verification:
+  - `npm test -- validate-env.spec.ts health.service.spec.ts prisma.service.spec.ts`: PASS (12/12 tests).
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
+  - `curl -fsS http://localhost:3000/health/live`: PENDING until app and Docker-backed dependencies are running.
+  - `curl -fsS http://localhost:3000/health/ready`: PENDING until app and Docker-backed dependencies are running.
+
+## api-1 — 2026-05-16
+
+- Added `configureApp` bootstrap helper for Helmet, body limits, validation pipe, error/response envelope primitives, CORS, `/api/v1` global prefix exclusions, and shutdown hooks.
+- Updated `main.ts` to use typed config port and handled bootstrap rejection to avoid floating promise behavior.
+- Verification:
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
+  - `curl -fsS http://localhost:3000/`: PENDING until Docker-backed dependencies allow the app to start.
+
+## testing-1 — 2026-05-16
+
+- Expanded e2e coverage for root compatibility, health live/ready with overridden providers, Helmet header, `/api/v1` prefix behavior, success envelope, validation error envelope, and body limit rejection.
+- Fixed error filter to preserve custom validation error code/details and map HTTP parser status errors.
+- Verification:
+  - `npm test`: PASS (18/18 tests).
+  - `npm run test:e2e`: PASS (7/7 tests).
+  - `npm run lint`: PASS after autofix.
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
+
+## review-fixes — 2026-05-16
+
+- Fixed review findings: applied Postgres readiness timeout, scoped Redis timeout to health ping instead of shared client command timeout, removed unused Terminus dependency/module import, exported Redis token explicitly, cleaned e2e env after each test, added error filter branch tests, added pagination validation rejection tests, cached request ID lookup.
+- Verification after fixes:
+  - `npm install`: PASS.
+  - `DATABASE_URL=... npm run prisma:validate`: PASS.
+  - `DATABASE_URL=... npm run prisma:generate`: PASS.
+  - `npm run typecheck`: PASS.
+  - `npm run lint`: PASS.
+  - `npm run build`: PASS.
+  - `npm test`: PASS (22/22 tests).
+  - `npm run test:e2e`: PASS (7/7 tests).
+  - Docker/curl smoke remains BLOCKED until Docker daemon is running.

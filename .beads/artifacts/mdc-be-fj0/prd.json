@@ -1,0 +1,245 @@
+{
+  "beadId": "mdc-be-fj0",
+  "prdName": "phase-0a-repo-baseline-core-infra",
+  "tasks": [
+    {
+      "id": "dependencies-1",
+      "category": "dependencies",
+      "description": "The repository has the Phase 0A npm dependencies and package scripts required for typechecking, Prisma validation/generation/migration, and test database workflows.",
+      "steps": [
+        "npm install",
+        "npm run typecheck",
+        "npm run prisma:validate",
+        "npm run prisma:generate"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [],
+        "parallel": false,
+        "conflicts_with": [
+          "tooling-1",
+          "database-1",
+          "infra-2",
+          "common-1",
+          "api-1"
+        ],
+        "files": [
+          "package.json",
+          "package-lock.json"
+        ]
+      }
+    },
+    {
+      "id": "tooling-1",
+      "category": "tooling",
+      "description": "The TypeScript configuration rejects implicit any and unsafe bind/call/apply usage while all starter and test code still typechecks.",
+      "steps": [
+        "npm run typecheck",
+        "npm run build"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "dependencies-1"
+        ],
+        "parallel": false,
+        "conflicts_with": [
+          "api-1",
+          "testing-1"
+        ],
+        "files": [
+          "tsconfig.json",
+          "src/**/*.ts",
+          "test/**/*.ts"
+        ]
+      }
+    },
+    {
+      "id": "infra-1",
+      "category": "infra",
+      "description": "Safe example environment variables and Docker Compose services allow local Postgres and Redis to start for Phase 0A development.",
+      "steps": [
+        "docker compose config",
+        "docker compose up -d postgres redis && docker compose ps postgres redis"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "dependencies-1"
+        ],
+        "parallel": true,
+        "conflicts_with": [
+          "infra-2"
+        ],
+        "files": [
+          ".env.example",
+          "docker-compose.yml"
+        ]
+      }
+    },
+    {
+      "id": "database-1",
+      "category": "database",
+      "description": "The Prisma schema and first migration define only the Phase 0 foundational tables with appropriate indexes, constraints, and relation integrity.",
+      "steps": [
+        "npm run prisma:validate",
+        "npm run prisma:generate",
+        "npm run prisma:migrate"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "dependencies-1",
+          "infra-1"
+        ],
+        "parallel": false,
+        "conflicts_with": [
+          "infra-2"
+        ],
+        "files": [
+          "prisma/schema.prisma",
+          "prisma/migrations/**/migration.sql",
+          "package.json"
+        ]
+      }
+    },
+    {
+      "id": "infra-2",
+      "category": "infra",
+      "description": "InfraModule exposes typed config, Prisma, Redis, and health/live/readiness support for Postgres and Redis without product-domain logic.",
+      "steps": [
+        "npm run typecheck",
+        "npm run build",
+        "curl -fsS http://localhost:3000/health/live",
+        "curl -fsS http://localhost:3000/health/ready"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "dependencies-1",
+          "infra-1",
+          "database-1"
+        ],
+        "parallel": false,
+        "conflicts_with": [
+          "api-1",
+          "testing-1"
+        ],
+        "files": [
+          "src/infra/**",
+          "src/app.module.ts",
+          ".env.example",
+          "package.json"
+        ]
+      }
+    },
+    {
+      "id": "common-1",
+      "category": "common",
+      "description": "CommonModule provides validation, response and error envelope helpers, cursor pagination types, auth placeholder decorators, and policy placeholder contracts for future modules.",
+      "steps": [
+        "npm run typecheck",
+        "npm test"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "dependencies-1"
+        ],
+        "parallel": true,
+        "conflicts_with": [
+          "api-1",
+          "testing-1"
+        ],
+        "files": [
+          "src/common/**",
+          "src/app.module.ts"
+        ]
+      }
+    },
+    {
+      "id": "api-1",
+      "category": "api",
+      "description": "The Nest bootstrap applies global validation, /api/v1, CORS, request body limits, Helmet security headers, typed port config, and preserves the root smoke route.",
+      "steps": [
+        "npm run typecheck",
+        "npm run build",
+        "curl -fsS http://localhost:3000/"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "infra-2",
+          "common-1",
+          "tooling-1"
+        ],
+        "parallel": false,
+        "conflicts_with": [
+          "testing-1"
+        ],
+        "files": [
+          "src/main.ts",
+          "src/app.module.ts",
+          "src/app.controller.ts",
+          "src/app.service.ts"
+        ]
+      }
+    },
+    {
+      "id": "testing-1",
+      "category": "testing",
+      "description": "Unit and e2e tests verify root smoke compatibility, health endpoints, config validation failure behavior, and API envelope/error primitives.",
+      "steps": [
+        "npm test",
+        "npm run test:e2e",
+        "npm run lint"
+      ],
+      "passes": false,
+      "metadata": {
+        "depends_on": [
+          "infra-2",
+          "common-1",
+          "api-1"
+        ],
+        "parallel": false,
+        "conflicts_with": [],
+        "files": [
+          "src/**/*.spec.ts",
+          "test/app.e2e-spec.ts",
+          "test/jest-e2e.json"
+        ]
+      }
+    }
+  ],
+  "context": {
+    "patterns": [
+      "src/app.module.ts imports modules and wires application controllers/providers",
+      "src/main.ts is the bootstrap point for NestFactory and app.listen",
+      "test/app.e2e-spec.ts is the existing e2e smoke test entry"
+    ],
+    "keyFiles": [
+      "package.json",
+      "tsconfig.json",
+      ".env.example",
+      "docker-compose.yml",
+      "prisma/schema.prisma",
+      "src/app.module.ts",
+      "src/main.ts",
+      "src/infra/**",
+      "src/common/**",
+      "test/app.e2e-spec.ts"
+    ],
+    "nonGoals": [
+      "Phase 0B adapters: MinIO/S3, Elasticsearch, SMTP/Nodemailer, structured logging, OpenTelemetry, and search facade",
+      "Phase 0C work: outbox processors, runtime role separation, Dockerfile, CI, deploy automation, and runbooks",
+      "Product domain implementation such as auth, users, profiles, companies, jobs, feed, messaging, and billing"
+    ]
+  },
+  "beadMetadata": {
+    "depends_on": [],
+    "parallel": false,
+    "conflicts_with": [],
+    "blocks": [],
+    "estimated_hours": 3
+  }
+}
