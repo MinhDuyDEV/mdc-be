@@ -1,0 +1,25 @@
+# Progress Log
+
+Bead: mdc-be-fj0
+Started: 2026-05-16
+
+## Codebase Patterns
+
+- Current repo is a bare NestJS 11 starter.
+- Root smoke route lives in src/app.controller.ts and src/app.service.ts.
+- App wiring starts in src/app.module.ts; bootstrap is src/main.ts.
+
+---
+
+<!-- Task logs below - APPEND ONLY -->
+
+## dependencies-1 — 2026-05-16
+
+- Approved dependency checkpoint: @nestjs/config, @nestjs/terminus, @prisma/client, ioredis, helmet, class-validator, class-transformer, prisma.
+- Added package scripts: typecheck, prisma:validate, prisma:generate, prisma:migrate, prisma:migrate:deploy, db:reset.
+- Verification:
+  - RED `npm run typecheck`: failed before script existed as expected.
+  - GREEN `npm run typecheck`: PASS.
+  - `npm run prisma:validate`: expected BLOCKED until prisma/schema.prisma exists.
+  - `npm run prisma:generate`: expected BLOCKED until prisma/schema.prisma exists.
+- Note: `npm install -D prisma` reported 3 moderate npm audit vulnerabilities; not remediated in Phase 0A because `npm audit fix` may alter dependencies beyond approved scope.
