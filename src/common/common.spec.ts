@@ -1,11 +1,16 @@
-import { BadRequestException, HttpStatus } from '@nestjs/common';
-import { of, lastValueFrom } from 'rxjs';
+import {
+  type ArgumentMetadata,
+  BadRequestException,
+  HttpStatus,
+} from '@nestjs/common';
+import { lastValueFrom, of } from 'rxjs';
 import { ApiExceptionFilter } from './errors';
 import {
   CursorPaginationQueryDto,
   createApiResponse,
-  Public,
+  createValidationPipe,
   IS_PUBLIC_ROUTE,
+  Public,
 } from './index';
 import { ApiResponseInterceptor } from './response';
 
@@ -76,11 +81,71 @@ describe('CommonModule primitives', () => {
     });
   });
 
+  it('maps plain errors to an internal server error envelope', () => {
+    const filter = new ApiExceptionFilter();
+    const json = jest.fn();
+    const status = jest.fn(() => ({ json }));
+    const host = {
+      switchToHttp: () => ({
+        getResponse: () => ({ status }),
+        getRequest: () => ({}),
+      }),
+    } as never;
+
+    filter.catch(new Error('do not leak this'), host);
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.INTERNAL_SERVER_ERROR);
+    expect(json).toHaveBeenCalledWith({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'Internal server error',
+      },
+    });
+  });
+
+  it('maps HTTP parser errors to the public error envelope', () => {
+    const filter = new ApiExceptionFilter();
+    const json = jest.fn();
+    const status = jest.fn(() => ({ json }));
+    const host = {
+      switchToHttp: () => ({
+        getResponse: () => ({ status }),
+        getRequest: () => ({}),
+      }),
+    } as never;
+
+    filter.catch(
+      { statusCode: 413, message: 'request entity too large' },
+      host,
+    );
+
+    expect(status).toHaveBeenCalledWith(HttpStatus.PAYLOAD_TOO_LARGE);
+    expect(json).toHaveBeenCalledWith({
+      error: {
+        code: 'PAYLOAD_TOO_LARGE',
+        message: 'request entity too large',
+      },
+    });
+  });
+
   it('defines cursor pagination defaults and placeholder auth/policy exports', () => {
     const pagination = new CursorPaginationQueryDto();
 
     expect(pagination.limit).toBe(20);
     expect(typeof Public).toBe('function');
     expect(typeof IS_PUBLIC_ROUTE).toBe('symbol');
+  });
+
+  it('rejects invalid cursor pagination query values', async () => {
+    const pipe = createValidationPipe();
+    const metadata: ArgumentMetadata = {
+      type: 'query',
+      metatype: CursorPaginationQueryDto,
+      data: '',
+    };
+
+    await expect(pipe.transform({ limit: '0' }, metadata)).rejects.toThrow();
+    await expect(pipe.transform({ limit: '200' }, metadata)).rejects.toThrow();
+    await expect(pipe.transform({ cursor: 123 }, metadata)).rejects.toThrow();
   });
 });

@@ -1,14 +1,24 @@
+import type { ConfigService } from '@nestjs/config';
+import type { AppConfig } from '../config';
 import type { PrismaService } from '../prisma';
 import type { RedisHealthService } from '../redis';
 import { HealthService } from './health.service';
 
 describe('HealthService', () => {
   function createService(
-    options: { postgresFails?: boolean; redisFails?: boolean } = {},
+    options: {
+      postgresFails?: boolean;
+      postgresHangs?: boolean;
+      redisFails?: boolean;
+    } = {},
   ) {
     const queryRaw = jest.fn(() => {
       if (options.postgresFails) {
         return Promise.reject(new Error('postgres down'));
+      }
+
+      if (options.postgresHangs) {
+        return new Promise(() => undefined);
       }
 
       return Promise.resolve([{ '?column?': 1 }]);
@@ -27,9 +37,12 @@ describe('HealthService', () => {
     const redisHealth = {
       ping,
     } as unknown as RedisHealthService;
+    const configService = {
+      get: jest.fn(() => 1),
+    } as unknown as ConfigService<AppConfig, true>;
 
     return {
-      service: new HealthService(prisma, redisHealth),
+      service: new HealthService(prisma, redisHealth, configService),
       queryRaw,
       ping,
     };
@@ -78,6 +91,18 @@ describe('HealthService', () => {
       checks: {
         postgres: { status: 'up' },
         redis: { status: 'down' },
+      },
+    });
+  });
+
+  it('fails closed when Postgres readiness hangs past the configured timeout', async () => {
+    const { service } = createService({ postgresHangs: true });
+
+    await expect(service.ready()).resolves.toEqual({
+      status: 'error',
+      checks: {
+        postgres: { status: 'down' },
+        redis: { status: 'up' },
       },
     });
   });

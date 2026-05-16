@@ -101,6 +101,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
             }
           : { message: 'Internal server error' };
 
+    const requestId = getRequestId(request);
     const body: ApiErrorResponse = {
       error: {
         code: normalized.code ?? HttpStatus[status] ?? 'INTERNAL_SERVER_ERROR',
@@ -108,9 +109,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
         ...(normalized.details === undefined
           ? {}
           : { details: normalized.details }),
-        ...(getRequestId(request) === undefined
-          ? {}
-          : { requestId: getRequestId(request) }),
+        ...(requestId === undefined ? {} : { requestId }),
       },
     };
 

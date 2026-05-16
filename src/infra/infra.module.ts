@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { TerminusModule } from '@nestjs/terminus';
 import { validateEnv } from './config';
 import { HealthController, HealthService } from './health';
 import { PrismaService } from './prisma';
-import { RedisHealthService, redisProvider } from './redis';
+import { REDIS_CLIENT, RedisHealthService, redisProvider } from './redis';
 
 @Module({
   imports: [
@@ -12,14 +11,13 @@ import { RedisHealthService, redisProvider } from './redis';
       isGlobal: true,
       validate: validateEnv,
     }),
-    TerminusModule,
   ],
   controllers: [HealthController],
   providers: [PrismaService, redisProvider, RedisHealthService, HealthService],
   exports: [
     ConfigModule,
     PrismaService,
-    redisProvider,
+    REDIS_CLIENT,
     RedisHealthService,
     HealthService,
   ],

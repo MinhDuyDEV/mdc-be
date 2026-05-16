@@ -31,8 +31,10 @@ class ContractController {
 
 describe('AppController (e2e)', () => {
   let app: INestApplication<App> | undefined;
+  let originalEnv: NodeJS.ProcessEnv;
 
   beforeEach(async () => {
+    originalEnv = { ...process.env };
     process.env.NODE_ENV = 'test';
     process.env.PORT = '3000';
     process.env.CORS_ORIGINS = 'http://localhost:3000,http://localhost:5173';
@@ -81,6 +83,7 @@ describe('AppController (e2e)', () => {
   afterEach(async () => {
     await app?.close();
     app = undefined;
+    process.env = originalEnv;
   });
 
   it('/ (GET) preserves the root smoke response', () => {

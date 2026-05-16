@@ -89,3 +89,17 @@ Started: 2026-05-16
   - `npm run lint`: PASS after autofix.
   - `npm run typecheck`: PASS.
   - `npm run build`: PASS.
+
+## review-fixes — 2026-05-16
+
+- Fixed review findings: applied Postgres readiness timeout, scoped Redis timeout to health ping instead of shared client command timeout, removed unused Terminus dependency/module import, exported Redis token explicitly, cleaned e2e env after each test, added error filter branch tests, added pagination validation rejection tests, cached request ID lookup.
+- Verification after fixes:
+  - `npm install`: PASS.
+  - `DATABASE_URL=... npm run prisma:validate`: PASS.
+  - `DATABASE_URL=... npm run prisma:generate`: PASS.
+  - `npm run typecheck`: PASS.
+  - `npm run lint`: PASS.
+  - `npm run build`: PASS.
+  - `npm test`: PASS (22/22 tests).
+  - `npm run test:e2e`: PASS (7/7 tests).
+  - Docker/curl smoke remains BLOCKED until Docker daemon is running.

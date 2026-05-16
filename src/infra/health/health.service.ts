@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma';
 import { RedisHealthService } from '../redis';
+import { type AppConfig } from '../config';
 
 export interface HealthDependencyStatus {
   status: 'up' | 'down';
@@ -20,6 +22,7 @@ export class HealthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redisHealth: RedisHealthService,
+    private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
   live(): HealthResponse {
@@ -31,12 +34,37 @@ export class HealthService {
     };
   }
 
+  private async withTimeout<T>(
+    operation: () => Promise<T>,
+    timeoutMs: number,
+  ): Promise<T> {
+    let timeout: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        operation(),
+        new Promise<never>((_resolve, reject) => {
+          timeout = setTimeout(
+            () => reject(new Error('Health check timed out')),
+            timeoutMs,
+          );
+        }),
+      ]);
+    } finally {
+      if (timeout !== undefined) {
+        clearTimeout(timeout);
+      }
+    }
+  }
+
   async ready(): Promise<HealthResponse> {
     const checks: HealthResponse['checks'] = {};
     let status: HealthResponse['status'] = 'ok';
 
     try {
-      await this.prisma.$queryRaw`SELECT 1`;
+      await this.withTimeout(
+        () => this.prisma.$queryRaw`SELECT 1`,
+        this.configService.get('healthDatabaseTimeoutMs', { infer: true }),
+      );
       checks.postgres = { status: 'up' };
     } catch {
       checks.postgres = { status: 'down' };
