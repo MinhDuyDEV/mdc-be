@@ -38,3 +38,11 @@ Started: 2026-05-16
   - RED `docker compose config`: failed before compose file existed as expected.
   - GREEN `docker compose config`: PASS.
   - `docker compose up -d postgres redis && docker compose ps postgres redis`: BLOCKED because Docker daemon is not running at `/Users/minhduydev/.docker/run/docker.sock`.
+
+## common-1 — 2026-05-16
+
+- Added CommonModule primitives for response envelopes, error envelopes, pagination DTO/meta, validation pipe factory, auth placeholders, and policy contracts.
+- Verification:
+  - `npm test -- common.spec.ts`: PASS (5/5 tests).
+  - `npm run typecheck`: PASS.
+  - `npm test`: PASS (6/6 tests).
