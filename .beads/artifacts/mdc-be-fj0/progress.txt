@@ -30,3 +30,11 @@ Started: 2026-05-16
 - Verification:
   - `npm run typecheck`: PASS.
   - `npm run build`: PASS.
+
+## infra-1 — 2026-05-16
+
+- Added safe `.env.example` and Docker Compose services for Postgres and Redis only.
+- Verification:
+  - RED `docker compose config`: failed before compose file existed as expected.
+  - GREEN `docker compose config`: PASS.
+  - `docker compose up -d postgres redis && docker compose ps postgres redis`: BLOCKED because Docker daemon is not running at `/Users/minhduydev/.docker/run/docker.sock`.
