@@ -23,3 +23,10 @@ Started: 2026-05-16
   - `npm run prisma:validate`: expected BLOCKED until prisma/schema.prisma exists.
   - `npm run prisma:generate`: expected BLOCKED until prisma/schema.prisma exists.
 - Note: `npm install -D prisma` reported 3 moderate npm audit vulnerabilities; not remediated in Phase 0A because `npm audit fix` may alter dependencies beyond approved scope.
+
+## tooling-1 — 2026-05-16
+
+- Enabled `noImplicitAny` and `strictBindCallApply` in `tsconfig.json`.
+- Verification:
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
