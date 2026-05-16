@@ -58,3 +58,14 @@ Started: 2026-05-16
   - `DATABASE_URL=... npm run prisma:generate`: PASS after Prisma 6.19.3 pin.
   - `DATABASE_URL=... npm run prisma:migrate -- --name init_baseline`: BLOCKED because Postgres is unreachable while Docker daemon is not running.
   - `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`: PASS and migration file synced to generated diff.
+
+## infra-2 — 2026-05-16
+
+- Added InfraModule with typed ConfigModule validation, Prisma lifecycle service, Redis provider/health service, and health controller/service.
+- Wired InfraModule and CommonModule into AppModule.
+- Verification:
+  - `npm test -- validate-env.spec.ts health.service.spec.ts prisma.service.spec.ts`: PASS (12/12 tests).
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
+  - `curl -fsS http://localhost:3000/health/live`: PENDING until app and Docker-backed dependencies are running.
+  - `curl -fsS http://localhost:3000/health/ready`: PENDING until app and Docker-backed dependencies are running.
