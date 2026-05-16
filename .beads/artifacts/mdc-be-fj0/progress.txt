@@ -46,3 +46,15 @@ Started: 2026-05-16
   - `npm test -- common.spec.ts`: PASS (5/5 tests).
   - `npm run typecheck`: PASS.
   - `npm test`: PASS (6/6 tests).
+
+## database-1 — 2026-05-16
+
+- Added Prisma schema for exactly six foundational model families: users, refresh tokens, audit logs, outbox events, outbox dead letters, and idempotency keys.
+- Added baseline migration SQL generated via `prisma migrate diff --from-empty --to-schema-datamodel`.
+- Applied deviation Rule 3: pinned `prisma` and `@prisma/client` to 6.19.3 because Prisma 7.8 rejects datasource URLs in `schema.prisma` and would require unapproved driver-adapter dependencies.
+- Verification:
+  - Initial `prisma validate`/`generate`: failed under Prisma 7.8 due removed datasource URL support.
+  - `DATABASE_URL=... npm run prisma:validate`: PASS after Prisma 6.19.3 pin.
+  - `DATABASE_URL=... npm run prisma:generate`: PASS after Prisma 6.19.3 pin.
+  - `DATABASE_URL=... npm run prisma:migrate -- --name init_baseline`: BLOCKED because Postgres is unreachable while Docker daemon is not running.
+  - `npx prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script`: PASS and migration file synced to generated diff.
