@@ -69,3 +69,12 @@ Started: 2026-05-16
   - `npm run build`: PASS.
   - `curl -fsS http://localhost:3000/health/live`: PENDING until app and Docker-backed dependencies are running.
   - `curl -fsS http://localhost:3000/health/ready`: PENDING until app and Docker-backed dependencies are running.
+
+## api-1 — 2026-05-16
+
+- Added `configureApp` bootstrap helper for Helmet, body limits, validation pipe, error/response envelope primitives, CORS, `/api/v1` global prefix exclusions, and shutdown hooks.
+- Updated `main.ts` to use typed config port and handled bootstrap rejection to avoid floating promise behavior.
+- Verification:
+  - `npm run typecheck`: PASS.
+  - `npm run build`: PASS.
+  - `curl -fsS http://localhost:3000/`: PENDING until Docker-backed dependencies allow the app to start.
