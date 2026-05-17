@@ -1,4 +1,4 @@
-export { STORAGE_CLIENT, type StorageClient } from './storage.constants.js';
-export { StorageHealthService } from './storage.health.js';
-export { storageProvider } from './storage.provider.js';
-export { StorageService } from './storage.service.js';
+export { STORAGE_CLIENT, type StorageClient } from './storage.constants';
+export { StorageHealthService } from './storage.health';
+export { storageProvider } from './storage.provider';
+export { StorageService } from './storage.service';

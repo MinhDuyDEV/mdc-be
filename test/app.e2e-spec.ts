@@ -45,6 +45,25 @@ describe('AppController (e2e)', () => {
     process.env.REDIS_URL = 'redis://localhost:6379';
     process.env.HEALTH_DATABASE_TIMEOUT_MS = '1000';
     process.env.HEALTH_REDIS_TIMEOUT_MS = '1000';
+    // Phase 0B env
+    process.env.S3_ENDPOINT = 'http://localhost:9000';
+    process.env.S3_REGION = 'us-east-1';
+    process.env.S3_ACCESS_KEY_ID = 'minioadmin';
+    process.env.S3_SECRET_ACCESS_KEY = 'minioadmin';
+    process.env.S3_BUCKET = 'mdc-media';
+    process.env.S3_FORCE_PATH_STYLE = 'true';
+    process.env.HEALTH_S3_TIMEOUT_MS = '1000';
+    process.env.ELASTICSEARCH_NODE = 'http://localhost:9200';
+    process.env.HEALTH_ELASTICSEARCH_TIMEOUT_MS = '1000';
+    process.env.SMTP_HOST = 'smtp.example.com';
+    process.env.SMTP_PORT = '587';
+    process.env.SMTP_SECURE = 'false';
+    process.env.SMTP_USER = 'test';
+    process.env.SMTP_PASS = 'test';
+    process.env.EMAIL_FROM = 'test@example.com';
+    process.env.HEALTH_MAILER_TIMEOUT_MS = '1000';
+    process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
 
     const { AppModule } = jest.requireActual<{ AppModule: Type<unknown> }>(
       './../src/app.module',
@@ -52,26 +71,105 @@ describe('AppController (e2e)', () => {
     const { configureApp } = jest.requireActual<{
       configureApp: (app: INestApplication) => void;
     }>('./../src/bootstrap');
+    const { HealthService } = jest.requireActual<{
+      HealthService: Type<unknown>;
+    }>('./../src/infra/health');
     const { PrismaService } = jest.requireActual<{
       PrismaService: Type<unknown>;
     }>('./../src/infra/prisma');
-    const { RedisHealthService } = jest.requireActual<{
-      RedisHealthService: Type<unknown>;
-    }>('./../src/infra/redis');
+    const { StorageService } = jest.requireActual<{
+      StorageService: Type<unknown>;
+    }>('./../src/infra/storage');
+    const { StorageHealthService } = jest.requireActual<{
+      StorageHealthService: Type<unknown>;
+    }>('./../src/infra/storage');
+    const { SearchEngineService } = jest.requireActual<{
+      SearchEngineService: Type<unknown>;
+    }>('./../src/infra/search-engine');
+    const { SearchEngineHealthService } = jest.requireActual<{
+      SearchEngineHealthService: Type<unknown>;
+    }>('./../src/infra/search-engine');
+    const { MailerService } = jest.requireActual<{
+      MailerService: Type<unknown>;
+    }>('./../src/infra/mailer');
+    const { MailerHealthService } = jest.requireActual<{
+      MailerHealthService: Type<unknown>;
+    }>('./../src/infra/mailer');
+    const { SearchIndexService } = jest.requireActual<{
+      SearchIndexService: Type<unknown>;
+    }>('./../src/search');
+    const { SearchService } = jest.requireActual<{
+      SearchService: Type<unknown>;
+    }>('./../src/search');
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
       controllers: [ContractController],
     })
+      .overrideProvider(HealthService)
+      .useValue({
+        live: () => ({
+          status: 'ok',
+          checks: { api: { status: 'up' } },
+        }),
+        ready: () => ({
+          status: 'ok',
+          checks: {
+            postgres: { status: 'up' },
+            redis: { status: 'up' },
+            s3: { status: 'up' },
+            elasticsearch: { status: 'up' },
+            mail: { status: 'up' },
+          },
+        }),
+      })
       .overrideProvider(PrismaService)
       .useValue({
         $connect: jest.fn(),
         $disconnect: jest.fn(),
         $queryRaw: jest.fn().mockResolvedValue([{ '?column?': 1 }]),
       })
-      .overrideProvider(RedisHealthService)
+      .overrideProvider(StorageService)
+      .useValue({
+        generatePresignedUploadUrl: jest.fn(),
+        generatePresignedDownloadUrl: jest.fn(),
+        headBucket: jest.fn(),
+      })
+      .overrideProvider(StorageHealthService)
       .useValue({
         ping: jest.fn().mockResolvedValue(undefined),
+      })
+      .overrideProvider(SearchEngineService)
+      .useValue({
+        checkClusterHealth: jest.fn(),
+        index: jest.fn(),
+        search: jest.fn(),
+        deleteByQuery: jest.fn(),
+      })
+      .overrideProvider(SearchEngineHealthService)
+      .useValue({
+        ping: jest.fn().mockResolvedValue(undefined),
+      })
+      .overrideProvider(MailerService)
+      .useValue({
+        sendMail: jest.fn().mockResolvedValue(undefined),
+        verifyConnection: jest.fn().mockResolvedValue(undefined),
+      })
+      .overrideProvider(MailerHealthService)
+      .useValue({
+        ping: jest.fn().mockResolvedValue(undefined),
+      })
+      .overrideProvider(SearchService)
+      .useValue({
+        toTsQuery: jest.fn().mockReturnValue(''),
+        tsVectorExpression: jest.fn().mockReturnValue(''),
+        tsQueryExpression: jest.fn().mockReturnValue(''),
+      })
+      .overrideProvider(SearchIndexService)
+      .useValue({
+        indexDocument: jest.fn(),
+        deleteByQuery: jest.fn(),
+        search: jest.fn(),
       })
       .compile();
 
@@ -114,6 +212,9 @@ describe('AppController (e2e)', () => {
       checks: {
         postgres: { status: 'up' },
         redis: { status: 'up' },
+        s3: { status: 'up' },
+        elasticsearch: { status: 'up' },
+        mail: { status: 'up' },
       },
     });
   });
