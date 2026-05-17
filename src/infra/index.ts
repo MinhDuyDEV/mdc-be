@@ -2,5 +2,8 @@ export * from './config';
 export * from './health';
 export * from './infra.module';
 export * from './logger';
+export * from './mailer';
 export * from './prisma';
 export * from './redis';
+export * from './search-engine';
+export * from './storage';
