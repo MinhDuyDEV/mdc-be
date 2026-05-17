@@ -223,16 +223,17 @@ describe('HealthController (e2e)', () => {
     describe('when Postgres is down', () => {
       beforeEach(async () => {
         app = await createApp({
-          ready: () => ({
-            status: 'error',
-            checks: {
-              postgres: { status: 'down' },
-              redis: { status: 'up' },
-              s3: { status: 'up' },
-              elasticsearch: { status: 'up' },
-              mail: { status: 'up' },
-            },
-          }),
+          ready: () =>
+            Promise.resolve({
+              status: 'error',
+              checks: {
+                postgres: { status: 'down' },
+                redis: { status: 'up' },
+                s3: { status: 'up' },
+                elasticsearch: { status: 'up' },
+                mail: { status: 'up' },
+              },
+            }),
         });
       });
 
@@ -251,16 +252,17 @@ describe('HealthController (e2e)', () => {
     describe('when Redis is down', () => {
       beforeEach(async () => {
         app = await createApp({
-          ready: () => ({
-            status: 'error',
-            checks: {
-              postgres: { status: 'up' },
-              redis: { status: 'down' },
-              s3: { status: 'up' },
-              elasticsearch: { status: 'up' },
-              mail: { status: 'up' },
-            },
-          }),
+          ready: () =>
+            Promise.resolve({
+              status: 'error',
+              checks: {
+                postgres: { status: 'up' },
+                redis: { status: 'down' },
+                s3: { status: 'up' },
+                elasticsearch: { status: 'up' },
+                mail: { status: 'up' },
+              },
+            }),
         });
       });
 
@@ -279,16 +281,17 @@ describe('HealthController (e2e)', () => {
     describe('when both Postgres and Redis are down', () => {
       beforeEach(async () => {
         app = await createApp({
-          ready: () => ({
-            status: 'error',
-            checks: {
-              postgres: { status: 'down' },
-              redis: { status: 'down' },
-              s3: { status: 'up' },
-              elasticsearch: { status: 'up' },
-              mail: { status: 'up' },
-            },
-          }),
+          ready: () =>
+            Promise.resolve({
+              status: 'error',
+              checks: {
+                postgres: { status: 'down' },
+                redis: { status: 'down' },
+                s3: { status: 'up' },
+                elasticsearch: { status: 'up' },
+                mail: { status: 'up' },
+              },
+            }),
         });
       });
 
