@@ -3,31 +3,18 @@ import {
   type ExecutionContext,
   Injectable,
 } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
-import { IS_PUBLIC_ROUTE } from '../auth/public.decorator';
 
 /**
  * Placeholder authentication guard.
  *
- * In Phase 0A this guard allows all requests through. The public-route
- * metadata check is wired so that `@Public()` continues to be recognised.
+ * In Phase 0A this guard allows all requests through.
  * Real JWT verification will be added in Phase 0C (Auth module).
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector) {}
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   canActivate(context: ExecutionContext): boolean {
-    const isPublic = this.reflector.getAllAndOverride<boolean>(
-      IS_PUBLIC_ROUTE,
-      [context.getHandler(), context.getClass()],
-    );
-
-    // Phase 0A: all requests are allowed; @Public() routes are just honoured.
-    if (isPublic) {
-      return true;
-    }
-
+    // Phase 0A: all requests are allowed.
     return true;
   }
 }
