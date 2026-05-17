@@ -1,4 +1,4 @@
-import { type AppConfig } from './app-config';
+import type { AppConfig } from './app-config';
 
 const VALID_NODE_ENVS = new Set(['development', 'test', 'production']);
 const BODY_LIMIT_PATTERN = /^\d+(b|kb|mb)$/i;
@@ -12,6 +12,10 @@ function requireString(env: RawEnv, key: string): string {
   }
 
   return value;
+}
+
+function parseOptionalString(env: RawEnv, key: string): string {
+  return env[key]?.trim() ?? '';
 }
 
 function parsePort(raw: string): number {
@@ -30,6 +34,13 @@ function parsePositiveInteger(env: RawEnv, key: string): number {
   }
 
   return value;
+}
+
+function parseBoolean(env: RawEnv, key: string): boolean {
+  const value = requireString(env, key).toLowerCase();
+  if (value === 'true') return true;
+  if (value === 'false') return false;
+  throw new Error(`${key} must be "true" or "false"`);
 }
 
 function parseBodyLimit(env: RawEnv, key: string): string {
@@ -73,5 +84,33 @@ export function validateEnv(env: RawEnv): AppConfig {
       'HEALTH_DATABASE_TIMEOUT_MS',
     ),
     healthRedisTimeoutMs: parsePositiveInteger(env, 'HEALTH_REDIS_TIMEOUT_MS'),
+    // S3 / MinIO
+    s3Endpoint: requireString(env, 'S3_ENDPOINT'),
+    s3Region: requireString(env, 'S3_REGION'),
+    s3AccessKeyId: requireString(env, 'S3_ACCESS_KEY_ID'),
+    s3SecretAccessKey: requireString(env, 'S3_SECRET_ACCESS_KEY'),
+    s3Bucket: requireString(env, 'S3_BUCKET'),
+    s3ForcePathStyle: parseBoolean(env, 'S3_FORCE_PATH_STYLE'),
+    healthS3TimeoutMs: parsePositiveInteger(env, 'HEALTH_S3_TIMEOUT_MS'),
+    // Elasticsearch
+    elasticsearchNode: requireString(env, 'ELASTICSEARCH_NODE'),
+    healthElasticsearchTimeoutMs: parsePositiveInteger(
+      env,
+      'HEALTH_ELASTICSEARCH_TIMEOUT_MS',
+    ),
+    // SMTP (host, user, pass are optional in dev for streamTransport fallback)
+    smtpHost: parseOptionalString(env, 'SMTP_HOST'),
+    smtpPort: parsePort(requireString(env, 'SMTP_PORT')),
+    smtpSecure: parseBoolean(env, 'SMTP_SECURE'),
+    smtpUser: parseOptionalString(env, 'SMTP_USER'),
+    smtpPass: parseOptionalString(env, 'SMTP_PASS'),
+    emailFrom: requireString(env, 'EMAIL_FROM'),
+    healthMailerTimeoutMs: parsePositiveInteger(
+      env,
+      'HEALTH_MAILER_TIMEOUT_MS',
+    ),
+    // OpenTelemetry
+    otelServiceName: requireString(env, 'OTEL_SERVICE_NAME'),
+    otelExporterOtlpEndpoint: requireString(env, 'OTEL_EXPORTER_OTLP_ENDPOINT'),
   };
 }

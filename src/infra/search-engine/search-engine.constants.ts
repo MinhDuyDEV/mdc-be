@@ -1,0 +1,1 @@
+export const SEARCH_ENGINE_CLIENT = Symbol('SEARCH_ENGINE_CLIENT');
