@@ -63,6 +63,7 @@ import {
     MailerService,
     MailerHealthService,
     HealthService,
+    LoggerModule,
   ],
 })
 export class InfraModule {}

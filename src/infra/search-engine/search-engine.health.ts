@@ -1,11 +1,11 @@
-import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../config';
 import { SEARCH_ENGINE_CLIENT } from './search-engine.constants';
 import type { SearchEngineClient } from './search-engine.provider';
 
 @Injectable()
-export class SearchEngineHealthService implements OnApplicationShutdown {
+export class SearchEngineHealthService {
   constructor(
     @Inject(SEARCH_ENGINE_CLIENT) private readonly client: SearchEngineClient,
     private readonly configService: ConfigService<AppConfig, true>,
@@ -45,9 +45,5 @@ export class SearchEngineHealthService implements OnApplicationShutdown {
         clearTimeout(timeout);
       }
     }
-  }
-
-  async onApplicationShutdown(): Promise<void> {
-    await this.client.close();
   }
 }

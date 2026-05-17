@@ -1,11 +1,13 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable } from '@nestjs/common';
+
+const VALID_COLUMN_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 /**
  * Search result from Postgres full-text fallback or Elasticsearch.
  */
 export interface SearchResult<T = Record<string, unknown>> {
-	items: T[];
-	total: number;
+  items: T[];
+  total: number;
 }
 
 /**
@@ -16,31 +18,37 @@ export interface SearchResult<T = Record<string, unknown>> {
  */
 @Injectable()
 export class SearchService {
-	/**
-	 * Build a tsquery parameter for Postgres `plainto_tsquery`.
-	 */
-	toTsQuery(term: string): string {
-		const sanitized = term.replace(/['";\\]/g, "").trim();
-		if (sanitized.length === 0) return "";
-		return sanitized.split(/\s+/).join(" & ");
-	}
+  /**
+   * Build a tsquery parameter for Postgres `plainto_tsquery`.
+   */
+  toTsQuery(term: string): string {
+    const sanitized = term.replace(/['";\\]/g, '').trim();
+    if (sanitized.length === 0) return '';
+    return sanitized.split(/\s+/).join(' & ');
+  }
 
-	/**
-	 * Build a SQL fragment for `to_tsvector` across multiple columns.
-	 */
-	tsVectorExpression(columns: string[]): string {
-		const coalesced = columns
-			.map((col) => `coalesce(${col}, '')`)
-			.join(" || ' ' || ");
-		return `to_tsvector('english', ${coalesced})`;
-	}
+  /**
+   * Build a SQL fragment for `to_tsvector` across multiple columns.
+   * Column names are validated against a strict identifier pattern to prevent injection.
+   */
+  tsVectorExpression(columns: string[]): string {
+    for (const col of columns) {
+      if (!VALID_COLUMN_NAME.test(col)) {
+        throw new Error(`Invalid column name: ${col}`);
+      }
+    }
+    const coalesced = columns
+      .map((col) => `coalesce(${col}, '')`)
+      .join(" || ' ' || ");
+    return `to_tsvector('english', ${coalesced})`;
+  }
 
-	/**
-	 * Wrap a query with `plainto_tsquery` and a similarity threshold.
-	 */
-	tsQueryExpression(term: string): string {
-		const query = this.toTsQuery(term);
-		if (query.length === 0) return "plainto_tsquery('english', '')";
-		return `plainto_tsquery('english', '${query}')`;
-	}
+  /**
+   * Wrap a query with `plainto_tsquery` and a similarity threshold.
+   */
+  tsQueryExpression(term: string): string {
+    const query = this.toTsQuery(term);
+    if (query.length === 0) return "plainto_tsquery('english', '')";
+    return `plainto_tsquery('english', '${query}')`;
+  }
 }

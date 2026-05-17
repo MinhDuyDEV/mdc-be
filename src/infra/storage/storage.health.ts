@@ -1,4 +1,4 @@
-import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../config';
 import type { StorageClient } from './storage.constants';
@@ -6,7 +6,7 @@ import { STORAGE_CLIENT } from './storage.constants';
 import { StorageService } from './storage.service';
 
 @Injectable()
-export class StorageHealthService implements OnApplicationShutdown {
+export class StorageHealthService {
   constructor(
     @Inject(STORAGE_CLIENT) private readonly s3: StorageClient,
     private readonly configService: ConfigService<AppConfig, true>,
