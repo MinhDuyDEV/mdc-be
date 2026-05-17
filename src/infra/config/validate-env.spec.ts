@@ -66,6 +66,13 @@ describe("validateEnv", () => {
 			otelServiceName: "mdc-be-test",
 			otelExporterOtlpEndpoint: "http://localhost:4318",
 			appProcessRole: "all",
+			outboxPollIntervalMs: 5000,
+			outboxBatchSize: 20,
+			outboxMaxRetries: 5,
+			outboxBaseBackoffMs: 1000,
+			outboxMaxBackoffMs: 60000,
+			outboxLeaseTimeoutMs: 60000,
+			outboxHealthLagThreshold: 100,
 		});
 	});
 
@@ -142,6 +149,47 @@ describe("validateEnv", () => {
 		it("should parse explicit process role", () => {
 			const config = validateEnv({ ...validEnv, APP_PROCESS_ROLE: "worker" });
 			expect(config.appProcessRole).toBe("worker");
+		});
+	});
+
+	describe("Outbox config", () => {
+		it("should parse outbox poll interval", () => {
+			const config = validateEnv({
+				...validEnv,
+				OUTBOX_POLL_INTERVAL_MS: "10000",
+			});
+			expect(config.outboxPollIntervalMs).toBe(10000);
+		});
+
+		it("should default all outbox config when unset", () => {
+			const config = validateEnv(validEnv);
+			expect(config.outboxPollIntervalMs).toBe(5000);
+			expect(config.outboxBatchSize).toBe(20);
+			expect(config.outboxMaxRetries).toBe(5);
+			expect(config.outboxBaseBackoffMs).toBe(1000);
+			expect(config.outboxMaxBackoffMs).toBe(60000);
+			expect(config.outboxLeaseTimeoutMs).toBe(60000);
+			expect(config.outboxHealthLagThreshold).toBe(100);
+		});
+
+		it("should parse all outbox env vars", () => {
+			const config = validateEnv({
+				...validEnv,
+				OUTBOX_POLL_INTERVAL_MS: "3000",
+				OUTBOX_BATCH_SIZE: "50",
+				OUTBOX_MAX_RETRIES: "10",
+				OUTBOX_BASE_BACKOFF_MS: "2000",
+				OUTBOX_MAX_BACKOFF_MS: "120000",
+				OUTBOX_LEASE_TIMEOUT_MS: "30000",
+				OUTBOX_HEALTH_LAG_THRESHOLD: "200",
+			});
+			expect(config.outboxPollIntervalMs).toBe(3000);
+			expect(config.outboxBatchSize).toBe(50);
+			expect(config.outboxMaxRetries).toBe(10);
+			expect(config.outboxBaseBackoffMs).toBe(2000);
+			expect(config.outboxMaxBackoffMs).toBe(120000);
+			expect(config.outboxLeaseTimeoutMs).toBe(30000);
+			expect(config.outboxHealthLagThreshold).toBe(200);
 		});
 	});
 });

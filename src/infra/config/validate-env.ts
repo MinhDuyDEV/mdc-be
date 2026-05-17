@@ -42,6 +42,21 @@ function parsePositiveInteger(env: RawEnv, key: string): number {
 	return value;
 }
 
+function parseOptionalPositiveInteger(
+	env: RawEnv,
+	key: string,
+	defaultVal: number,
+): number {
+	const raw = env[key]?.trim();
+	if (raw === undefined || raw === "") return defaultVal;
+	const value = Number(raw);
+	if (!Number.isInteger(value) || value < 1) {
+		throw new Error(`${key} must be a positive integer`);
+	}
+
+	return value;
+}
+
 function parseBoolean(env: RawEnv, key: string): boolean {
 	const value = requireString(env, key).toLowerCase();
 	if (value === "true") return true;
@@ -131,5 +146,37 @@ export function validateEnv(env: RawEnv): AppConfig {
 		otelExporterOtlpEndpoint: requireString(env, "OTEL_EXPORTER_OTLP_ENDPOINT"),
 		// Process role
 		appProcessRole: parseProcessRole(env.APP_PROCESS_ROLE),
+		// Outbox (all with sensible defaults)
+		outboxPollIntervalMs: parseOptionalPositiveInteger(
+			env,
+			"OUTBOX_POLL_INTERVAL_MS",
+			5000,
+		),
+		outboxBatchSize: parseOptionalPositiveInteger(env, "OUTBOX_BATCH_SIZE", 20),
+		outboxMaxRetries: parseOptionalPositiveInteger(
+			env,
+			"OUTBOX_MAX_RETRIES",
+			5,
+		),
+		outboxBaseBackoffMs: parseOptionalPositiveInteger(
+			env,
+			"OUTBOX_BASE_BACKOFF_MS",
+			1000,
+		),
+		outboxMaxBackoffMs: parseOptionalPositiveInteger(
+			env,
+			"OUTBOX_MAX_BACKOFF_MS",
+			60000,
+		),
+		outboxLeaseTimeoutMs: parseOptionalPositiveInteger(
+			env,
+			"OUTBOX_LEASE_TIMEOUT_MS",
+			60000,
+		),
+		outboxHealthLagThreshold: parseOptionalPositiveInteger(
+			env,
+			"OUTBOX_HEALTH_LAG_THRESHOLD",
+			100,
+		),
 	};
 }

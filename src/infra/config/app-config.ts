@@ -34,4 +34,12 @@ export interface AppConfig {
 	otelExporterOtlpEndpoint: string;
 	// Process role
 	appProcessRole: ProcessRole;
+	// Outbox
+	outboxPollIntervalMs: number;
+	outboxBatchSize: number;
+	outboxMaxRetries: number;
+	outboxBaseBackoffMs: number;
+	outboxMaxBackoffMs: number;
+	outboxLeaseTimeoutMs: number;
+	outboxHealthLagThreshold: number;
 }
