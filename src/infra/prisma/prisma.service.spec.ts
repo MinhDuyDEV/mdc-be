@@ -38,14 +38,12 @@ describe('PrismaService', () => {
     expect(result).toBe(txResult);
   });
 
-  it('withTransaction propagates errors from the callback', async () => {
+  it('withTransaction propagates errors from $transaction', async () => {
     const error = new Error('transaction failed');
     jest.spyOn(service, '$transaction').mockRejectedValue(error);
 
     await expect(
-      service.withTransaction(() => {
-        throw error;
-      }),
+      service.withTransaction(() => Promise.resolve({})),
     ).rejects.toThrow('transaction failed');
   });
 });
