@@ -48,6 +48,7 @@ describe("MediaService", () => {
 					useValue: {
 						generatePresignedUploadUrl: jest.fn(),
 						verifyObject: jest.fn(),
+						generatePresignedDownloadUrl: jest.fn(),
 					},
 				},
 			],
@@ -266,6 +267,172 @@ describe("MediaService", () => {
 			await expect(
 				service.confirmUpload({ id: "user-123" } as any, "media-123"),
 			).rejects.toThrow(BadRequestException);
+		});
+	});
+
+	describe("getDownloadUrl", () => {
+		it("should return presigned download URL", async () => {
+			const user = { id: "user-123" };
+			const mediaId = "media-123";
+			const asset = {
+				id: mediaId,
+				ownerId: user.id,
+				filename: "profile.jpg",
+				contentType: "image/jpeg",
+				status: "READY",
+				s3Bucket: "test-bucket",
+				s3Key: "avatar/test-key-profile.jpg",
+			};
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+			jest
+				.spyOn(storage, "generatePresignedDownloadUrl")
+				.mockResolvedValue("https://download-url");
+
+			const result = await service.getDownloadUrl(user as any, mediaId);
+
+			expect(prisma.mediaAsset.findUnique).toHaveBeenCalledWith({
+				where: { id: mediaId },
+			});
+			expect(storage.generatePresignedDownloadUrl).toHaveBeenCalledWith(
+				asset.s3Bucket,
+				asset.s3Key,
+				300,
+			);
+			expect(result).toEqual({
+				mediaId: asset.id,
+				downloadUrl: "https://download-url",
+				expiresIn: 300,
+				filename: asset.filename,
+				contentType: asset.contentType,
+			});
+		});
+
+		it("should throw NotFoundException if asset not found", async () => {
+			jest.spyOn(prisma.mediaAsset, "findUnique").mockResolvedValue(null);
+
+			await expect(
+				service.getDownloadUrl({ id: "user-123" } as any, "missing"),
+			).rejects.toThrow(NotFoundException);
+		});
+
+		it("should throw NotFoundException if not owner", async () => {
+			const asset = {
+				id: "media-123",
+				ownerId: "other-user",
+				status: "READY",
+			};
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+
+			await expect(
+				service.getDownloadUrl({ id: "user-123" } as any, "media-123"),
+			).rejects.toThrow(NotFoundException);
+		});
+
+		it("should throw NotFoundException if status is DELETED", async () => {
+			const asset = {
+				id: "media-123",
+				ownerId: "user-123",
+				status: "DELETED",
+			};
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+
+			await expect(
+				service.getDownloadUrl({ id: "user-123" } as any, "media-123"),
+			).rejects.toThrow(NotFoundException);
+		});
+
+		it("should throw NotFoundException if status is QUARANTINED", async () => {
+			const asset = {
+				id: "media-123",
+				ownerId: "user-123",
+				status: "QUARANTINED",
+			};
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+
+			await expect(
+				service.getDownloadUrl({ id: "user-123" } as any, "media-123"),
+			).rejects.toThrow(NotFoundException);
+		});
+	});
+
+	describe("deleteAsset", () => {
+		it("should mark asset as DELETED", async () => {
+			const user = { id: "user-123" };
+			const mediaId = "media-123";
+			const asset = {
+				id: mediaId,
+				ownerId: user.id,
+				status: "READY",
+			};
+			const updated = { ...asset, status: "DELETED" };
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+			jest.spyOn(prisma.mediaAsset, "update").mockResolvedValue(updated as any);
+
+			const result = await service.deleteAsset(user as any, mediaId);
+
+			expect(prisma.mediaAsset.findUnique).toHaveBeenCalledWith({
+				where: { id: mediaId },
+			});
+			expect(prisma.mediaAsset.update).toHaveBeenCalledWith({
+				where: { id: mediaId },
+				data: { status: "DELETED" },
+			});
+			expect(result.status).toBe("DELETED");
+		});
+
+		it("should throw NotFoundException if asset not found", async () => {
+			jest.spyOn(prisma.mediaAsset, "findUnique").mockResolvedValue(null);
+
+			await expect(
+				service.deleteAsset({ id: "user-123" } as any, "missing"),
+			).rejects.toThrow(NotFoundException);
+		});
+
+		it("should throw NotFoundException if not owner", async () => {
+			const asset = {
+				id: "media-123",
+				ownerId: "other-user",
+				status: "READY",
+			};
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+
+			await expect(
+				service.deleteAsset({ id: "user-123" } as any, "media-123"),
+			).rejects.toThrow(NotFoundException);
+		});
+
+		it("should throw NotFoundException if already deleted", async () => {
+			const asset = {
+				id: "media-123",
+				ownerId: "user-123",
+				status: "DELETED",
+			};
+
+			jest
+				.spyOn(prisma.mediaAsset, "findUnique")
+				.mockResolvedValue(asset as any);
+
+			await expect(
+				service.deleteAsset({ id: "user-123" } as any, "media-123"),
+			).rejects.toThrow(NotFoundException);
 		});
 	});
 });

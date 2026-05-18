@@ -1,6 +1,8 @@
 import {
 	Body,
 	Controller,
+	Delete,
+	Get,
 	HttpCode,
 	HttpStatus,
 	Param,
@@ -33,5 +35,23 @@ export class MediaController {
 		@Body() _dto: ConfirmUploadDto,
 	) {
 		return this.mediaService.confirmUpload(user, id);
+	}
+
+	@Get(":id")
+	@HttpCode(HttpStatus.OK)
+	async getDownloadUrl(
+		@CurrentUser() user: AuthenticatedUser,
+		@Param('id') id: string,
+	) {
+		return this.mediaService.getDownloadUrl(user, id);
+	}
+
+	@Delete(":id")
+	@HttpCode(HttpStatus.OK)
+	async deleteAsset(
+		@CurrentUser() user: AuthenticatedUser,
+		@Param('id') id: string,
+	) {
+		return this.mediaService.deleteAsset(user, id);
 	}
 }

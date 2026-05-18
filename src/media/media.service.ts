@@ -122,4 +122,54 @@ export class MediaService {
 				return this.config.get("mediaResumeMaxSizeBytes", { infer: true });
 		}
 	}
+
+	async getDownloadUrl(user: AuthenticatedUser, mediaId: string) {
+		const asset = await this.prisma.mediaAsset.findUnique({
+			where: { id: mediaId },
+		});
+
+		if (!asset || asset.ownerId !== user.id) {
+			throw new NotFoundException("Media asset not found");
+		}
+
+		if (asset.status === "DELETED" || asset.status === "QUARANTINED") {
+			throw new NotFoundException("Media asset not found");
+		}
+
+		const downloadUrl = await this.storage.generatePresignedDownloadUrl(
+			asset.s3Bucket,
+			asset.s3Key,
+			300,
+		);
+
+		return {
+			mediaId: asset.id,
+			downloadUrl,
+			expiresIn: 300,
+			filename: asset.filename,
+			contentType: asset.contentType,
+		};
+	}
+
+	async deleteAsset(user: AuthenticatedUser, mediaId: string) {
+		const asset = await this.prisma.mediaAsset.findUnique({
+			where: { id: mediaId },
+		});
+
+		if (!asset || asset.ownerId !== user.id) {
+			throw new NotFoundException("Media asset not found");
+		}
+
+		if (asset.status === "DELETED") {
+			throw new NotFoundException("Media asset not found");
+		}
+
+		// Soft delete — keep S3 object, mark status
+		const updated = await this.prisma.mediaAsset.update({
+			where: { id: mediaId },
+			data: { status: "DELETED" },
+		});
+
+		return updated;
+	}
 }
