@@ -1,3 +1,5 @@
+export type ProcessRole = 'api' | 'worker' | 'realtime' | 'all';
+
 export interface AppConfig {
   nodeEnv: 'development' | 'test' | 'production';
   port: number;
@@ -30,4 +32,13 @@ export interface AppConfig {
   // OpenTelemetry
   otelServiceName: string;
   otelExporterOtlpEndpoint: string;
+  // Process role
+  appProcessRole: ProcessRole;
+  // Outbox
+  outboxBatchSize: number;
+  outboxMaxRetries: number;
+  outboxBaseBackoffMs: number;
+  outboxMaxBackoffMs: number;
+  outboxLeaseTimeoutMs: number;
+  outboxHealthLagThreshold: number;
 }

@@ -1,7 +1,13 @@
-import type { AppConfig } from './app-config';
+import type { AppConfig, ProcessRole } from './app-config';
 
 const VALID_NODE_ENVS = new Set(['development', 'test', 'production']);
 const BODY_LIMIT_PATTERN = /^\d+(b|kb|mb)$/i;
+const VALID_PROCESS_ROLES = new Set<ProcessRole>([
+  'api',
+  'worker',
+  'realtime',
+  'all',
+]);
 
 export type RawEnv = Record<string, string | undefined>;
 
@@ -36,6 +42,21 @@ function parsePositiveInteger(env: RawEnv, key: string): number {
   return value;
 }
 
+function parseOptionalPositiveInteger(
+  env: RawEnv,
+  key: string,
+  defaultVal: number,
+): number {
+  const raw = env[key]?.trim();
+  if (raw === undefined || raw === '') return defaultVal;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error(`${key} must be a positive integer`);
+  }
+
+  return value;
+}
+
 function parseBoolean(env: RawEnv, key: string): boolean {
   const value = requireString(env, key).toLowerCase();
   if (value === 'true') return true;
@@ -63,6 +84,17 @@ function parseCorsOrigins(raw: string): string[] {
   }
 
   return origins;
+}
+
+function parseProcessRole(value: string | undefined): ProcessRole {
+  const role = value ?? 'all';
+  if (!VALID_PROCESS_ROLES.has(role as ProcessRole)) {
+    throw new Error(
+      `APP_PROCESS_ROLE must be one of: api, worker, realtime, all (got: ${role})`,
+    );
+  }
+
+  return role as ProcessRole;
 }
 
 export function validateEnv(env: RawEnv): AppConfig {
@@ -112,5 +144,34 @@ export function validateEnv(env: RawEnv): AppConfig {
     // OpenTelemetry
     otelServiceName: requireString(env, 'OTEL_SERVICE_NAME'),
     otelExporterOtlpEndpoint: requireString(env, 'OTEL_EXPORTER_OTLP_ENDPOINT'),
+    // Process role
+    appProcessRole: parseProcessRole(env.APP_PROCESS_ROLE),
+    // Outbox (all with sensible defaults)
+    outboxBatchSize: parseOptionalPositiveInteger(env, 'OUTBOX_BATCH_SIZE', 20),
+    outboxMaxRetries: parseOptionalPositiveInteger(
+      env,
+      'OUTBOX_MAX_RETRIES',
+      5,
+    ),
+    outboxBaseBackoffMs: parseOptionalPositiveInteger(
+      env,
+      'OUTBOX_BASE_BACKOFF_MS',
+      1000,
+    ),
+    outboxMaxBackoffMs: parseOptionalPositiveInteger(
+      env,
+      'OUTBOX_MAX_BACKOFF_MS',
+      60000,
+    ),
+    outboxLeaseTimeoutMs: parseOptionalPositiveInteger(
+      env,
+      'OUTBOX_LEASE_TIMEOUT_MS',
+      60000,
+    ),
+    outboxHealthLagThreshold: parseOptionalPositiveInteger(
+      env,
+      'OUTBOX_HEALTH_LAG_THRESHOLD',
+      100,
+    ),
   };
 }

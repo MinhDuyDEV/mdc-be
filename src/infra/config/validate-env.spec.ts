@@ -65,6 +65,13 @@ describe('validateEnv', () => {
       healthMailerTimeoutMs: 3000,
       otelServiceName: 'mdc-be-test',
       otelExporterOtlpEndpoint: 'http://localhost:4318',
+      appProcessRole: 'all',
+      outboxBatchSize: 20,
+      outboxMaxRetries: 5,
+      outboxBaseBackoffMs: 1000,
+      outboxMaxBackoffMs: 60000,
+      outboxLeaseTimeoutMs: 60000,
+      outboxHealthLagThreshold: 100,
     });
   });
 
@@ -116,5 +123,69 @@ describe('validateEnv', () => {
     expect(result.smtpHost).toBe('');
     expect(result.smtpUser).toBe('');
     expect(result.smtpPass).toBe('');
+  });
+
+  describe('APP_PROCESS_ROLE', () => {
+    it('should accept valid process roles', () => {
+      for (const role of ['api', 'worker', 'realtime', 'all']) {
+        expect(() =>
+          validateEnv({ ...validEnv, APP_PROCESS_ROLE: role }),
+        ).not.toThrow();
+      }
+    });
+
+    it('should reject invalid process roles', () => {
+      expect(() =>
+        validateEnv({ ...validEnv, APP_PROCESS_ROLE: 'invalid' }),
+      ).toThrow(/APP_PROCESS_ROLE/);
+    });
+
+    it("should default to 'all' when unset", () => {
+      const config = validateEnv(validEnv);
+      expect(config.appProcessRole).toBe('all');
+    });
+
+    it('should parse explicit process role', () => {
+      const config = validateEnv({ ...validEnv, APP_PROCESS_ROLE: 'worker' });
+      expect(config.appProcessRole).toBe('worker');
+    });
+  });
+
+  describe('Outbox config', () => {
+    it('should parse outbox batch size', () => {
+      const config = validateEnv({
+        ...validEnv,
+        OUTBOX_BATCH_SIZE: '100',
+      });
+      expect(config.outboxBatchSize).toBe(100);
+    });
+
+    it('should default all outbox config when unset', () => {
+      const config = validateEnv(validEnv);
+      expect(config.outboxBatchSize).toBe(20);
+      expect(config.outboxMaxRetries).toBe(5);
+      expect(config.outboxBaseBackoffMs).toBe(1000);
+      expect(config.outboxMaxBackoffMs).toBe(60000);
+      expect(config.outboxLeaseTimeoutMs).toBe(60000);
+      expect(config.outboxHealthLagThreshold).toBe(100);
+    });
+
+    it('should parse all outbox env vars', () => {
+      const config = validateEnv({
+        ...validEnv,
+        OUTBOX_BATCH_SIZE: '50',
+        OUTBOX_MAX_RETRIES: '10',
+        OUTBOX_BASE_BACKOFF_MS: '2000',
+        OUTBOX_MAX_BACKOFF_MS: '120000',
+        OUTBOX_LEASE_TIMEOUT_MS: '30000',
+        OUTBOX_HEALTH_LAG_THRESHOLD: '200',
+      });
+      expect(config.outboxBatchSize).toBe(50);
+      expect(config.outboxMaxRetries).toBe(10);
+      expect(config.outboxBaseBackoffMs).toBe(2000);
+      expect(config.outboxMaxBackoffMs).toBe(120000);
+      expect(config.outboxLeaseTimeoutMs).toBe(30000);
+      expect(config.outboxHealthLagThreshold).toBe(200);
+    });
   });
 });
