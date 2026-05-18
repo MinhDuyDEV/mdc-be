@@ -1,2 +1,2 @@
-export { ProfilesModule } from "./profiles.module";
-export { ProfilesService } from "./profiles.service";
+export { ProfilesModule } from './profiles.module';
+export { ProfilesService } from './profiles.service';
