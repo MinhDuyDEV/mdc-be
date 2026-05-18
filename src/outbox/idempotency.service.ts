@@ -32,8 +32,7 @@ export class IdempotencyService {
           WHERE scope = ${scope} AND key = ${key}
           FOR UPDATE
         `;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const existing = rows[0];
+        const existing = (rows as Array<Record<string, unknown>>)[0];
         if (existing) return existing;
         throw err; // Re-throw original if no existing row found
       }

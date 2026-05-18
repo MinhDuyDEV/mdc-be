@@ -1,21 +1,33 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
+import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import type { PrismaService } from '../infra/prisma';
+import type { DeadLetterService } from './dead-letter.service';
+
+export interface ClaimedEvent {
+  id: string;
+  eventType: string;
+  payload: unknown;
+  attempts: number;
+}
 
 @Injectable()
 export class OutboxProcessor {
-  private readonly logger = new Logger(OutboxProcessor.name);
   private readonly batchSize: number;
   private readonly maxRetries: number;
   private readonly baseBackoffMs: number;
   private readonly maxBackoffMs: number;
+  private readonly leaseTimeoutMs: number;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<AppConfig, true>,
+    private readonly deadLetter: DeadLetterService,
+    @InjectPinoLogger(OutboxProcessor.name)
+    private readonly logger: PinoLogger,
   ) {
     this.batchSize = this.config.get('outboxBatchSize', { infer: true });
     this.maxRetries = this.config.get('outboxMaxRetries', { infer: true });
@@ -23,6 +35,9 @@ export class OutboxProcessor {
       infer: true,
     });
     this.maxBackoffMs = this.config.get('outboxMaxBackoffMs', { infer: true });
+    this.leaseTimeoutMs = this.config.get('outboxLeaseTimeoutMs', {
+      infer: true,
+    });
   }
 
   @Cron(CronExpression.EVERY_5_SECONDS, {
@@ -31,18 +46,57 @@ export class OutboxProcessor {
   })
   async processOutbox(): Promise<void> {
     try {
+      await this.recoverStaleLocks();
       const events = await this.claimEvents();
-      // TODO: dispatch to handlers in future phases
-      this.logger.debug(
-        `Claimed ${events.length} outbox events for processing`,
-      );
+      if (events.length === 0) return;
+
+      this.logger.debug('Processing %d outbox events', events.length);
+
+      for (const event of events) {
+        try {
+          // TODO: dispatch to domain handlers in future phases
+          await this.markProcessed(event.id);
+          this.logger.debug(
+            'Event %s (%s) marked as processed',
+            event.id,
+            event.eventType,
+          );
+        } catch (err) {
+          const error = err instanceof Error ? err : new Error(String(err));
+          const attempts = await this.getAttempts(event.id);
+
+          if (attempts >= this.maxRetries) {
+            await this.deadLetter.moveToDeadLetter(
+              {
+                id: event.id,
+                eventType: event.eventType,
+                payload: event.payload,
+              },
+              error,
+            );
+            this.logger.warn(
+              'Event %s moved to dead letter after %d attempts',
+              event.id,
+              attempts,
+            );
+          } else {
+            await this.requeueWithBackoff(event.id, attempts);
+            this.logger.debug(
+              'Event %s requeued with backoff (attempt %d/%d)',
+              event.id,
+              attempts,
+              this.maxRetries,
+            );
+          }
+        }
+      }
     } catch (err) {
       // Log but don't rethrow — that would kill the cron job
-      this.logger.error('Outbox processing failed', err);
+      this.logger.error('Outbox processing failed: %s', err);
     }
   }
 
-  async claimEvents(): Promise<any[]> {
+  async claimEvents(): Promise<ClaimedEvent[]> {
     const lockId = randomUUID();
 
     return this.prisma.$transaction(async (tx) => {
@@ -65,17 +119,69 @@ export class OutboxProcessor {
         UPDATE outbox_events
         SET status = 'PROCESSING'::"OutboxEventStatus",
             locked_at = NOW(),
-            locked_by = ${lockId}::uuid,
+            locked_by = ${lockId},
             attempts = attempts + 1
         WHERE id = ANY(${ids}::uuid[])
       `;
 
       // 3. Fetch full rows for the handler
-      return tx.outboxEvent.findMany({
+      const events = (await tx.outboxEvent.findMany({
         where: { id: { in: ids }, lockedBy: lockId },
         orderBy: { createdAt: 'asc' },
-      });
+      })) as ClaimedEvent[];
+      return events;
     });
+  }
+
+  private async recoverStaleLocks(): Promise<void> {
+    try {
+      await this.prisma.$executeRaw`
+        UPDATE outbox_events
+        SET status = 'PENDING'::"OutboxEventStatus",
+            locked_at = NULL,
+            locked_by = NULL
+        WHERE status = 'PROCESSING'::"OutboxEventStatus"
+          AND locked_at < NOW() - INTERVAL '1 millisecond' * ${this.leaseTimeoutMs}
+      `;
+    } catch (err) {
+      this.logger.error('Stale lock recovery failed: %s', err);
+    }
+  }
+
+  private async markProcessed(eventId: string): Promise<void> {
+    await this.prisma.outboxEvent.update({
+      where: { id: eventId },
+      data: {
+        status: 'PROCESSED',
+        processedAt: new Date(),
+        lockedAt: null,
+        lockedBy: null,
+      },
+    });
+  }
+
+  private async requeueWithBackoff(
+    eventId: string,
+    attempts: number,
+  ): Promise<void> {
+    const backoffMs = this.calculateBackoff(attempts);
+    await this.prisma.outboxEvent.update({
+      where: { id: eventId },
+      data: {
+        status: 'PENDING',
+        availableAt: new Date(Date.now() + backoffMs),
+        lockedAt: null,
+        lockedBy: null,
+      },
+    });
+  }
+
+  private async getAttempts(eventId: string): Promise<number> {
+    const event = await this.prisma.outboxEvent.findUnique({
+      where: { id: eventId },
+      select: { attempts: true },
+    });
+    return event?.attempts ?? 0;
   }
 
   private calculateBackoff(attempt: number): number {

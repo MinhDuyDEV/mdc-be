@@ -35,27 +35,29 @@ export class DeadLetterService {
   }
 
   async replay(deadLetterId: string): Promise<void> {
-    const deadLetter = await this.prisma.outboxDeadLetter.findUnique({
-      where: { id: deadLetterId },
-    });
+    await this.prisma.$transaction(async (tx) => {
+      const deadLetter = await tx.outboxDeadLetter.findUnique({
+        where: { id: deadLetterId },
+      });
 
-    if (!deadLetter) {
-      throw new Error(`Dead letter event not found: ${deadLetterId}`);
-    }
+      if (!deadLetter) {
+        throw new Error(`Dead letter event not found: ${deadLetterId}`);
+      }
 
-    // Create a new PENDING event from the dead-letter payload
-    await this.prisma.outboxEvent.create({
-      data: {
-        eventType: deadLetter.eventType,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        payload: deadLetter.payload as any,
-        status: 'PENDING',
-      },
-    });
+      // Create a new PENDING event from the dead-letter payload
+      await tx.outboxEvent.create({
+        data: {
+          eventType: deadLetter.eventType,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          payload: deadLetter.payload as any,
+          status: 'PENDING',
+        },
+      });
 
-    // Remove the dead-letter record
-    await this.prisma.outboxDeadLetter.delete({
-      where: { id: deadLetterId },
+      // Remove the dead-letter record
+      await tx.outboxDeadLetter.delete({
+        where: { id: deadLetterId },
+      });
     });
   }
 }

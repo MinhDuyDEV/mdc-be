@@ -1,4 +1,5 @@
 import { DeadLetterService } from './dead-letter.service';
+
 /* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 
 describe('DeadLetterService', () => {
@@ -46,20 +47,22 @@ describe('DeadLetterService', () => {
     expect(mockPrisma.$transaction).toHaveBeenCalled();
   });
 
-  it('should replay dead letter event', async () => {
+  it('should replay dead letter event within a transaction', async () => {
     const { service, mockPrisma } = createService();
 
+    // replay() wraps in $transaction, so mock it as a passthrough
+    mockPrisma.$transaction.mockImplementation((fn: any) => fn(mockPrisma));
     mockPrisma.outboxDeadLetter.findUnique.mockResolvedValue({
       id: 'dl-1',
       eventType: 'test.event',
       payload: { foo: 'bar' },
     });
-
     mockPrisma.outboxEvent.create.mockResolvedValue({ id: 'new-event-1' });
     mockPrisma.outboxDeadLetter.delete.mockResolvedValue({});
 
     await service.replay('dl-1');
 
+    expect(mockPrisma.$transaction).toHaveBeenCalled();
     expect(mockPrisma.outboxDeadLetter.findUnique).toHaveBeenCalledWith({
       where: { id: 'dl-1' },
     });
@@ -77,6 +80,7 @@ describe('DeadLetterService', () => {
   it('should throw when replaying missing dead letter', async () => {
     const { service, mockPrisma } = createService();
 
+    mockPrisma.$transaction.mockImplementation((fn: any) => fn(mockPrisma));
     mockPrisma.outboxDeadLetter.findUnique.mockResolvedValue(null);
 
     await expect(service.replay('nonexistent')).rejects.toThrow(/not found/);
