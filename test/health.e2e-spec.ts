@@ -94,6 +94,15 @@ describe('HealthController (e2e)', () => {
     const { SearchService } = jest.requireActual<{
       SearchService: Type<unknown>;
     }>('./../src/search');
+    const { OutboxProcessor } = jest.requireActual<{
+      OutboxProcessor: Type<unknown>;
+    }>('./../src/outbox');
+    const { DeadLetterService } = jest.requireActual<{
+      DeadLetterService: Type<unknown>;
+    }>('./../src/outbox');
+    const { IdempotencyService } = jest.requireActual<{
+      IdempotencyService: Type<unknown>;
+    }>('./../src/outbox');
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -164,6 +173,21 @@ describe('HealthController (e2e)', () => {
         indexDocument: jest.fn(),
         deleteByQuery: jest.fn(),
         search: jest.fn(),
+      })
+      .overrideProvider(OutboxProcessor)
+      .useValue({
+        processOutbox: jest.fn(),
+        claimEvents: jest.fn().mockResolvedValue([]),
+      })
+      .overrideProvider(DeadLetterService)
+      .useValue({
+        moveToDeadLetter: jest.fn(),
+        replay: jest.fn(),
+      })
+      .overrideProvider(IdempotencyService)
+      .useValue({
+        claim: jest.fn().mockResolvedValue({ id: 'key-1' }),
+        cleanup: jest.fn(),
       })
       .compile();
 
