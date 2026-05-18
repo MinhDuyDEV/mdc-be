@@ -12,9 +12,10 @@ import {
 } from "@nestjs/common";
 import { CurrentUser } from "../common/auth/current-user.decorator";
 import type { AuthenticatedUser } from "../common/auth/current-user.interface";
+import { Public } from "../common/auth/public.decorator";
 import type { SearchProfilesDto } from "./dto/search-profiles.dto";
 import type { UpdateProfileDto } from "./dto/update-profile.dto";
-import { ProfilesService } from "./profiles.service";
+import type { ProfilesService } from "./profiles.service";
 
 @Controller("profiles")
 export class ProfilesController {
@@ -36,6 +37,7 @@ export class ProfilesController {
 	}
 
 	@Get('search')
+  @Public()
   @HttpCode(HttpStatus.OK)
   async searchProfiles(@Query() dto: SearchProfilesDto) {
     return this.profilesService.searchProfiles(dto.q, dto.limit, dto.offset);
