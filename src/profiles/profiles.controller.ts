@@ -13,9 +13,9 @@ import {
 import { CurrentUser } from "../common/auth/current-user.decorator";
 import type { AuthenticatedUser } from "../common/auth/current-user.interface";
 import { Public } from "../common/auth/public.decorator";
-import type { SearchProfilesDto } from "./dto/search-profiles.dto";
-import type { UpdateProfileDto } from "./dto/update-profile.dto";
-import type { ProfilesService } from "./profiles.service";
+import { SearchProfilesDto } from "./dto/search-profiles.dto";
+import { UpdateProfileDto } from "./dto/update-profile.dto";
+import { ProfilesService } from "./profiles.service";
 
 @Controller("profiles")
 export class ProfilesController {
