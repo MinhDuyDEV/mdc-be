@@ -18,14 +18,16 @@ jobs:
           node-version: '20'
       - run: npm audit --audit-level=high
 
-  dependency-review:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: high
+  # dependency-review requires GitHub Advanced Security enabled on the repo.
+  # Enable at: https://github.com/MinhDuyDEV/mdc-be/settings/security_analysis
+  # dependency-review:
+  #   runs-on: ubuntu-latest
+  #   if: github.event_name == 'pull_request'
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/dependency-review-action@v4
+  #       with:
+  #         fail-on-severity: high
 
   # Placeholder for CodeQL
   # codeql:

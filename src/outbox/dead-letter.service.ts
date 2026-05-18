@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { PrismaService } from '../infra/prisma';
+import { PrismaService } from '../infra/prisma';
 
 export interface DeadLetterEvent {
   id: string;

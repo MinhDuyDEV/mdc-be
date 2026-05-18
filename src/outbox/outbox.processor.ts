@@ -4,7 +4,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
-import type { PrismaService } from '../infra/prisma';
+import { PrismaService } from '../infra/prisma';
 import type { DeadLetterService } from './dead-letter.service';
 
 export interface ClaimedEvent {
