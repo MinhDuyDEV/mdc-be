@@ -7,8 +7,8 @@ import {
 import { Reflector } from "@nestjs/core";
 import { JwtService } from "@nestjs/jwt";
 import type { Request } from "express";
-import type { AuthenticatedUser } from "../auth/current-user.interface";
-import { IS_PUBLIC_ROUTE } from "../auth/public.decorator";
+import type { AuthenticatedUser } from "../common/auth/current-user.interface";
+import { IS_PUBLIC_ROUTE } from "../common/auth/public.decorator";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
