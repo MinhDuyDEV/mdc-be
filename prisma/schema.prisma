@@ -31,6 +31,42 @@ enum EmailStatus {
   FAILED
 }
 
+enum MediaStatus {
+  PENDING
+  READY
+  QUARANTINED
+  DELETED
+}
+
+enum ProfileVisibility {
+  PUBLIC
+  CONNECTIONS_ONLY
+  PRIVATE
+}
+
+enum SkillCategory {
+  LANGUAGE
+  FRAMEWORK
+  TOOL
+  SOFT
+  OTHER
+}
+
+enum SkillProficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+  EXPERT
+}
+
+enum LanguageProficiency {
+  ELEMENTARY
+  LIMITED_WORKING
+  PROFESSIONAL_WORKING
+  FULL_PROFESSIONAL
+  NATIVE_BILINGUAL
+}
+
 model User {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String         @unique
@@ -44,6 +80,9 @@ model User {
   auditLogs       AuditLog[]
   verificationTokens VerificationToken[]
   preference         UserPreference?
+  profile           Profile?
+  mediaAssets       MediaAsset[]
+  endorsements      Endorsement[]
 
   @@map("users")
 }
@@ -179,4 +218,145 @@ model EmailDelivery {
   @@index([status])
   @@index([createdAt])
   @@map("email_deliveries")
+}
+
+model Profile {
+  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId              String              @unique @map("user_id") @db.Uuid
+  headline            String?             @db.VarChar(200)
+  about               String?             @db.Text
+  location            String?             @db.VarChar(200)
+  website             String?             @db.VarChar(500)
+  openToWork          Boolean             @default(false) @map("open_to_work")
+  recruitingEligible  Boolean             @default(false) @map("recruiting_eligible")
+  visibility          ProfileVisibility   @default(PUBLIC)
+  searchVector        Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
+  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills            ProfileSkill[]
+  experiences       Experience[]
+  educations        Education[]
+  certifications    Certification[]
+  languages         ProfileLanguage[]
+  endorsements      Endorsement[]
+
+  @@index([searchVector], type: Gin, name: "idx_profiles_search")
+  @@map("profiles")
+}
+
+model ProfileSkill {
+  id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId   String            @map("profile_id") @db.Uuid
+  name        String            @db.VarChar(100)
+  category    SkillCategory?
+  proficiency SkillProficiency?
+  createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile     Profile           @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  endorsements Endorsement[]
+
+  @@unique([profileId, name])
+  @@map("profile_skills")
+}
+
+model Experience {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId   String    @map("profile_id") @db.Uuid
+  title       String    @db.VarChar(200)
+  company     String    @db.VarChar(200)
+  companyUrl  String?   @map("company_url") @db.VarChar(500)
+  location    String?   @db.VarChar(200)
+  description String?   @db.Text
+  startDate   DateTime  @map("start_date") @db.Date
+  endDate     DateTime? @map("end_date") @db.Date
+  isCurrent   Boolean   @default(false) @map("is_current")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("experiences")
+}
+
+model Education {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId     String    @map("profile_id") @db.Uuid
+  school        String    @db.VarChar(200)
+  degree        String    @db.VarChar(200)
+  fieldOfStudy  String?   @map("field_of_study") @db.VarChar(200)
+  startDate     DateTime  @map("start_date") @db.Date
+  endDate       DateTime? @map("end_date") @db.Date
+  grade         String?   @db.VarChar(50)
+  activities    String?   @db.Text
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile       Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("educations")
+}
+
+model Certification {
+  id                  String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId           String    @map("profile_id") @db.Uuid
+  name                String    @db.VarChar(200)
+  issuingOrganization String    @map("issuing_organization") @db.VarChar(200)
+  issueDate           DateTime  @map("issue_date") @db.Date
+  expirationDate      DateTime? @map("expiration_date") @db.Date
+  credentialId        String?   @map("credential_id") @db.VarChar(200)
+  credentialUrl       String?   @map("credential_url") @db.VarChar(500)
+  createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("certifications")
+}
+
+model ProfileLanguage {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId   String              @map("profile_id") @db.Uuid
+  language    String              @db.VarChar(100)
+  proficiency LanguageProficiency
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile     Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, language])
+  @@map("profile_languages")
+}
+
+model Endorsement {
+  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId       String       @map("profile_id") @db.Uuid
+  profileSkillId  String       @map("profile_skill_id") @db.Uuid
+  endorserId      String       @map("endorser_id") @db.Uuid
+  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile         Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileSkill    ProfileSkill @relation(fields: [profileSkillId], references: [id], onDelete: Cascade)
+  endorser        User         @relation(fields: [endorserId], references: [id], onDelete: Cascade)
+
+  @@unique([profileSkillId, endorserId])
+  @@index([profileId])
+  @@map("endorsements")
+}
+
+model MediaAsset {
+  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId     String      @map("owner_id") @db.Uuid
+  purpose     String      @db.VarChar(50)
+  filename    String      @db.VarChar(500)
+  s3Key       String      @unique @map("s3_key") @db.VarChar(500)
+  s3Bucket    String      @map("s3_bucket") @db.VarChar(200)
+  contentType String      @map("content_type") @db.VarChar(200)
+  sizeBytes   Int?        @map("size_bytes")
+  status      MediaStatus @default(PENDING)
+  etag        String?     @db.VarChar(200)
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, status])
+  @@map("media_assets")
 }
