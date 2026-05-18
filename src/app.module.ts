@@ -10,6 +10,7 @@ import { InfraModule } from "./infra";
 import type { AppConfig } from "./infra/config";
 import { OutboxModule } from "./outbox";
 import { SearchModule } from "./search";
+import { UsersModule } from "./users/users.module";
 
 @Module({
 	imports: [
@@ -31,6 +32,7 @@ import { SearchModule } from "./search";
 		EmailModule,
 		OutboxModule,
 		SearchModule,
+		UsersModule,
 	],
 	controllers: [AppController],
 	providers: [AppService],

@@ -36,6 +36,7 @@ model User {
   email           String         @unique
   passwordHash    String?        @map("password_hash")
   emailVerifiedAt DateTime?      @map("email_verified_at")
+  displayName     String?         @map("display_name")
   status          UserStatus     @default(ACTIVE)
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")

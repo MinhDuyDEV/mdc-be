@@ -73,6 +73,7 @@ describe('AuthService', () => {
         id: 'user-123',
         email: dto.email,
         passwordHash: hashedPassword,
+        displayName: null,
         emailVerifiedAt: null,
         status: 'ACTIVE',
         createdAt: new Date(),
@@ -116,7 +117,7 @@ describe('AuthService', () => {
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-123',
         email: dto.email,
-        passwordHash: '$2b$12$hash',
+        passwordHash: '$2b$12$hash', displayName: null,
         status: 'ACTIVE',
       } as any);
       jest.spyOn(passwordService, 'compare').mockResolvedValue(true);
@@ -150,7 +151,7 @@ describe('AuthService', () => {
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-123',
         email: dto.email,
-        passwordHash: '$2b$12$hash',
+        passwordHash: '$2b$12$hash', displayName: null,
         status: 'ACTIVE',
       } as any);
       jest.spyOn(passwordService, 'compare').mockResolvedValue(false);
@@ -170,7 +171,7 @@ describe('AuthService', () => {
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-123',
         email: 'test@example.com',
-        passwordHash: '$2b$12$hash',
+        passwordHash: '$2b$12$hash', displayName: null,
         status: 'DISABLED',
       } as any);
 
