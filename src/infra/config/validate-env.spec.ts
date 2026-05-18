@@ -66,7 +66,6 @@ describe('validateEnv', () => {
       otelServiceName: 'mdc-be-test',
       otelExporterOtlpEndpoint: 'http://localhost:4318',
       appProcessRole: 'all',
-      outboxPollIntervalMs: 5000,
       outboxBatchSize: 20,
       outboxMaxRetries: 5,
       outboxBaseBackoffMs: 1000,
@@ -153,17 +152,16 @@ describe('validateEnv', () => {
   });
 
   describe('Outbox config', () => {
-    it('should parse outbox poll interval', () => {
+    it('should parse outbox batch size', () => {
       const config = validateEnv({
         ...validEnv,
-        OUTBOX_POLL_INTERVAL_MS: '10000',
+        OUTBOX_BATCH_SIZE: '100',
       });
-      expect(config.outboxPollIntervalMs).toBe(10000);
+      expect(config.outboxBatchSize).toBe(100);
     });
 
     it('should default all outbox config when unset', () => {
       const config = validateEnv(validEnv);
-      expect(config.outboxPollIntervalMs).toBe(5000);
       expect(config.outboxBatchSize).toBe(20);
       expect(config.outboxMaxRetries).toBe(5);
       expect(config.outboxBaseBackoffMs).toBe(1000);
@@ -175,7 +173,6 @@ describe('validateEnv', () => {
     it('should parse all outbox env vars', () => {
       const config = validateEnv({
         ...validEnv,
-        OUTBOX_POLL_INTERVAL_MS: '3000',
         OUTBOX_BATCH_SIZE: '50',
         OUTBOX_MAX_RETRIES: '10',
         OUTBOX_BASE_BACKOFF_MS: '2000',
@@ -183,7 +180,6 @@ describe('validateEnv', () => {
         OUTBOX_LEASE_TIMEOUT_MS: '30000',
         OUTBOX_HEALTH_LAG_THRESHOLD: '200',
       });
-      expect(config.outboxPollIntervalMs).toBe(3000);
       expect(config.outboxBatchSize).toBe(50);
       expect(config.outboxMaxRetries).toBe(10);
       expect(config.outboxBaseBackoffMs).toBe(2000);

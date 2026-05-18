@@ -39,11 +39,36 @@ jobs:
       NODE_ENV: test
       PORT: 3000
       CORS_ORIGINS: http://localhost:3000
-      JSON_BODY_LIMIT: 1mb
-      URLENCODED_BODY_LIMIT: 1mb
+      BODY_JSON_LIMIT: 1mb
+      BODY_URLENCODED_LIMIT: 1mb
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mdc_test?schema=public
       REDIS_URL: redis://localhost:6379
-      HEALTH_CHECK_TIMEOUT_MS: 5000
+      HEALTH_DATABASE_TIMEOUT_MS: 5000
+      HEALTH_REDIS_TIMEOUT_MS: 5000
+      # S3 / MinIO
+      S3_ENDPOINT: http://localhost:9000
+      S3_REGION: us-east-1
+      S3_ACCESS_KEY_ID: minioadmin
+      S3_SECRET_ACCESS_KEY: minioadmin
+      S3_BUCKET: mdc-test
+      S3_FORCE_PATH_STYLE: true
+      HEALTH_S3_TIMEOUT_MS: 5000
+      # Elasticsearch
+      ELASTICSEARCH_NODE: http://localhost:9200
+      HEALTH_ELASTICSEARCH_TIMEOUT_MS: 5000
+      # SMTP
+      SMTP_HOST: smtp.example.com
+      SMTP_PORT: 587
+      SMTP_SECURE: false
+      SMTP_USER: test
+      SMTP_PASS: test
+      EMAIL_FROM: test@mdc.local
+      HEALTH_MAILER_TIMEOUT_MS: 5000
+      # OpenTelemetry
+      OTEL_SERVICE_NAME: mdc-be-ci
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+      # Process role
+      APP_PROCESS_ROLE: all
 
     steps:
       - name: Checkout code

@@ -147,11 +147,6 @@ export function validateEnv(env: RawEnv): AppConfig {
     // Process role
     appProcessRole: parseProcessRole(env.APP_PROCESS_ROLE),
     // Outbox (all with sensible defaults)
-    outboxPollIntervalMs: parseOptionalPositiveInteger(
-      env,
-      'OUTBOX_POLL_INTERVAL_MS',
-      5000,
-    ),
     outboxBatchSize: parseOptionalPositiveInteger(env, 'OUTBOX_BATCH_SIZE', 20),
     outboxMaxRetries: parseOptionalPositiveInteger(
       env,

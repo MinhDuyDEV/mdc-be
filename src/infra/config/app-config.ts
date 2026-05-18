@@ -35,7 +35,6 @@ export interface AppConfig {
   // Process role
   appProcessRole: ProcessRole;
   // Outbox
-  outboxPollIntervalMs: number;
   outboxBatchSize: number;
   outboxMaxRetries: number;
   outboxBaseBackoffMs: number;
