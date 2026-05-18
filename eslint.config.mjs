@@ -45,7 +45,7 @@ export default tseslint.config(
     // Test files: jest.spyOn on mock methods triggers unbound-method false positives;
     // mocked Prisma return types frequently resolve to any.
     // NestJS ExecutionContext mocks use any-casts for switchToHttp/getRequest.
-    files: ['**/*.spec.ts', '**/*.test.ts'],
+    files: ['**/*.spec.ts', '**/*.test.ts', '**/*.e2e-spec.ts'],
     rules: {
       '@typescript-eslint/unbound-method': 'off',
       '@typescript-eslint/require-await': 'off',
