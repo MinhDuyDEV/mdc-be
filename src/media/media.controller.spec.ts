@@ -57,7 +57,6 @@ describe('MediaController', () => {
     it('should call mediaService.confirmUpload', async () => {
       const user = { id: 'user-123' };
       const id = 'media-123';
-      const dto = {};
 
       const response = { id, status: 'READY' };
 
@@ -65,7 +64,7 @@ describe('MediaController', () => {
         .spyOn(mediaService, 'confirmUpload')
         .mockResolvedValue(response as any);
 
-      const result = await controller.confirmUpload(user, id, dto);
+      const result = await controller.confirmUpload(user, id);
 
       expect(mediaService.confirmUpload).toHaveBeenCalledWith(user, id);
       expect(result).toEqual(response);

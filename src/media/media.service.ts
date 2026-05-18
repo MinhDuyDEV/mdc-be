@@ -87,6 +87,11 @@ export class MediaService {
       throw new ForbiddenException('You do not own this media asset');
     }
 
+    // Only PENDING assets can be confirmed
+    if (asset.status !== 'PENDING') {
+      throw new BadRequestException('Media asset is not pending confirmation');
+    }
+
     const metadata = await this.storage.verifyObject(
       asset.s3Bucket,
       asset.s3Key,
@@ -100,17 +105,17 @@ export class MediaService {
       throw new BadRequestException('Content type mismatch');
     }
 
-    const updated = await this.prisma.mediaAsset.update({
-      where: { id: mediaId },
-      data: {
-        status: 'READY',
-        etag: metadata.etag,
-        sizeBytes: metadata.contentLength,
-      },
-    });
+    // Atomic: update status + emit event in one transaction
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.mediaAsset.update({
+        where: { id: mediaId },
+        data: {
+          status: 'READY',
+          etag: metadata.etag,
+          sizeBytes: metadata.contentLength,
+        },
+      });
 
-    // Emit event (non-transactional — outbox emission should be in a tx)
-    await this.prisma.$transaction(async (tx) => {
       await this.outboxService.emit(tx as any, {
         eventType: 'MediaAssetCompleted',
         aggregateType: 'MediaAsset',
@@ -123,6 +128,8 @@ export class MediaService {
           sizeBytes: metadata.contentLength,
         },
       });
+
+      return result;
     });
 
     return updated;
@@ -182,13 +189,13 @@ export class MediaService {
       throw new NotFoundException('Media asset not found');
     }
 
-    // Soft delete — keep S3 object, mark status
-    const updated = await this.prisma.mediaAsset.update({
-      where: { id: mediaId },
-      data: { status: 'DELETED' },
-    });
+    // Atomic: soft delete + emit event in one transaction (keep S3 object for now)
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.mediaAsset.update({
+        where: { id: mediaId },
+        data: { status: 'DELETED' },
+      });
 
-    await this.prisma.$transaction(async (tx) => {
       await this.outboxService.emit(tx as any, {
         eventType: 'MediaAssetDeleted',
         aggregateType: 'MediaAsset',
@@ -201,6 +208,8 @@ export class MediaService {
           s3Bucket: asset.s3Bucket,
         },
       });
+
+      return result;
     });
 
     return updated;
