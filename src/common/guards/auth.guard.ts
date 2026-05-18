@@ -1,20 +1,59 @@
 import {
-  type CanActivate,
-  type ExecutionContext,
+  CanActivate,
+  ExecutionContext,
   Injectable,
-} from '@nestjs/common';
+  UnauthorizedException,
+} from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
+import { JwtService } from "@nestjs/jwt";
+import type { Request } from "express";
+import type { AuthenticatedUser } from "../auth/current-user.interface";
+import { IS_PUBLIC_ROUTE } from "../auth/public.decorator";
 
-/**
- * Placeholder authentication guard.
- *
- * In Phase 0A this guard allows all requests through.
- * Real JWT verification will be added in Phase 0C (Auth module).
- */
 @Injectable()
 export class AuthGuard implements CanActivate {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  canActivate(context: ExecutionContext): boolean {
-    // Phase 0A: all requests are allowed.
-    return true;
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const isPublic = this.reflector.getAllAndOverride<boolean>(IS_PUBLIC_ROUTE, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+
+    if (isPublic) {
+      return true;
+    }
+
+    const request = context.switchToHttp().getRequest<Request>();
+    const token = this.extractToken(request);
+
+    if (!token) {
+      throw new UnauthorizedException("Missing or invalid access token");
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: string;
+        email: string;
+      }>(token);
+
+      const user: AuthenticatedUser = {
+        id: payload.sub,
+        email: payload.email,
+      };
+
+      (request as any).user = user;
+      return true;
+    } catch {
+      throw new UnauthorizedException("Invalid or expired access token");
+    }
+  }
+
+  private extractToken(request: Request): string | undefined {
+    const [type, token] = request.headers.authorization?.split(" ") ?? [];
+    return type === "Bearer" ? token : undefined;
   }
 }
