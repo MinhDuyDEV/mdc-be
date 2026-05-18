@@ -19,7 +19,9 @@ export class EmailProcessor {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(MAILER_TRANSPORTER)
-    private readonly mailerService: { sendMail: (options: any) => Promise<any> },
+    private readonly mailerService: {
+      sendMail: (options: any) => Promise<any>;
+    },
     private readonly emailService: EmailService,
   ) {}
 

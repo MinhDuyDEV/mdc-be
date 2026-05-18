@@ -33,7 +33,9 @@ describe('UsersController', () => {
     it('should call usersService.getOwnProfile', async () => {
       const user = { id: 'user-123', email: 'test@example.com' };
       const profile = { id: 'user-123', email: 'test@example.com' };
-      jest.spyOn(usersService, 'getOwnProfile').mockResolvedValue(profile as any);
+      jest
+        .spyOn(usersService, 'getOwnProfile')
+        .mockResolvedValue(profile as any);
 
       const result = await controller.getMe(user);
       expect(result).toEqual(profile);

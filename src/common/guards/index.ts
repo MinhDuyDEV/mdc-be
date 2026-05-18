@@ -1,1 +1,1 @@
-export * from "./policy.guard";
+export * from './policy.guard';

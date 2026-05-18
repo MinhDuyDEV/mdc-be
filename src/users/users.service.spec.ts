@@ -72,7 +72,9 @@ describe('UsersService', () => {
 
       jest.spyOn(prisma.user, 'update').mockResolvedValue(updated as any);
 
-      const result = await service.updateOwnProfile(user, { displayName: 'New Name' });
+      const result = await service.updateOwnProfile(user, {
+        displayName: 'New Name',
+      });
       expect(result.displayName).toBe('New Name');
     });
   });
@@ -86,7 +88,9 @@ describe('UsersService', () => {
         createdAt: new Date(),
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(userRecord as any);
+      jest
+        .spyOn(prisma.user, 'findUnique')
+        .mockResolvedValue(userRecord as any);
 
       const result = await service.getPublicProfile('user-123');
       expect(result).toEqual({

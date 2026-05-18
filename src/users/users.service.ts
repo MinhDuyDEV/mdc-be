@@ -26,7 +26,10 @@ export class UsersService {
     return profile;
   }
 
-  async updateOwnProfile(user: AuthenticatedUser, data: { displayName?: string }) {
+  async updateOwnProfile(
+    user: AuthenticatedUser,
+    data: { displayName?: string },
+  ) {
     const updated = await this.prisma.user.update({
       where: { id: user.id },
       data: {
