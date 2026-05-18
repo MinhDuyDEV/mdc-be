@@ -1,6 +1,6 @@
 import { DeadLetterService } from './dead-letter.service';
 
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 
 describe('DeadLetterService', () => {
   function createService() {

@@ -41,4 +41,24 @@ export interface AppConfig {
   outboxMaxBackoffMs: number;
   outboxLeaseTimeoutMs: number;
   outboxHealthLagThreshold: number;
+  // JWT Authentication
+  jwtAccessSecret: string;
+  jwtAccessExpiresIn: string;
+  jwtRefreshSecret: string;
+  jwtRefreshExpiresIn: string;
+  // Cookie Configuration
+  cookieSecret: string;
+  cookieSecure: boolean;
+  cookieSameSite: 'strict' | 'lax' | 'none';
+  // Rate Limiting
+  throttleLoginLimit: number;
+  throttleLoginTtl: number;
+  throttleRegisterLimit: number;
+  throttleRegisterTtl: number;
+  throttlePasswordResetLimit: number;
+  throttlePasswordResetTtl: number;
+  throttleResendVerificationLimit: number;
+  throttleResendVerificationTtl: number;
+  throttleRefreshLimit: number;
+  throttleRefreshTtl: number;
 }

@@ -47,7 +47,6 @@ describe('MailerService', () => {
         html: '<p>Hello</p>',
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockTransporter.sendMail).toHaveBeenCalledWith({
         from: 'test@example.com',
         to: 'recipient@example.com',
@@ -58,7 +57,7 @@ describe('MailerService', () => {
 
     it('verifyConnection guards against streamTransport (typeof check)', async () => {
       await expect(service.verifyConnection()).resolves.toBeUndefined();
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(mockTransporter.verify).toBe(false);
     });
   });
@@ -85,7 +84,6 @@ describe('MailerService', () => {
         text: 'Hello',
       });
 
-      // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(mockTransporter.sendMail).toHaveBeenCalledWith({
         from: 'test@example.com',
         to: 'recipient@example.com',
@@ -97,7 +95,7 @@ describe('MailerService', () => {
 
     it('verifyConnection calls transporter.verify() for real transporter', async () => {
       await service.verifyConnection();
-      // eslint-disable-next-line @typescript-eslint/unbound-method
+
       expect(mockTransporter.verify).toHaveBeenCalled();
     });
   });

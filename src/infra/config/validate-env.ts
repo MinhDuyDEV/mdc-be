@@ -86,6 +86,17 @@ function parseCorsOrigins(raw: string): string[] {
   return origins;
 }
 
+function parseCookieSameSite(
+  env: RawEnv,
+  key: string,
+): 'strict' | 'lax' | 'none' {
+  const value = env[key]?.toLowerCase();
+  if (value === 'strict' || value === 'lax' || value === 'none') {
+    return value;
+  }
+  return 'lax'; // default
+}
+
 function parseProcessRole(value: string | undefined): ProcessRole {
   const role = value ?? 'all';
   if (!VALID_PROCESS_ROLES.has(role as ProcessRole)) {
@@ -172,6 +183,68 @@ export function validateEnv(env: RawEnv): AppConfig {
       env,
       'OUTBOX_HEALTH_LAG_THRESHOLD',
       100,
+    ),
+    // JWT Authentication
+    jwtAccessSecret: requireString(env, 'JWT_ACCESS_SECRET'),
+    jwtAccessExpiresIn:
+      parseOptionalString(env, 'JWT_ACCESS_EXPIRES_IN') || '15m',
+    jwtRefreshSecret: requireString(env, 'JWT_REFRESH_SECRET'),
+    jwtRefreshExpiresIn:
+      parseOptionalString(env, 'JWT_REFRESH_EXPIRES_IN') || '7d',
+    // Cookie Configuration
+    cookieSecret: requireString(env, 'COOKIE_SECRET'),
+    cookieSecure: parseBoolean(env, 'COOKIE_SECURE'),
+    cookieSameSite: parseCookieSameSite(env, 'COOKIE_SAME_SITE'),
+    // Rate Limiting
+    throttleLoginLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_LOGIN_LIMIT',
+      5,
+    ),
+    throttleLoginTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_LOGIN_TTL',
+      60000,
+    ),
+    throttleRegisterLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REGISTER_LIMIT',
+      3,
+    ),
+    throttleRegisterTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REGISTER_TTL',
+      60000,
+    ),
+    throttlePasswordResetLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_PASSWORD_RESET_LIMIT',
+      3,
+    ),
+    throttlePasswordResetTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_PASSWORD_RESET_TTL',
+      300000,
+    ),
+    throttleResendVerificationLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_RESEND_VERIFICATION_LIMIT',
+      1,
+    ),
+    throttleResendVerificationTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_RESEND_VERIFICATION_TTL',
+      60000,
+    ),
+    throttleRefreshLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REFRESH_LIMIT',
+      10,
+    ),
+    throttleRefreshTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REFRESH_TTL',
+      60000,
     ),
   };
 }

@@ -10,6 +10,7 @@ import { Test, type TestingModule } from '@nestjs/testing';
 import { IsString } from 'class-validator';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import { Public } from './../src/common/auth/public.decorator';
 
 class ContractDto {
   @IsString()
@@ -18,11 +19,13 @@ class ContractDto {
 
 @Controller('contract')
 class ContractController {
+  @Public()
   @Get()
   getContract() {
     return { ok: true };
   }
 
+  @Public()
   @Post()
   postContract(@Body() body: ContractDto) {
     return body;
@@ -40,8 +43,10 @@ describe('AppController (e2e)', () => {
     process.env.CORS_ORIGINS = 'http://localhost:3000,http://localhost:5173';
     process.env.BODY_JSON_LIMIT = '1kb';
     process.env.BODY_URLENCODED_LIMIT = '1kb';
-    process.env.DATABASE_URL =
-      'postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public';
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL =
+        'postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public';
+    }
     process.env.REDIS_URL = 'redis://localhost:6379';
     process.env.HEALTH_DATABASE_TIMEOUT_MS = '1000';
     process.env.HEALTH_REDIS_TIMEOUT_MS = '1000';
@@ -63,6 +68,10 @@ describe('AppController (e2e)', () => {
     process.env.EMAIL_FROM = 'test@example.com';
     process.env.HEALTH_MAILER_TIMEOUT_MS = '1000';
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
+    process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32';
+    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32';
+    process.env.COOKIE_SECRET = 'test-cookie-secret-min-32';
+    process.env.COOKIE_SECURE = 'false';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
 
     const { AppModule } = jest.requireActual<{ AppModule: Type<unknown> }>(

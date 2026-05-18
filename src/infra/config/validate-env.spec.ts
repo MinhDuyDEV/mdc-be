@@ -33,6 +33,12 @@ const validEnv: RawEnv = {
   // OpenTelemetry
   OTEL_SERVICE_NAME: 'mdc-be-test',
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
+  // JWT Authentication
+  JWT_ACCESS_SECRET: 'test-access-secret-min-32-chars-long',
+  JWT_REFRESH_SECRET: 'test-refresh-secret-min-32-chars-long',
+  // Cookie Configuration
+  COOKIE_SECRET: 'test-cookie-secret-min-32-chars-long',
+  COOKIE_SECURE: 'false',
 };
 
 describe('validateEnv', () => {
@@ -72,6 +78,23 @@ describe('validateEnv', () => {
       outboxMaxBackoffMs: 60000,
       outboxLeaseTimeoutMs: 60000,
       outboxHealthLagThreshold: 100,
+      jwtAccessSecret: 'test-access-secret-min-32-chars-long',
+      jwtAccessExpiresIn: '15m',
+      jwtRefreshSecret: 'test-refresh-secret-min-32-chars-long',
+      jwtRefreshExpiresIn: '7d',
+      cookieSecret: 'test-cookie-secret-min-32-chars-long',
+      cookieSecure: false,
+      cookieSameSite: 'lax',
+      throttleLoginLimit: 5,
+      throttleLoginTtl: 60000,
+      throttleRegisterLimit: 3,
+      throttleRegisterTtl: 60000,
+      throttlePasswordResetLimit: 3,
+      throttlePasswordResetTtl: 300000,
+      throttleResendVerificationLimit: 1,
+      throttleResendVerificationTtl: 60000,
+      throttleRefreshLimit: 10,
+      throttleRefreshTtl: 60000,
     });
   });
 

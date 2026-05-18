@@ -20,16 +20,30 @@ enum OutboxEventStatus {
   FAILED
 }
 
+enum TokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 model User {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String         @unique
   passwordHash    String?        @map("password_hash")
   emailVerifiedAt DateTime?      @map("email_verified_at")
+  displayName     String?         @map("display_name")
   status          UserStatus     @default(ACTIVE)
   createdAt       DateTime       @default(now()) @map("created_at")
   updatedAt       DateTime       @updatedAt @map("updated_at")
   refreshTokens   RefreshToken[]
   auditLogs       AuditLog[]
+  verificationTokens VerificationToken[]
+  preference         UserPreference?
 
   @@map("users")
 }
@@ -118,4 +132,51 @@ model IdempotencyKey {
   @@unique([scope, key])
   @@index([expiresAt])
   @@map("idempotency_keys")
+}
+
+model VerificationToken {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  type      TokenType
+  tokenHash String   @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([expiresAt])
+  @@map("verification_tokens")
+}
+
+model UserPreference {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  theme     String?  @default("system")
+  language  String?  @default("en")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
+
+model EmailDelivery {
+  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  to          String
+  subject     String
+  template    String
+  context     Json
+  status      EmailStatus    @default(PENDING)
+  sentAt      DateTime?      @map("sent_at")
+  failedAt    DateTime?      @map("failed_at")
+  errorMessage String?       @map("error_message")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("email_deliveries")
 }
