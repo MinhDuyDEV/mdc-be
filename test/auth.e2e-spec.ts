@@ -1,6 +1,5 @@
-import type { INestApplication } from '@nestjs/common';
+import type { INestApplication, Type } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
-import type { Type } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 
@@ -95,7 +94,8 @@ describe('Auth (e2e)', () => {
     const mockUser = {
       id: 'user-123',
       email: 'test@example.com',
-      passwordHash: '$2b$12$LJ3m4ys3nGxDXZQGhVIyqOfYK5CxJNZY7vQQ5pEtZRVL7NW1Oa4Ke',
+      passwordHash:
+        '$2b$12$LJ3m4ys3nGxDXZQGhVIyqOfYK5CxJNZY7vQQ5pEtZRVL7NW1Oa4Ke',
       displayName: null,
       emailVerifiedAt: null,
       status: 'ACTIVE',
@@ -223,7 +223,9 @@ describe('Auth (e2e)', () => {
         .send({ email: 'invalid', password: 'password123' })
         .expect(400);
 
-      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect((response.body as { error: { code: string } }).error.code).toBe(
+        'VALIDATION_ERROR',
+      );
     });
 
     it('should return 400 for short password', async () => {
@@ -232,15 +234,15 @@ describe('Auth (e2e)', () => {
         .send({ email: 'test@example.com', password: 'short' })
         .expect(400);
 
-      expect(response.body.error.code).toBe('VALIDATION_ERROR');
+      expect((response.body as { error: { code: string } }).error.code).toBe(
+        'VALIDATION_ERROR',
+      );
     });
   });
 
   describe('Protected routes', () => {
     it('GET /api/v1/users/me should return 401 without token', async () => {
-      await request(app!.getHttpServer())
-        .get('/api/v1/users/me')
-        .expect(401);
+      await request(app!.getHttpServer()).get('/api/v1/users/me').expect(401);
     });
 
     it('GET /api/v1/users/me should return 401 with invalid token', async () => {

@@ -33,10 +33,10 @@ export default tseslint.config(
     },
   },
   {
-    // Outbox services use PrismaService as a runtime value for NestJS DI.
-    // The consistent-type-imports rule would convert to a type-only import,
-    // removing the class at runtime and breaking dependency injection.
-    files: ['src/outbox/**/*.ts'],
+    // Disable consistent-type-imports globally for NestJS DI compatibility.
+    // NestJS uses classes as injection tokens — import type erases them at
+    // runtime, breaking dependency injection. See @typescript-eslint docs.
+    files: ['src/**/*.ts'],
     rules: {
       '@typescript-eslint/consistent-type-imports': 'off',
     },

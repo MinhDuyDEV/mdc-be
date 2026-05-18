@@ -3,13 +3,13 @@ import {
   Inject,
   Injectable,
   Logger,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { randomBytes } from "crypto";
-import type { AppConfig } from "../infra/config";
-import { MAILER_TRANSPORTER } from "../infra/mailer/mailer.constants";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import { PasswordService } from "./password.service";
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
+import type { AppConfig } from '../infra/config';
+import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { PasswordService } from './password.service';
 
 const VERIFICATION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -32,19 +32,19 @@ export class EmailVerificationService {
     await this.prisma.verificationToken.updateMany({
       where: {
         userId,
-        type: "EMAIL_VERIFICATION",
+        type: 'EMAIL_VERIFICATION',
         usedAt: null,
       },
       data: { usedAt: new Date() },
     });
 
-    const rawToken = randomBytes(32).toString("hex");
+    const rawToken = randomBytes(32).toString('hex');
     const tokenHash = await this.passwordService.hash(rawToken);
 
     await this.prisma.verificationToken.create({
       data: {
         userId,
-        type: "EMAIL_VERIFICATION",
+        type: 'EMAIL_VERIFICATION',
         tokenHash,
         expiresAt: new Date(Date.now() + VERIFICATION_EXPIRY_MS),
       },
@@ -53,14 +53,26 @@ export class EmailVerificationService {
     return rawToken;
   }
 
-  async verifyToken(rawToken: string): Promise<boolean> {
+  async verifyToken(rawToken: string, userId?: string): Promise<boolean> {
+    const where: {
+      type: 'EMAIL_VERIFICATION';
+      usedAt: null;
+      expiresAt: { gt: Date };
+      userId?: string;
+    } = {
+      type: 'EMAIL_VERIFICATION',
+      usedAt: null,
+      expiresAt: { gt: new Date() },
+    };
+
+    // If userId is provided, filter by it for additional security
+    if (userId) {
+      where.userId = userId;
+    }
+
     const tokens = await this.prisma.verificationToken.findMany({
-      where: {
-        type: "EMAIL_VERIFICATION",
-        usedAt: null,
-        expiresAt: { gt: new Date() },
-      },
-      orderBy: { createdAt: "desc" },
+      where,
+      orderBy: { createdAt: 'desc' },
     });
 
     for (const token of tokens) {
@@ -69,6 +81,11 @@ export class EmailVerificationService {
         token.tokenHash,
       );
       if (isValid) {
+        // Double-check userId if provided
+        if (userId && token.userId !== userId) {
+          throw new BadRequestException('Token does not belong to this user');
+        }
+
         await this.prisma.verificationToken.update({
           where: { id: token.id },
           data: { usedAt: new Date() },
@@ -83,6 +100,6 @@ export class EmailVerificationService {
       }
     }
 
-    throw new BadRequestException("Invalid or expired verification token");
+    throw new BadRequestException('Invalid or expired verification token');
   }
 }

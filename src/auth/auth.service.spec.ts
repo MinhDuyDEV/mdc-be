@@ -1,6 +1,7 @@
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { OutboxService } from '../outbox/outbox.service';
 import { AuthService } from './auth.service';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordService } from './password.service';
@@ -24,6 +25,16 @@ describe('AuthService', () => {
               findUnique: jest.fn(),
               create: jest.fn(),
             },
+            $transaction: jest.fn((cb: (tx: unknown) => unknown) => {
+              return cb({
+                user: {
+                  create: jest.fn(),
+                },
+                auditLog: {
+                  create: jest.fn(),
+                },
+              });
+            }),
           },
         },
         {
@@ -46,6 +57,12 @@ describe('AuthService', () => {
             generateToken: jest.fn(),
           },
         },
+        {
+          provide: OutboxService,
+          useValue: {
+            emit: jest.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -66,22 +83,32 @@ describe('AuthService', () => {
     it('should create user with hashed password', async () => {
       const dto = { email: 'test@example.com', password: 'password123' };
       const hashedPassword = '$2b$12$...';
-
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
-      jest.spyOn(passwordService, 'hash').mockResolvedValue(hashedPassword);
-      jest.spyOn(prisma.user, 'create').mockResolvedValue({
+      const createdUser = {
         id: 'user-123',
         email: dto.email,
         passwordHash: hashedPassword,
         displayName: null,
         emailVerifiedAt: null,
-        status: 'ACTIVE',
+        status: 'ACTIVE' as const,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      };
+
+      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(passwordService, 'hash').mockResolvedValue(hashedPassword);
       jest
         .spyOn(emailVerificationService, 'generateToken')
         .mockResolvedValue('verification-token');
+
+      // $transaction mock: execute the callback with a tx that has create mocks
+      jest
+        .spyOn(prisma, '$transaction')
+        .mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+          return cb({
+            user: { create: jest.fn().mockResolvedValue(createdUser) },
+            auditLog: { create: jest.fn() },
+          });
+        });
 
       const result = await service.register(dto);
 
@@ -92,7 +119,7 @@ describe('AuthService', () => {
         }),
       );
       expect(passwordService.hash).toHaveBeenCalledWith(dto.password);
-      expect(prisma.user.create).toHaveBeenCalled();
+      expect(prisma.$transaction).toHaveBeenCalled();
     });
 
     it('should throw ConflictException for duplicate email', async () => {
@@ -117,7 +144,8 @@ describe('AuthService', () => {
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-123',
         email: dto.email,
-        passwordHash: '$2b$12$hash', displayName: null,
+        passwordHash: '$2b$12$hash',
+        displayName: null,
         status: 'ACTIVE',
       } as any);
       jest.spyOn(passwordService, 'compare').mockResolvedValue(true);
@@ -151,7 +179,8 @@ describe('AuthService', () => {
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-123',
         email: dto.email,
-        passwordHash: '$2b$12$hash', displayName: null,
+        passwordHash: '$2b$12$hash',
+        displayName: null,
         status: 'ACTIVE',
       } as any);
       jest.spyOn(passwordService, 'compare').mockResolvedValue(false);
@@ -171,7 +200,8 @@ describe('AuthService', () => {
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: 'user-123',
         email: 'test@example.com',
-        passwordHash: '$2b$12$hash', displayName: null,
+        passwordHash: '$2b$12$hash',
+        displayName: null,
         status: 'DISABLED',
       } as any);
 

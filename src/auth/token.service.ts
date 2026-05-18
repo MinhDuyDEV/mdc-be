@@ -1,10 +1,10 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { JwtService } from "@nestjs/jwt";
-import { randomUUID } from "crypto";
-import type { AppConfig } from "../infra/config/app-config";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import { PasswordService } from "./password.service";
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'crypto';
+import type { AppConfig } from '../infra/config/app-config';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { PasswordService } from './password.service';
 
 @Injectable()
 export class TokenService {
@@ -18,8 +18,8 @@ export class TokenService {
   async generateAccessToken(userId: string, email: string): Promise<string> {
     const payload = { sub: userId, email };
     return this.jwtService.signAsync(payload, {
-      secret: this.configService.get("jwtAccessSecret", { infer: true }),
-      expiresIn: this.configService.get("jwtAccessExpiresIn", { infer: true }),
+      secret: this.configService.get('jwtAccessSecret', { infer: true }),
+      expiresIn: this.configService.get('jwtAccessExpiresIn', { infer: true }),
     });
   }
 
@@ -30,7 +30,7 @@ export class TokenService {
     const token = randomUUID();
     const tokenHash = await this.passwordService.hash(token);
     const family = familyId || randomUUID();
-    const expiresIn = this.configService.get("jwtRefreshExpiresIn", {
+    const expiresIn = this.configService.get('jwtRefreshExpiresIn', {
       infer: true,
     });
     const expiresAt = this.parseExpiresIn(expiresIn);
@@ -53,11 +53,11 @@ export class TokenService {
   ): Promise<{ newToken: string; newFamilyId: string }> {
     const stored = await this.prisma.refreshToken.findFirst({
       where: { userId },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!stored || stored.expiresAt < new Date()) {
-      throw new UnauthorizedException("Invalid or expired refresh token");
+      throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
     // Reuse detection
@@ -66,19 +66,16 @@ export class TokenService {
         where: { userId },
         data: { revokedAt: new Date() },
       });
-      throw new UnauthorizedException("Token reuse detected");
+      throw new UnauthorizedException('Token reuse detected');
     }
 
-    const isValid = await this.passwordService.compare(
-      token,
-      stored.tokenHash,
-    );
+    const isValid = await this.passwordService.compare(token, stored.tokenHash);
     if (!isValid) {
       await this.prisma.refreshToken.updateMany({
         where: { userId },
         data: { revokedAt: new Date() },
       });
-      throw new UnauthorizedException("Invalid refresh token");
+      throw new UnauthorizedException('Invalid refresh token');
     }
 
     // Revoke used token
@@ -96,7 +93,7 @@ export class TokenService {
   async revokeRefreshToken(userId: string, token: string): Promise<void> {
     const stored = await this.prisma.refreshToken.findFirst({
       where: { userId },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (stored) {

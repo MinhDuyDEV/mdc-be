@@ -1,9 +1,9 @@
-import { UnauthorizedException } from "@nestjs/common";
-import { Reflector } from "@nestjs/core";
-import { JwtService } from "@nestjs/jwt";
-import { AuthGuard } from "./auth.guard";
+import { UnauthorizedException } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
+import { AuthGuard } from './auth.guard';
 
-describe("AuthGuard", () => {
+describe('AuthGuard', () => {
   let guard: AuthGuard;
   let jwtService: JwtService;
   let reflector: Reflector;
@@ -14,13 +14,13 @@ describe("AuthGuard", () => {
     guard = new AuthGuard(jwtService, reflector);
   });
 
-  it("should be defined", () => {
+  it('should be defined', () => {
     expect(guard).toBeDefined();
   });
 
-  describe("public routes", () => {
-    it("should allow access when route is marked @Public()", async () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
+  describe('public routes', () => {
+    it('should allow access when route is marked @Public()', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
 
       const context = {
         getHandler: jest.fn(),
@@ -35,7 +35,7 @@ describe("AuthGuard", () => {
     });
   });
 
-  describe("protected routes", () => {
+  describe('protected routes', () => {
     const mockContext = () => {
       const request = { headers: {} };
       return {
@@ -47,44 +47,44 @@ describe("AuthGuard", () => {
       } as any;
     };
 
-    it("should throw UnauthorizedException when no token provided", async () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    it('should throw UnauthorizedException when no token provided', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
 
       await expect(guard.canActivate(mockContext())).rejects.toThrow(
         UnauthorizedException,
       );
     });
 
-    it("should populate request.user on valid token", async () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    it('should populate request.user on valid token', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
 
       const context = mockContext();
       const request = context.switchToHttp().getRequest();
-      request.headers.authorization = "Bearer valid.jwt.token";
+      request.headers.authorization = 'Bearer valid.jwt.token';
 
-      jest.spyOn(jwtService, "verifyAsync").mockResolvedValue({
-        sub: "user-123",
-        email: "test@example.com",
+      jest.spyOn(jwtService, 'verifyAsync').mockResolvedValue({
+        sub: 'user-123',
+        email: 'test@example.com',
       });
 
       const result = await guard.canActivate(context);
       expect(result).toBe(true);
-      expect((request as any).user).toEqual({
-        id: "user-123",
-        email: "test@example.com",
+      expect(request.user).toEqual({
+        id: 'user-123',
+        email: 'test@example.com',
       });
     });
 
-    it("should throw UnauthorizedException for invalid token", async () => {
-      jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    it('should throw UnauthorizedException for invalid token', async () => {
+      jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(false);
 
       const context = mockContext();
       const request = context.switchToHttp().getRequest();
-      request.headers.authorization = "Bearer invalid.token";
+      request.headers.authorization = 'Bearer invalid.token';
 
       jest
-        .spyOn(jwtService, "verifyAsync")
-        .mockRejectedValue(new Error("Invalid"));
+        .spyOn(jwtService, 'verifyAsync')
+        .mockRejectedValue(new Error('Invalid'));
 
       await expect(guard.canActivate(context)).rejects.toThrow(
         UnauthorizedException,

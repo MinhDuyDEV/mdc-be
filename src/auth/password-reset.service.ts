@@ -3,16 +3,16 @@ import {
   Inject,
   Injectable,
   Logger,
-} from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { randomBytes } from "crypto";
-import type { AppConfig } from "../infra/config/app-config";
-import { MAILER_TRANSPORTER } from "../infra/mailer/mailer.constants";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import { PasswordService } from "./password.service";
-import { TokenService } from "./token.service";
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { randomBytes } from 'crypto';
+import type { AppConfig } from '../infra/config/app-config';
+import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { PasswordService } from './password.service';
+import { TokenService } from './token.service';
 
-const RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
+const RESET_EXPIRY_MS = 15 * 60 * 1000; // 15 minutes
 
 @Injectable()
 export class PasswordResetService {
@@ -32,29 +32,29 @@ export class PasswordResetService {
   async requestReset(email: string): Promise<{ message: string }> {
     const user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user || user.status === "DELETED") {
+    if (!user || user.status === 'DELETED') {
       return {
         message:
-          "If an account with that email exists, a password reset link has been sent.",
+          'If an account with that email exists, a password reset link has been sent.',
       };
     }
 
     await this.prisma.verificationToken.updateMany({
       where: {
         userId: user.id,
-        type: "PASSWORD_RESET",
+        type: 'PASSWORD_RESET',
         usedAt: null,
       },
       data: { usedAt: new Date() },
     });
 
-    const rawToken = randomBytes(32).toString("hex");
+    const rawToken = randomBytes(32).toString('hex');
     const tokenHash = await this.passwordService.hash(rawToken);
 
     await this.prisma.verificationToken.create({
       data: {
         userId: user.id,
-        type: "PASSWORD_RESET",
+        type: 'PASSWORD_RESET',
         tokenHash,
         expiresAt: new Date(Date.now() + RESET_EXPIRY_MS),
       },
@@ -64,7 +64,7 @@ export class PasswordResetService {
 
     return {
       message:
-        "If an account with that email exists, a password reset link has been sent.",
+        'If an account with that email exists, a password reset link has been sent.',
     };
   }
 
@@ -74,15 +74,15 @@ export class PasswordResetService {
   ): Promise<{ message: string }> {
     const token = await this.prisma.verificationToken.findFirst({
       where: {
-        type: "PASSWORD_RESET",
+        type: 'PASSWORD_RESET',
         usedAt: null,
         expiresAt: { gt: new Date() },
       },
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!token) {
-      throw new BadRequestException("Invalid or expired password reset token");
+      throw new BadRequestException('Invalid or expired password reset token');
     }
 
     const isValid = await this.passwordService.compare(
@@ -90,7 +90,7 @@ export class PasswordResetService {
       token.tokenHash,
     );
     if (!isValid) {
-      throw new BadRequestException("Invalid or expired password reset token");
+      throw new BadRequestException('Invalid or expired password reset token');
     }
 
     await this.prisma.verificationToken.update({
@@ -111,6 +111,6 @@ export class PasswordResetService {
 
     this.logger.log(`Password reset confirmed for user ${token.userId}`);
 
-    return { message: "Password has been reset successfully." };
+    return { message: 'Password has been reset successfully.' };
   }
 }
