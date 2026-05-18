@@ -10,6 +10,7 @@ import type { AuthenticatedUser } from "../common/auth/current-user.interface";
 import type { AppConfig } from "../infra/config/app-config";
 import { PrismaService } from "../infra/prisma/prisma.service";
 import { StorageService } from "../infra/storage/storage.service";
+import { OutboxService } from "../outbox/outbox.service";
 import type { InitiateUploadDto } from "./dto/initiate-upload.dto";
 
 @Injectable()
@@ -18,6 +19,7 @@ export class MediaService {
 		private readonly config: ConfigService<AppConfig, true>,
 		private readonly prisma: PrismaService,
 		private readonly storage: StorageService,
+		private readonly outboxService: OutboxService,
 	) {}
 
 	async initiateUpload(user: AuthenticatedUser, dto: InitiateUploadDto) {
@@ -107,6 +109,22 @@ export class MediaService {
 			},
 		});
 
+		// Emit event (non-transactional — outbox emission should be in a tx)
+		await this.prisma.$transaction(async (tx) => {
+			await this.outboxService.emit(tx as any, {
+				eventType: "MediaAssetCompleted",
+				aggregateType: "MediaAsset",
+				aggregateId: asset.id,
+				payload: {
+					mediaId: asset.id,
+					ownerId: asset.ownerId,
+					purpose: asset.purpose,
+					contentType: asset.contentType,
+					sizeBytes: metadata.contentLength,
+				},
+			});
+		});
+
 		return updated;
 	}
 
@@ -168,6 +186,21 @@ export class MediaService {
 		const updated = await this.prisma.mediaAsset.update({
 			where: { id: mediaId },
 			data: { status: "DELETED" },
+		});
+
+		await this.prisma.$transaction(async (tx) => {
+			await this.outboxService.emit(tx as any, {
+				eventType: "MediaAssetDeleted",
+				aggregateType: "MediaAsset",
+				aggregateId: asset.id,
+				payload: {
+					mediaId: asset.id,
+					ownerId: asset.ownerId,
+					purpose: asset.purpose,
+					s3Key: asset.s3Key,
+					s3Bucket: asset.s3Bucket,
+				},
+			});
 		});
 
 		return updated;

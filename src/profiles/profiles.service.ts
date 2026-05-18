@@ -7,6 +7,7 @@ import {
 import { Prisma, ProfileVisibility } from "@prisma/client";
 import type { AuthenticatedUser } from "../common/auth/current-user.interface";
 import { PrismaService } from "../infra/prisma/prisma.service";
+import { OutboxService } from "../outbox/outbox.service";
 import type { CertificationDto } from "./dto/certification.dto";
 import type { EducationDto } from "./dto/education.dto";
 import type { ExperienceDto } from "./dto/experience.dto";
@@ -34,7 +35,10 @@ function isPrismaUniqueViolation(
 
 @Injectable()
 export class ProfilesService {
-	constructor(private readonly prisma: PrismaService) {}
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly outboxService: OutboxService,
+	) {}
 
 	async getOwnProfile(user: AuthenticatedUser) {
 		let profile = await this.prisma.profile.findUnique({
@@ -62,30 +66,45 @@ export class ProfilesService {
 			...profileData
 		} = data;
 
-		let profile = await this.prisma.profile.findUnique({
-			where: { userId: user.id },
+		let profileId: string;
+
+		await this.prisma.$transaction(async (tx) => {
+			let profile = await tx.profile.findUnique({
+				where: { userId: user.id },
+			});
+
+			if (!profile) {
+				profile = await tx.profile.create({
+					data: { userId: user.id, ...profileData },
+				});
+			} else if (Object.keys(profileData).length > 0) {
+				profile = await tx.profile.update({
+					where: { userId: user.id },
+					data: profileData,
+				});
+			}
+
+			profileId = profile.id;
+
+			// Emit ProfileUpdated event
+			await this.outboxService.emit(tx as any, {
+				eventType: "ProfileUpdated",
+				aggregateType: "Profile",
+				aggregateId: profile.id,
+				payload: { profileId: profile.id, userId: user.id },
+			});
 		});
 
-		if (!profile) {
-			profile = await this.prisma.profile.create({
-				data: { userId: user.id, ...profileData },
-			});
-		} else if (Object.keys(profileData).length > 0) {
-			profile = await this.prisma.profile.update({
-				where: { userId: user.id },
-				data: profileData,
-			});
-		}
-
-		if (skills !== undefined) await this.replaceSkills(profile.id, skills);
+		// Sub-entity replacements (outside tx since they're independent)
+		if (skills !== undefined) await this.replaceSkills(profileId!, skills);
 		if (experiences !== undefined)
-			await this.replaceExperiences(profile.id, experiences);
+			await this.replaceExperiences(profileId!, experiences);
 		if (educations !== undefined)
-			await this.replaceEducations(profile.id, educations);
+			await this.replaceEducations(profileId!, educations);
 		if (certifications !== undefined)
-			await this.replaceCertifications(profile.id, certifications);
+			await this.replaceCertifications(profileId!, certifications);
 		if (languages !== undefined)
-			await this.replaceLanguages(profile.id, languages);
+			await this.replaceLanguages(profileId!, languages);
 
 		return this.prisma.profile.findUnique({
 			where: { userId: user.id },

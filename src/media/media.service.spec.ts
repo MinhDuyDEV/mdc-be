@@ -7,6 +7,7 @@ import { ConfigService } from "@nestjs/config";
 import { Test, type TestingModule } from "@nestjs/testing";
 import { PrismaService } from "../infra/prisma/prisma.service";
 import { StorageService } from "../infra/storage/storage.service";
+import { OutboxService } from "../outbox/outbox.service";
 import { MediaService } from "./media.service";
 
 describe("MediaService", () => {
@@ -41,6 +42,7 @@ describe("MediaService", () => {
 							findUnique: jest.fn(),
 							update: jest.fn(),
 						},
+						$transaction: jest.fn((fn: any) => fn({})),
 					},
 				},
 				{
@@ -50,6 +52,10 @@ describe("MediaService", () => {
 						verifyObject: jest.fn(),
 						generatePresignedDownloadUrl: jest.fn(),
 					},
+				},
+				{
+					provide: OutboxService,
+					useValue: { emit: jest.fn() },
 				},
 			],
 		}).compile();

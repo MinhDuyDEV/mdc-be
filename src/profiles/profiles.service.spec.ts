@@ -6,6 +6,7 @@ import {
 import { Test, type TestingModule } from "@nestjs/testing";
 import { Prisma, ProfileVisibility } from "@prisma/client";
 import { PrismaService } from "../infra/prisma/prisma.service";
+import { OutboxService } from "../outbox/outbox.service";
 import { ProfilesService } from "./profiles.service";
 
 function createPrismaUniqueViolationError() {
@@ -72,6 +73,10 @@ describe("ProfilesService", () => {
 				{
 					provide: PrismaService,
 					useValue: mockPrismaValue,
+				},
+				{
+					provide: OutboxService,
+					useValue: { emit: jest.fn() },
 				},
 			],
 		}).compile();
