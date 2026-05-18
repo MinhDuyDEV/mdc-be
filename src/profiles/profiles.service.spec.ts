@@ -35,6 +35,7 @@ describe("ProfilesService", () => {
 				deleteMany: jest.fn(),
 				createMany: jest.fn(),
 				findMany: jest.fn(),
+				findUnique: jest.fn(),
 			},
 			experience: {
 				deleteMany: jest.fn(),
@@ -58,6 +59,11 @@ describe("ProfilesService", () => {
 			},
 			$transaction: jest.fn((fn: any) => fn(mockPrismaValue)),
 			$queryRaw: jest.fn(),
+			endorsement: {
+				findUnique: jest.fn(),
+				create: jest.fn(),
+				delete: jest.fn(),
+			},
 		};
 
 		const module: TestingModule = await Test.createTestingModule({
@@ -828,6 +834,126 @@ describe("ProfilesService", () => {
 			expect(result.meta.limit).toBe(5);
 			expect(result.meta.offset).toBe(10);
 			expect(result.meta.total).toBe(10);
+		});
+	});
+
+	describe("endorseSkill", () => {
+		it("should create an endorsement for another user's skill", async () => {
+			const endorser = { id: "user-456", email: "endorser@example.com" };
+			const skill = {
+				id: "skill-1",
+				profileId: "prof-1",
+				profile: { userId: "user-123" },
+			};
+			const createdEndorsement = {
+				id: "end-1",
+				profileId: "prof-1",
+				profileSkillId: "skill-1",
+				endorserId: "user-456",
+				createdAt: new Date(),
+			};
+
+			jest
+				.spyOn(prisma.profileSkill, "findUnique")
+				.mockResolvedValue(skill as any);
+			jest
+				.spyOn(prisma.endorsement, "create")
+				.mockResolvedValue(createdEndorsement as any);
+
+			const result = await service.endorseSkill("skill-1", endorser);
+
+			expect(result).toEqual(createdEndorsement);
+			expect(prisma.endorsement.create).toHaveBeenCalledWith(
+				expect.objectContaining({
+					data: {
+						profileId: "prof-1",
+						profileSkillId: "skill-1",
+						endorserId: "user-456",
+					},
+				}),
+			);
+		});
+
+		it("should throw NotFoundException when skill does not exist", async () => {
+			const endorser = { id: "user-456", email: "endorser@example.com" };
+			jest.spyOn(prisma.profileSkill, "findUnique").mockResolvedValue(null);
+
+			await expect(service.endorseSkill("skill-1", endorser)).rejects.toThrow(
+				NotFoundException,
+			);
+		});
+
+		it("should throw BadRequestException for self-endorsement", async () => {
+			const endorser = { id: "user-123", email: "self@example.com" };
+			const skill = {
+				id: "skill-1",
+				profileId: "prof-1",
+				profile: { userId: "user-123" },
+			};
+
+			jest
+				.spyOn(prisma.profileSkill, "findUnique")
+				.mockResolvedValue(skill as any);
+
+			await expect(service.endorseSkill("skill-1", endorser)).rejects.toThrow(
+				BadRequestException,
+			);
+		});
+
+		it("should throw ConflictException on duplicate endorsement P2002", async () => {
+			const endorser = { id: "user-456", email: "endorser@example.com" };
+			const skill = {
+				id: "skill-1",
+				profileId: "prof-1",
+				profile: { userId: "user-123" },
+			};
+
+			jest
+				.spyOn(prisma.profileSkill, "findUnique")
+				.mockResolvedValue(skill as any);
+			jest
+				.spyOn(prisma.endorsement, "create")
+				.mockRejectedValue(createPrismaUniqueViolationError());
+
+			await expect(service.endorseSkill("skill-1", endorser)).rejects.toThrow(
+				ConflictException,
+			);
+		});
+	});
+
+	describe("removeEndorsement", () => {
+		it("should delete an existing endorsement", async () => {
+			const endorser = { id: "user-456", email: "endorser@example.com" };
+			const endorsement = {
+				id: "end-1",
+				profileId: "prof-1",
+				profileSkillId: "skill-1",
+				endorserId: "user-456",
+				createdAt: new Date(),
+			};
+
+			jest
+				.spyOn(prisma.endorsement, "findUnique")
+				.mockResolvedValue(endorsement as any);
+			jest
+				.spyOn(prisma.endorsement, "delete")
+				.mockResolvedValue(endorsement as any);
+
+			const result = await service.removeEndorsement("skill-1", endorser);
+
+			expect(result).toEqual({ deleted: true });
+			expect(prisma.endorsement.delete).toHaveBeenCalledWith({
+				where: { id: "end-1" },
+			});
+		});
+
+		it("should throw NotFoundException when endorsement does not exist", async () => {
+			const endorser = { id: "user-456", email: "endorser@example.com" };
+			jest.spyOn(prisma.endorsement, "findUnique").mockResolvedValue(null);
+
+			await expect(
+				service.removeEndorsement("skill-1", endorser),
+			).rejects.toThrow(NotFoundException);
 		});
 	});
 });

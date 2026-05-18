@@ -1,11 +1,13 @@
 import {
 	Body,
 	Controller,
+	Delete,
 	Get,
 	HttpCode,
 	HttpStatus,
 	Param,
 	Patch,
+	Post,
 	Query,
 } from "@nestjs/common";
 import { CurrentUser } from "../common/auth/current-user.decorator";
@@ -46,5 +48,23 @@ export class ProfilesController {
 		@CurrentUser() user: AuthenticatedUser | undefined,
 	) {
 		return this.profilesService.getPublicProfile(userId, user ?? undefined);
+	}
+
+	@Post(":userId/skills/:skillId/endorse")
+	@HttpCode(HttpStatus.CREATED)
+	async endorseSkill(
+		@CurrentUser() endorser: AuthenticatedUser,
+		@Param('skillId') skillId: string,
+	) {
+		return this.profilesService.endorseSkill(skillId, endorser);
+	}
+
+	@Delete(":userId/skills/:skillId/endorse")
+	@HttpCode(HttpStatus.OK)
+	async removeEndorsement(
+		@CurrentUser() endorser: AuthenticatedUser,
+		@Param('skillId') skillId: string,
+	) {
+		return this.profilesService.removeEndorsement(skillId, endorser);
 	}
 }

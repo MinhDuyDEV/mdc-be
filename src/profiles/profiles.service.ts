@@ -371,4 +371,62 @@ export class ProfilesService {
 			meta: { total, limit, offset },
 		};
 	}
+
+	async endorseSkill(skillId: string, endorser: AuthenticatedUser) {
+		// Find the skill and its profile
+		const skill = await this.prisma.profileSkill.findUnique({
+			where: { id: skillId },
+			include: { profile: true },
+		});
+
+		if (!skill) {
+			throw new NotFoundException("Skill not found");
+		}
+
+		// Prevent self-endorsement
+		if (skill.profile.userId === endorser.id) {
+			throw new BadRequestException("You cannot endorse your own skills");
+		}
+
+		// Create endorsement (unique constraint prevents duplicates)
+		try {
+			const endorsement = await this.prisma.endorsement.create({
+				data: {
+					profileId: skill.profileId,
+					profileSkillId: skillId,
+					endorserId: endorser.id,
+				},
+			});
+			return endorsement;
+		} catch (error) {
+			if (
+				error instanceof Prisma.PrismaClientKnownRequestError &&
+				error.code === "P2002"
+			) {
+				throw new ConflictException("You have already endorsed this skill");
+			}
+			throw error;
+		}
+	}
+
+	async removeEndorsement(skillId: string, endorser: AuthenticatedUser) {
+		const endorsement = await this.prisma.endorsement.findUnique({
+			where: {
+				profileSkillId_endorserId: {
+					profileSkillId: skillId,
+					endorserId: endorser.id,
+				},
+			},
+		});
+
+		if (!endorsement) {
+			throw new NotFoundException("Endorsement not found");
+		}
+
+		await this.prisma.endorsement.delete({
+			where: { id: endorsement.id },
+		});
+
+		return { deleted: true };
+	}
 }
