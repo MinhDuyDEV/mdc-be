@@ -32,6 +32,37 @@ npm run lint           # eslint --fix
 npm run format         # prettier --write
 ```
 
+## CODE NAVIGATION
+
+**srcwalk** (v0.5.0) — Tree-sitter indexed code navigation for AI agents
+
+```bash
+# Essential commands
+srcwalk guide                    # Full agent guide (must read first)
+srcwalk <path>                   # Smart file read
+srcwalk <path>:<line>            # Read around specific line
+srcwalk find <query>             # Find definitions/usages/text
+srcwalk files <glob>             # Find files by pattern
+srcwalk callers <symbol>         # Show who calls a symbol
+srcwalk callees <symbol>         # Show what a symbol calls
+srcwalk deps <file>              # Analyze imports and dependents
+srcwalk map                      # Repo structure and dependency groups
+srcwalk flow <symbol>            # Compact caller/callee slice
+srcwalk impact <symbol>          # Blast-radius triage
+
+# Options
+--scope <dir>                    # Search within directory
+--budget <tokens>                # Max tokens (default: 5000)
+--no-budget                      # Disable token limit
+```
+
+**When to use srcwalk:**
+
+- Before editing unfamiliar code — understand structure first
+- Finding symbol definitions and usages across the codebase
+- Tracing dependencies and impact analysis
+- Generating repo maps for context
+
 ## CONVENTIONS
 
 - Decorators: `emitDecoratorMetadata` + `experimentalDecorators` enabled in tsconfig
