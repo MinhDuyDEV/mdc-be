@@ -3,13 +3,14 @@ import {
   ValidationPipe,
   type ValidationPipeOptions,
 } from '@nestjs/common';
-import { type ValidationError } from 'class-validator';
+import type { ValidationError } from 'class-validator';
 
 export const defaultValidationPipeOptions: ValidationPipeOptions = {
   transform: true,
   whitelist: true,
   forbidNonWhitelisted: true,
   validateCustomDecorators: true,
+  skipMissingProperties: false,
   exceptionFactory: (errors: ValidationError[]) =>
     new BadRequestException({
       code: 'VALIDATION_ERROR',

@@ -43,8 +43,10 @@ describe('AppController (e2e)', () => {
     process.env.CORS_ORIGINS = 'http://localhost:3000,http://localhost:5173';
     process.env.BODY_JSON_LIMIT = '1kb';
     process.env.BODY_URLENCODED_LIMIT = '1kb';
-    process.env.DATABASE_URL =
-      'postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public';
+    if (!process.env.DATABASE_URL) {
+      process.env.DATABASE_URL =
+        'postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public';
+    }
     process.env.REDIS_URL = 'redis://localhost:6379';
     process.env.HEALTH_DATABASE_TIMEOUT_MS = '1000';
     process.env.HEALTH_REDIS_TIMEOUT_MS = '1000';
