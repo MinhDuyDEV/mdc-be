@@ -1,61 +1,113 @@
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { StorageService } from './storage.service';
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { Test, type TestingModule } from "@nestjs/testing";
+import { STORAGE_CLIENT } from "./storage.constants";
+import { type ObjectMetadata, StorageService } from "./storage.service";
 
-jest.mock('@aws-sdk/s3-request-presigner');
+jest.mock("@aws-sdk/s3-request-presigner", () => ({
+	getSignedUrl: jest
+		.fn()
+		.mockResolvedValue("https://signed.example.com/upload"),
+}));
 
-describe('StorageService', () => {
-  let service: StorageService;
-  let mockSend: jest.Mock;
-  let mockDestroy: jest.Mock;
-  let mockS3: { send: jest.Mock; destroy: jest.Mock };
+describe("StorageService", () => {
+	let service: StorageService;
+	let mockSend: jest.Mock;
+	let mockDestroy: jest.Mock;
+	let mockS3: any;
 
-  beforeEach(() => {
-    mockSend = jest.fn();
-    mockDestroy = jest.fn();
-    mockS3 = {
-      send: mockSend,
-      destroy: mockDestroy,
-    };
+	beforeEach(async () => {
+		mockSend = jest.fn();
+		mockDestroy = jest.fn();
+		mockS3 = {
+			send: mockSend,
+			destroy: mockDestroy,
+		};
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-    service = new StorageService(mockS3 as any);
-  });
+		const module: TestingModule = await Test.createTestingModule({
+			providers: [
+				StorageService,
+				{ provide: STORAGE_CLIENT, useValue: mockS3 },
+			],
+		}).compile();
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+		service = module.get<StorageService>(StorageService);
+	});
 
-  it('generatePresignedUploadUrl resolves', async () => {
-    (getSignedUrl as jest.Mock).mockResolvedValue(
-      'https://presigned-upload-url',
-    );
+	afterEach(() => {
+		jest.clearAllMocks();
+	});
 
-    const url = await service.generatePresignedUploadUrl('bucket', 'key', 60);
-    expect(url).toBe('https://presigned-upload-url');
-    expect(getSignedUrl).toHaveBeenCalledTimes(1);
-  });
+	describe("generatePresignedUploadUrl", () => {
+		it("should generate a presigned upload URL with default expiry", async () => {
+			const url = await service.generatePresignedUploadUrl("bucket", "key.jpg");
+			expect(url).toBe("https://signed.example.com/upload");
+			expect(getSignedUrl).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.anything(),
+				expect.objectContaining({ expiresIn: 300 }),
+			);
+		});
 
-  it('generatePresignedDownloadUrl resolves', async () => {
-    (getSignedUrl as jest.Mock).mockResolvedValue(
-      'https://presigned-download-url',
-    );
+		it("should enforce content-type via signableHeaders", async () => {
+			await service.generatePresignedUploadUrl("bucket", "key.jpg", {
+				contentType: "image/jpeg",
+			});
+			expect(getSignedUrl).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.anything(),
+				expect.objectContaining({
+					signableHeaders: expect.any(Set),
+				}),
+			);
+		});
 
-    const url = await service.generatePresignedDownloadUrl('bucket', 'key', 60);
-    expect(url).toBe('https://presigned-download-url');
-    expect(getSignedUrl).toHaveBeenCalledTimes(1);
-  });
+		it("should accept legacy number argument for backward compat", async () => {
+			await service.generatePresignedUploadUrl("bucket", "key.jpg", 60);
+			expect(getSignedUrl).toHaveBeenCalledWith(
+				expect.anything(),
+				expect.anything(),
+				expect.objectContaining({ expiresIn: 60 }),
+			);
+		});
+	});
 
-  it('headBucket resolves', async () => {
-    mockSend.mockResolvedValue({});
-    await expect(service.headBucket('bucket')).resolves.toBeUndefined();
-    expect(mockSend).toHaveBeenCalledTimes(1);
-  });
+	describe("verifyObject", () => {
+		it("should return metadata when object exists", async () => {
+			mockSend.mockResolvedValueOnce({
+				ContentLength: 1024,
+				ContentType: "image/jpeg",
+				ETag: '"abc123"',
+				LastModified: new Date("2026-01-01"),
+			});
 
-  it('headBucket rejects on error', async () => {
-    mockSend.mockRejectedValue(new Error('Bucket not found'));
-    await expect(service.headBucket('bucket')).rejects.toThrow(
-      'Bucket not found',
-    );
-    expect(mockSend).toHaveBeenCalledTimes(1);
-  });
+			const meta: ObjectMetadata | null = await service.verifyObject(
+				"bucket",
+				"key.jpg",
+			);
+			expect(meta).not.toBeNull();
+			expect(meta!.contentLength).toBe(1024);
+			expect(meta!.contentType).toBe("image/jpeg");
+			expect(meta!.etag).toBe('"abc123"');
+		});
+
+		it("should return null when object does not exist", async () => {
+			mockSend.mockRejectedValueOnce(new Error("NotFound"));
+			const meta = await service.verifyObject("bucket", "missing.jpg");
+			expect(meta).toBeNull();
+		});
+
+		it("should return null when S3 call fails", async () => {
+			mockSend.mockRejectedValueOnce(new Error("Network error"));
+			const meta = await service.verifyObject("bucket", "key.jpg");
+			expect(meta).toBeNull();
+		});
+	});
+
+	describe("deleteObject", () => {
+		it("should send a DeleteObjectCommand", async () => {
+			mockSend.mockResolvedValueOnce({});
+			await service.deleteObject("bucket", "key.jpg");
+			expect(mockSend).toHaveBeenCalledTimes(1);
+		});
+	});
 });
