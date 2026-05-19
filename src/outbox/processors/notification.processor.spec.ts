@@ -5,7 +5,7 @@ interface MockPrisma {
   application: { findUnique: jest.Mock };
   companyMember: { findMany: jest.Mock };
   recruiterSeat: { findMany: jest.Mock; findFirst: jest.Mock };
-  notification: { create: jest.Mock };
+  notification: { create: jest.Mock; findFirst: jest.Mock };
 }
 
 interface MockIdempotency {
@@ -29,6 +29,7 @@ function createProcessor() {
     },
     notification: {
       create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      findFirst: jest.fn().mockResolvedValue(null),
     },
   };
   const idempotency: MockIdempotency = {
@@ -105,11 +106,11 @@ describe('NotificationProcessor', () => {
       expect(prisma.notification.create).toHaveBeenCalledTimes(1);
     });
 
-    it('skips on replay when claim throws P2002', async () => {
-      const { processor, prisma, idempotency } = createProcessor();
+    it('skips on replay when notification already exists', async () => {
+      const { processor, prisma } = createProcessor();
       prisma.application.findUnique.mockResolvedValue({ id: 'app-1' });
       prisma.companyMember.findMany.mockResolvedValue([{ userId: 'owner-1' }]);
-      idempotency.claim.mockRejectedValue(makeP2002());
+      prisma.notification.findFirst.mockResolvedValue({ id: 'notif-exists' });
 
       await processor.processApplicationSubmitted({
         applicationId: 'app-1',
