@@ -6,7 +6,9 @@ import { InjectPinoLogger, type PinoLogger } from "nestjs-pino";
 import type { AppConfig } from "../infra/config";
 import type { PrismaService } from "../infra/prisma";
 import type { DeadLetterService } from "./dead-letter.service";
+import type { ApplicationEmailProcessor } from "./processors/application-email.processor";
 import type { CompanySearchIndexProcessor } from "./processors/company-search-index.processor";
+import type { JobSearchIndexProcessor } from "./processors/job-search-index.processor";
 
 export interface ClaimedEvent {
 	id: string;
@@ -28,6 +30,8 @@ export class OutboxProcessor {
     private readonly config: ConfigService<AppConfig, true>,
     private readonly deadLetter: DeadLetterService,
     private readonly companySearchIndex: CompanySearchIndexProcessor,
+    private readonly jobSearchIndex: JobSearchIndexProcessor,
+    private readonly applicationEmail: ApplicationEmailProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -169,16 +173,42 @@ export class OutboxProcessor {
 				});
 				return;
 			}
-			// Phase 4 events — stubs. Real handlers land in Wave 4 (job search + app email)
-			// and Wave 6 (notification fan-in). For now, recognize the event type so it
-			// is marked PROCESSED instead of silently no-op'd via `default`.
 			case "JobCreated":
+				await this.jobSearchIndex.processJobCreated(
+					event.payload as { jobId: string },
+				);
+				return;
 			case "JobUpdated":
+				await this.jobSearchIndex.processJobUpdated(
+					event.payload as { jobId: string },
+				);
+				return;
 			case "JobPublished":
+				await this.jobSearchIndex.processJobPublished(
+					event.payload as { jobId: string },
+				);
+				return;
 			case "JobClosed":
+				await this.jobSearchIndex.processJobClosed(
+					event.payload as { jobId: string },
+				);
+				return;
 			case "JobDeleted":
-			case "ApplicationSubmitted":
+				await this.jobSearchIndex.processJobDeleted(
+					event.payload as { jobId: string },
+				);
+				return;
 			case "ApplicationStatusChanged":
+				await this.applicationEmail.processApplicationStatusChanged(
+					event.payload as {
+						applicationId: string;
+						toStatus: string;
+						fromStatus?: string;
+					},
+				);
+				return;
+			// Phase 4 stub remainder — real handlers deferred to later phases.
+			case "ApplicationSubmitted":
 			case "ApplicationNoteAdded":
 			case "ExternalApplyClicked":
 			case "CandidateSaved":

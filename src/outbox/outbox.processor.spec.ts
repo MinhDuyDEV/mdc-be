@@ -32,6 +32,16 @@ describe("OutboxProcessor", () => {
 			processCompanyCreated: jest.fn().mockResolvedValue(undefined),
 			processCompanyUpdated: jest.fn().mockResolvedValue(undefined),
 		};
+		const mockJobSearchIndex = {
+			processJobCreated: jest.fn().mockResolvedValue(undefined),
+			processJobUpdated: jest.fn().mockResolvedValue(undefined),
+			processJobPublished: jest.fn().mockResolvedValue(undefined),
+			processJobClosed: jest.fn().mockResolvedValue(undefined),
+			processJobDeleted: jest.fn().mockResolvedValue(undefined),
+		};
+		const mockApplicationEmail = {
+			processApplicationStatusChanged: jest.fn().mockResolvedValue(undefined),
+		};
 		const mockLogger = {
 			debug: jest.fn(),
 			warn: jest.fn(),
@@ -43,6 +53,8 @@ describe("OutboxProcessor", () => {
 			mockConfig as any,
 			mockDeadLetter as any,
 			mockCompanySearchIndex as any,
+			mockJobSearchIndex as any,
+			mockApplicationEmail as any,
 			mockLogger as any,
 		);
 		return {
@@ -51,6 +63,8 @@ describe("OutboxProcessor", () => {
 			mockConfig,
 			mockDeadLetter,
 			mockCompanySearchIndex,
+			mockJobSearchIndex,
+			mockApplicationEmail,
 			mockLogger,
 		};
 	}
@@ -267,13 +281,7 @@ describe("OutboxProcessor", () => {
 
 	describe("Phase 4 event types", () => {
 		const PHASE_4_STUB_EVENTS = [
-			"JobCreated",
-			"JobUpdated",
-			"JobPublished",
-			"JobClosed",
-			"JobDeleted",
 			"ApplicationSubmitted",
-			"ApplicationStatusChanged",
 			"ApplicationNoteAdded",
 			"ExternalApplyClicked",
 			"CandidateSaved",
@@ -329,6 +337,64 @@ describe("OutboxProcessor", () => {
 					companyId: "c1",
 				},
 			);
+		});
+	});
+
+	describe("Job search index routing", () => {
+		const JOB_EVENTS = [
+			{ eventType: "JobCreated", method: "processJobCreated" },
+			{ eventType: "JobUpdated", method: "processJobUpdated" },
+			{ eventType: "JobPublished", method: "processJobPublished" },
+			{ eventType: "JobClosed", method: "processJobClosed" },
+			{ eventType: "JobDeleted", method: "processJobDeleted" },
+		] as const;
+
+		it.each(JOB_EVENTS)("routes $eventType to jobSearchIndex.$method", async ({
+			eventType,
+			method,
+		}) => {
+			const { processor, mockJobSearchIndex } = createProcessor();
+			const event = {
+				id: "evt-job",
+				eventType,
+				payload: { jobId: "job-1" },
+				attempts: 0,
+			};
+
+			await (
+				processor as unknown as {
+					dispatch: (e: typeof event) => Promise<void>;
+				}
+			).dispatch(event);
+
+			expect(
+				(mockJobSearchIndex as Record<string, jest.Mock>)[method],
+			).toHaveBeenCalledWith({
+				jobId: "job-1",
+			});
+		});
+	});
+
+	it("routes ApplicationStatusChanged to applicationEmail.processApplicationStatusChanged", async () => {
+		const { processor, mockApplicationEmail } = createProcessor();
+		const event = {
+			id: "evt-app",
+			eventType: "ApplicationStatusChanged",
+			payload: { applicationId: "app-1", toStatus: "INTERVIEW" },
+			attempts: 0,
+		};
+
+		await (
+			processor as unknown as {
+				dispatch: (e: typeof event) => Promise<void>;
+			}
+		).dispatch(event);
+
+		expect(
+			mockApplicationEmail.processApplicationStatusChanged,
+		).toHaveBeenCalledWith({
+			applicationId: "app-1",
+			toStatus: "INTERVIEW",
 		});
 	});
 });
