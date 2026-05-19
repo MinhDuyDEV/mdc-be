@@ -96,28 +96,58 @@ enum CompanyRole {
   MEMBER
 }
 
+enum ApplyMode {
+  INTERNAL
+  EXTERNAL
+  HYBRID
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  CONTRACT
+  INTERNSHIP
+  TEMPORARY
+}
+
+enum JobStatus {
+  DRAFT
+  PUBLISHED
+  CLOSED
+  DELETED
+}
+
+enum WorkplaceType {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
 model User {
-  id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email           String         @unique
-  passwordHash    String?        @map("password_hash")
-  emailVerifiedAt DateTime?      @map("email_verified_at")
-  displayName     String?         @map("display_name")
-  status          UserStatus     @default(ACTIVE)
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
-  refreshTokens   RefreshToken[]
-  auditLogs       AuditLog[]
-  verificationTokens VerificationToken[]
-  preference         UserPreference?
-  profile           Profile?
-  mediaAssets       MediaAsset[]
-  endorsements             Endorsement[]
-  companyMembers           CompanyMember[]
-  companyFollowers         CompanyFollower[]
-  verificationsRequested   CompanyVerification[] @relation("VerificationRequester")
-  verificationsReviewed    CompanyVerification[] @relation("VerificationReviewer")
-  recruiterSeats           RecruiterSeat[]
-  memberInvitations        MemberInvitation[]
+  id                     String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                  String                @unique
+  passwordHash           String?               @map("password_hash")
+  emailVerifiedAt        DateTime?             @map("email_verified_at")
+  displayName            String?               @map("display_name")
+  status                 UserStatus            @default(ACTIVE)
+  createdAt              DateTime              @default(now()) @map("created_at")
+  updatedAt              DateTime              @updatedAt @map("updated_at")
+  refreshTokens          RefreshToken[]
+  auditLogs              AuditLog[]
+  verificationTokens     VerificationToken[]
+  preference             UserPreference?
+  profile                Profile?
+  mediaAssets            MediaAsset[]
+  endorsements           Endorsement[]
+  companyMembers         CompanyMember[]
+  companyFollowers       CompanyFollower[]
+  verificationsRequested CompanyVerification[] @relation("VerificationRequester")
+  verificationsReviewed  CompanyVerification[] @relation("VerificationReviewer")
+  recruiterSeats         RecruiterSeat[]
+  memberInvitations      MemberInvitation[]
+  jobsCreated            Job[]                 @relation("JobsCreated")
+  savedJobs              SavedJob[]
+  jobViews               JobView[]
 
   @@map("users")
 }
@@ -157,20 +187,20 @@ model AuditLog {
 }
 
 model OutboxEvent {
-  id           String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  eventType    String              @map("event_type")
-  aggregateType String?            @map("aggregate_type")
-  aggregateId   String?            @map("aggregate_id")
-  payload      Json
-  status       OutboxEventStatus   @default(PENDING)
-  attempts     Int                 @default(0)
-  availableAt  DateTime            @default(now()) @map("available_at")
-  lockedAt     DateTime?           @map("locked_at")
-  lockedBy     String?             @map("locked_by")
-  processedAt  DateTime?           @map("processed_at")
-  createdAt    DateTime            @default(now()) @map("created_at")
-  updatedAt    DateTime            @updatedAt @map("updated_at")
-  deadLetter   OutboxDeadLetter?
+  id            String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  eventType     String            @map("event_type")
+  aggregateType String?           @map("aggregate_type")
+  aggregateId   String?           @map("aggregate_id")
+  payload       Json
+  status        OutboxEventStatus @default(PENDING)
+  attempts      Int               @default(0)
+  availableAt   DateTime          @default(now()) @map("available_at")
+  lockedAt      DateTime?         @map("locked_at")
+  lockedBy      String?           @map("locked_by")
+  processedAt   DateTime?         @map("processed_at")
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+  deadLetter    OutboxDeadLetter?
 
   @@index([status, availableAt])
   @@index([aggregateType, aggregateId])
@@ -209,15 +239,15 @@ model IdempotencyKey {
 }
 
 model VerificationToken {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
   type      TokenType
-  tokenHash String   @map("token_hash")
-  expiresAt DateTime @map("expires_at")
+  tokenHash String    @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, type])
   @@index([expiresAt])
@@ -232,23 +262,23 @@ model UserPreference {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("user_preferences")
 }
 
 model EmailDelivery {
-  id          String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  to          String
-  subject     String
-  template    String
-  context     Json
-  status      EmailStatus    @default(PENDING)
-  sentAt      DateTime?      @map("sent_at")
-  failedAt    DateTime?      @map("failed_at")
-  errorMessage String?       @map("error_message")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  id           String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  to           String
+  subject      String
+  template     String
+  context      Json
+  status       EmailStatus @default(PENDING)
+  sentAt       DateTime?   @map("sent_at")
+  failedAt     DateTime?   @map("failed_at")
+  errorMessage String?     @map("error_message")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
 
   @@index([status])
   @@index([createdAt])
@@ -256,59 +286,60 @@ model EmailDelivery {
 }
 
 model Profile {
-  id                  String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId              String              @unique @map("user_id") @db.Uuid
-  headline            String?             @db.VarChar(200)
-  about               String?             @db.Text
-  location            String?             @db.VarChar(200)
-  website             String?             @db.VarChar(500)
-  openToWork          Boolean             @default(false) @map("open_to_work")
-  recruitingEligible  Boolean             @default(false) @map("recruiting_eligible")
-  visibility          ProfileVisibility   @default(PUBLIC)
-  searchVector        Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
-  createdAt           DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt           DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId             String                   @unique @map("user_id") @db.Uuid
+  headline           String?                  @db.VarChar(200)
+  about              String?                  @db.Text
+  location           String?                  @db.VarChar(200)
+  website            String?                  @db.VarChar(500)
+  openToWork         Boolean                  @default(false) @map("open_to_work")
+  recruitingEligible Boolean                  @default(false) @map("recruiting_eligible")
+  visibility         ProfileVisibility        @default(PUBLIC)
+  searchVector       Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
+  createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
-  skills            ProfileSkill[]
-  experiences       Experience[]
-  educations        Education[]
-  certifications    Certification[]
-  languages         ProfileLanguage[]
-  endorsements      Endorsement[]
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  skills         ProfileSkill[]
+  experiences    Experience[]
+  educations     Education[]
+  certifications Certification[]
+  languages      ProfileLanguage[]
+  endorsements   Endorsement[]
 
   @@index([searchVector], type: Gin, name: "idx_profiles_search")
   @@map("profiles")
 }
 
 model Company {
-  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  name              String    @db.VarChar(200)
-  slug              String    @db.VarChar(200)
+  id                String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String                   @db.VarChar(200)
+  slug              String                   @db.VarChar(200)
   industry          Industry?
-  description       String?   @db.Text
-  website           String?   @db.VarChar(500)
-  logoMediaAssetId  String?   @map("logo_media_asset_id") @db.Uuid
-  coverMediaAssetId String?   @map("cover_media_asset_id") @db.Uuid
-  verified          Boolean   @default(false)
-  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz(3)
-  followerCount     Int       @default(0) @map("follower_count")
-  employeeCount     String?   @map("employee_count") @db.VarChar(50)
-  foundedYear       Int?      @map("founded_year")
-  headquarters      String?   @db.VarChar(200)
+  description       String?                  @db.Text
+  website           String?                  @db.VarChar(500)
+  logoMediaAssetId  String?                  @map("logo_media_asset_id") @db.Uuid
+  coverMediaAssetId String?                  @map("cover_media_asset_id") @db.Uuid
+  verified          Boolean                  @default(false)
+  verifiedAt        DateTime?                @map("verified_at") @db.Timestamptz(3)
+  followerCount     Int                      @default(0) @map("follower_count")
+  employeeCount     String?                  @map("employee_count") @db.VarChar(50)
+  foundedYear       Int?                     @map("founded_year")
+  headquarters      String?                  @db.VarChar(200)
   searchVector      Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
-  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
-  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt         DateTime?                @map("deleted_at") @db.Timestamptz(3)
+  createdAt         DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  logoMediaAsset    MediaAsset? @relation("CompanyLogo", fields: [logoMediaAssetId], references: [id], onDelete: SetNull)
-  coverMediaAsset   MediaAsset? @relation("CompanyCover", fields: [coverMediaAssetId], references: [id], onDelete: SetNull)
+  logoMediaAsset    MediaAsset?           @relation("CompanyLogo", fields: [logoMediaAssetId], references: [id], onDelete: SetNull)
+  coverMediaAsset   MediaAsset?           @relation("CompanyCover", fields: [coverMediaAssetId], references: [id], onDelete: SetNull)
   members           CompanyMember[]
   followers         CompanyFollower[]
   verifications     CompanyVerification[]
   entitlements      CompanyEntitlement[]
   recruiterSeats    RecruiterSeat[]
   memberInvitations MemberInvitation[]
+  jobs              Job[]
 
   @@index([slug])
   @@index([industry])
@@ -326,7 +357,7 @@ model ProfileSkill {
   proficiency SkillProficiency?
   createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  profile     Profile           @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
   endorsements Endorsement[]
 
   @@unique([profileId, name])
@@ -346,25 +377,25 @@ model Experience {
   isCurrent   Boolean   @default(false) @map("is_current")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
   @@map("experiences")
 }
 
 model Education {
-  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  profileId     String    @map("profile_id") @db.Uuid
-  school        String    @db.VarChar(200)
-  degree        String    @db.VarChar(200)
-  fieldOfStudy  String?   @map("field_of_study") @db.VarChar(200)
-  startDate     DateTime  @map("start_date") @db.Date
-  endDate       DateTime? @map("end_date") @db.Date
-  grade         String?   @db.VarChar(50)
-  activities    String?   @db.Text
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  id           String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId    String    @map("profile_id") @db.Uuid
+  school       String    @db.VarChar(200)
+  degree       String    @db.VarChar(200)
+  fieldOfStudy String?   @map("field_of_study") @db.VarChar(200)
+  startDate    DateTime  @map("start_date") @db.Date
+  endDate      DateTime? @map("end_date") @db.Date
+  grade        String?   @db.VarChar(50)
+  activities   String?   @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  profile       Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
   @@map("educations")
@@ -381,7 +412,7 @@ model Certification {
   credentialUrl       String?   @map("credential_url") @db.VarChar(500)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
   @@map("certifications")
@@ -394,22 +425,22 @@ model ProfileLanguage {
   proficiency LanguageProficiency
   createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  profile     Profile             @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@unique([profileId, language])
   @@map("profile_languages")
 }
 
 model Endorsement {
-  id              String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  profileId       String       @map("profile_id") @db.Uuid
-  profileSkillId  String       @map("profile_skill_id") @db.Uuid
-  endorserId      String       @map("endorser_id") @db.Uuid
-  createdAt       DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId      String   @map("profile_id") @db.Uuid
+  profileSkillId String   @map("profile_skill_id") @db.Uuid
+  endorserId     String   @map("endorser_id") @db.Uuid
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  profile         Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  profileSkill    ProfileSkill @relation(fields: [profileSkillId], references: [id], onDelete: Cascade)
-  endorser        User         @relation(fields: [endorserId], references: [id], onDelete: Cascade)
+  profile      Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  profileSkill ProfileSkill @relation(fields: [profileSkillId], references: [id], onDelete: Cascade)
+  endorser     User         @relation(fields: [endorserId], references: [id], onDelete: Cascade)
 
   @@unique([profileSkillId, endorserId])
   @@index([profileId])
@@ -430,7 +461,7 @@ model MediaAsset {
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  owner         User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   companyLogos  Company[] @relation("CompanyLogo")
   companyCovers Company[] @relation("CompanyCover")
 
@@ -445,12 +476,12 @@ model CompanyMember {
   role      CompanyRole
   title     String?     @db.VarChar(200)
   status    String      @default("active") @db.VarChar(50)
-  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+  joinedAt  DateTime    @default(now()) @map("joined_at") @db.Timestamptz(3)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -465,8 +496,8 @@ model CompanyFollower {
   userId    String   @map("user_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([companyId, userId])
   @@index([companyId])
@@ -486,9 +517,9 @@ model CompanyVerification {
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  requestedBy       User      @relation("VerificationRequester", fields: [requestedByUserId], references: [id], onDelete: Cascade)
-  reviewedBy        User?     @relation("VerificationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  company     Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedBy User    @relation("VerificationRequester", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  reviewedBy  User?   @relation("VerificationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([status])
@@ -507,7 +538,7 @@ model CompanyEntitlement {
   createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([entitlementType])
@@ -524,8 +555,8 @@ model RecruiterSeat {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([companyId])
   @@index([userId])
@@ -546,8 +577,8 @@ model MemberInvitation {
   createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
-  inviter    User      @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inviter User    @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
 
   @@index([companyId])
   @@index([email])
@@ -555,4 +586,81 @@ model MemberInvitation {
   @@index([status])
   @@index([expiresAt])
   @@map("member_invitations")
+}
+
+model Job {
+  id              String                   @id @default(uuid()) @db.Uuid
+  companyId       String                   @map("company_id") @db.Uuid
+  title           String                   @db.VarChar(255)
+  description     String                   @db.Text
+  applyMode       ApplyMode                @map("apply_mode")
+  applyUrl        String?                  @map("apply_url") @db.VarChar(2048)
+  status          JobStatus                @default(DRAFT)
+  employmentType  EmploymentType           @map("employment_type")
+  workplaceType   WorkplaceType            @map("workplace_type")
+  location        String?                  @db.VarChar(255)
+  salaryMin       Decimal?                 @map("salary_min") @db.Decimal(12, 2)
+  salaryMax       Decimal?                 @map("salary_max") @db.Decimal(12, 2)
+  salaryCurrency  String?                  @map("salary_currency") @db.VarChar(3)
+  publishedAt     DateTime?                @map("published_at") @db.Timestamptz(3)
+  closedAt        DateTime?                @map("closed_at") @db.Timestamptz(3)
+  createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime?                @map("deleted_at") @db.Timestamptz(3)
+  searchVector    Unsupported("tsvector")? @map("search_vector")
+  createdByUserId String                   @map("created_by_user_id") @db.Uuid
+
+  company   Company    @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy User       @relation("JobsCreated", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  skills    JobSkill[]
+  savedBy   SavedJob[]
+  views     JobView[]
+
+  @@index([companyId, status, deletedAt])
+  @@index([status, publishedAt(sort: Desc), id(sort: Desc)])
+  @@index([employmentType, workplaceType])
+  @@map("jobs")
+}
+
+model JobSkill {
+  id      String @id @default(uuid()) @db.Uuid
+  jobId   String @map("job_id") @db.Uuid
+  skillId String @map("skill_id") @db.Uuid
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@unique([jobId, skillId])
+  @@index([skillId])
+  @@map("job_skills")
+}
+
+model SavedJob {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  jobId     String    @map("job_id") @db.Uuid
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job  Job  @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([jobId])
+  @@map("saved_jobs")
+}
+
+model JobView {
+  id        String   @id @default(uuid()) @db.Uuid
+  jobId     String   @map("job_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  job  Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([jobId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("job_views")
 }
