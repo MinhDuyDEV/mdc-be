@@ -7,9 +7,9 @@ import {
 import { ApplyMode, JobStatus, Prisma } from '@prisma/client';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import type { PrismaTransaction } from '../infra/prisma';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-import type { IdempotencyService } from '../outbox/idempotency.service';
-import type { OutboxService } from '../outbox/outbox.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { IdempotencyService } from '../outbox/idempotency.service';
+import { OutboxService } from '../outbox/outbox.service';
 import type { CreateJobDto } from './dto/create-job.dto';
 import { toJobResponseDto } from './dto/job.response.dto';
 import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
