@@ -134,33 +134,40 @@ enum ApplicationStatus {
 }
 
 model User {
-  id                      String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email                   String                   @unique
-  passwordHash            String?                  @map("password_hash")
-  emailVerifiedAt         DateTime?                @map("email_verified_at")
-  displayName             String?                  @map("display_name")
-  status                  UserStatus               @default(ACTIVE)
-  createdAt               DateTime                 @default(now()) @map("created_at")
-  updatedAt               DateTime                 @updatedAt @map("updated_at")
-  refreshTokens           RefreshToken[]
-  auditLogs               AuditLog[]
-  verificationTokens      VerificationToken[]
-  preference              UserPreference?
-  profile                 Profile?
-  mediaAssets             MediaAsset[]
-  endorsements            Endorsement[]
-  companyMembers          CompanyMember[]
-  companyFollowers        CompanyFollower[]
-  verificationsRequested  CompanyVerification[]    @relation("VerificationRequester")
-  verificationsReviewed   CompanyVerification[]    @relation("VerificationReviewer")
-  recruiterSeats          RecruiterSeat[]
-  memberInvitations       MemberInvitation[]
-  jobsCreated             Job[]                    @relation("JobsCreated")
-  savedJobs               SavedJob[]
-  jobViews                JobView[]
-  applications            Application[]
-  applicationStatusEvents ApplicationStatusEvent[] @relation("ApplicationStatusEvents")
-  applicationNotes        ApplicationNote[]        @relation("ApplicationNotes")
+  id                          String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email                       String                   @unique
+  passwordHash                String?                  @map("password_hash")
+  emailVerifiedAt             DateTime?                @map("email_verified_at")
+  displayName                 String?                  @map("display_name")
+  status                      UserStatus               @default(ACTIVE)
+  createdAt                   DateTime                 @default(now()) @map("created_at")
+  updatedAt                   DateTime                 @updatedAt @map("updated_at")
+  refreshTokens               RefreshToken[]
+  auditLogs                   AuditLog[]
+  verificationTokens          VerificationToken[]
+  preference                  UserPreference?
+  profile                     Profile?
+  mediaAssets                 MediaAsset[]
+  endorsements                Endorsement[]
+  companyMembers              CompanyMember[]
+  companyFollowers            CompanyFollower[]
+  verificationsRequested      CompanyVerification[]    @relation("VerificationRequester")
+  verificationsReviewed       CompanyVerification[]    @relation("VerificationReviewer")
+  recruiterSeats              RecruiterSeat[]
+  memberInvitations           MemberInvitation[]
+  jobsCreated                 Job[]                    @relation("JobsCreated")
+  savedJobs                   SavedJob[]
+  jobViews                    JobView[]
+  applications                Application[]
+  applicationStatusEvents     ApplicationStatusEvent[] @relation("ApplicationStatusEvents")
+  applicationNotes            ApplicationNote[]        @relation("ApplicationNotes")
+  savedCandidatesAsCandidate  SavedCandidate[]         @relation("SavedCandidatesAsCandidate")
+  savedCandidatesBySaver      SavedCandidate[]         @relation("SavedCandidatesBySaver")
+  talentPoolsCreated          TalentPool[]             @relation("TalentPoolsCreated")
+  talentPoolCandidates        TalentPoolCandidate[]    @relation("TalentPoolCandidates")
+  talentPoolCandidatesAddedBy TalentPoolCandidate[]    @relation("TalentPoolCandidatesAddedBy")
+  candidateNotesAsCandidate   CandidateNote[]          @relation("CandidateNotesAsCandidate")
+  candidateNotesByAuthor      CandidateNote[]          @relation("CandidateNotesByAuthor")
 
   @@map("users")
 }
@@ -353,6 +360,9 @@ model Company {
   recruiterSeats    RecruiterSeat[]
   memberInvitations MemberInvitation[]
   jobs              Job[]
+  savedCandidates   SavedCandidate[]
+  talentPools       TalentPool[]
+  candidateNotes    CandidateNote[]
 
   @@index([slug])
   @@index([industry])
@@ -770,4 +780,96 @@ model ApplicationNote {
   @@index([applicationId, createdAt(sort: Desc), deletedAt])
   @@index([authorUserId])
   @@map("application_notes")
+}
+
+model CandidateSource {
+  id          String   @id @default(uuid()) @db.Uuid
+  code        String   @unique @db.VarChar(64)
+  label       String   @db.VarChar(128)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  savedCandidates SavedCandidate[]
+
+  @@map("candidate_sources")
+}
+
+model SavedCandidate {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  candidateUserId String    @map("candidate_user_id") @db.Uuid
+  savedByUserId   String    @map("saved_by_user_id") @db.Uuid
+  sourceId        String?   @map("source_id") @db.Uuid
+  note            String?   @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company   Company          @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidate User             @relation("SavedCandidatesAsCandidate", fields: [candidateUserId], references: [id], onDelete: Cascade)
+  savedBy   User             @relation("SavedCandidatesBySaver", fields: [savedByUserId], references: [id], onDelete: Restrict)
+  source    CandidateSource? @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+
+  // Active uniqueness handled by raw-SQL partial index saved_candidates_active_unique
+  @@index([companyId, createdAt(sort: Desc), deletedAt])
+  @@index([candidateUserId])
+  @@index([savedByUserId])
+  @@map("saved_candidates")
+}
+
+model TalentPool {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  name            String    @db.VarChar(255)
+  description     String?   @db.Text
+  createdByUserId String    @map("created_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company    Company               @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdBy  User                  @relation("TalentPoolsCreated", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  candidates TalentPoolCandidate[]
+
+  // Name uniqueness on active rows handled by raw-SQL partial index talent_pools_name_active_unique
+  @@index([companyId, createdAt(sort: Desc), deletedAt])
+  @@index([createdByUserId])
+  @@map("talent_pools")
+}
+
+model TalentPoolCandidate {
+  id              String    @id @default(uuid()) @db.Uuid
+  talentPoolId    String    @map("talent_pool_id") @db.Uuid
+  candidateUserId String    @map("candidate_user_id") @db.Uuid
+  addedByUserId   String    @map("added_by_user_id") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  talentPool TalentPool @relation(fields: [talentPoolId], references: [id], onDelete: Cascade)
+  candidate  User       @relation("TalentPoolCandidates", fields: [candidateUserId], references: [id], onDelete: Cascade)
+  addedBy    User       @relation("TalentPoolCandidatesAddedBy", fields: [addedByUserId], references: [id], onDelete: Restrict)
+
+  // Active uniqueness handled by raw-SQL partial index talent_pool_candidates_active_unique
+  @@index([talentPoolId, createdAt(sort: Desc), deletedAt])
+  @@index([candidateUserId])
+  @@map("talent_pool_candidates")
+}
+
+model CandidateNote {
+  id              String    @id @default(uuid()) @db.Uuid
+  companyId       String    @map("company_id") @db.Uuid
+  candidateUserId String    @map("candidate_user_id") @db.Uuid
+  authorUserId    String    @map("author_user_id") @db.Uuid
+  content         String    @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
+
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  candidate User    @relation("CandidateNotesAsCandidate", fields: [candidateUserId], references: [id], onDelete: Cascade)
+  author    User    @relation("CandidateNotesByAuthor", fields: [authorUserId], references: [id], onDelete: Restrict)
+
+  @@index([companyId, candidateUserId, createdAt(sort: Desc), deletedAt])
+  @@index([authorUserId])
+  @@map("candidate_notes")
 }
