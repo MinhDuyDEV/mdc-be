@@ -1,0 +1,376 @@
+import {
+	ConflictException,
+	ForbiddenException,
+	Injectable,
+	NotFoundException,
+} from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import type { PrismaTransaction } from "../infra/prisma";
+import type { PrismaService } from "../infra/prisma/prisma.service";
+import type { IdempotencyService } from "../outbox/idempotency.service";
+import type { OutboxService } from "../outbox/outbox.service";
+import type {
+	AddCandidateToPoolDto,
+	SaveCandidateDto,
+} from "./dto/save-candidate.dto";
+import type {
+	CreateTalentPoolDto,
+	UpdateTalentPoolDto,
+} from "./dto/talent-pool.dto";
+
+interface CursorPayload {
+	createdAt: string;
+	id: string;
+}
+
+function encodeCursor(createdAt: Date, id: string): string {
+	return Buffer.from(
+		JSON.stringify({ createdAt: createdAt.toISOString(), id }),
+	).toString("base64");
+}
+
+function decodeCursor(cursor: string): CursorPayload | null {
+	try {
+		const decoded = JSON.parse(
+			Buffer.from(cursor, "base64").toString("utf8"),
+		) as CursorPayload;
+		if (!decoded?.createdAt || !decoded?.id) return null;
+		return decoded;
+	} catch {
+		return null;
+	}
+}
+
+/**
+ * Recruiting domain service.
+ *
+ * All endpoints are company-scoped. The shared `assertEmployerRole` helper
+ * resolves OWNER/ADMIN or active RecruiterSeat membership for the caller.
+ * Methods throw `ForbiddenException('INSUFFICIENT_COMPANY_ROLE')` for
+ * candidates and non-recruiters trying to access these endpoints.
+ */
+@Injectable()
+export class RecruitingService {
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly outboxService: OutboxService,
+		private readonly idempotencyService: IdempotencyService,
+	) {}
+
+	private async assertEmployerRole(companyId: string, userId: string) {
+		const company = await this.prisma.company.findFirst({
+			where: { id: companyId, deletedAt: null },
+			select: { id: true },
+		});
+		if (!company) throw new NotFoundException("COMPANY_NOT_FOUND");
+
+		const member = await this.prisma.companyMember.findUnique({
+			where: { companyId_userId: { companyId, userId } },
+		});
+		if (member && member.status === "active") {
+			if (member.role === "OWNER" || member.role === "ADMIN") return;
+		}
+		const seat = await this.prisma.recruiterSeat.findFirst({
+			where: { companyId, userId, status: "allocated" },
+		});
+		if (!seat) {
+			throw new ForbiddenException("INSUFFICIENT_COMPANY_ROLE");
+		}
+	}
+
+	// ─────────────────────── Saved candidates ───────────────────────────────
+
+	async saveCandidate(
+		userId: string,
+		companyId: string,
+		dto: SaveCandidateDto,
+	) {
+		await this.assertEmployerRole(companyId, userId);
+
+		// Verify candidate Profile exists and recruitingEligible=true.
+		const profile = await this.prisma.profile.findUnique({
+			where: { userId: dto.candidateUserId },
+			select: { recruitingEligible: true },
+		});
+		if (!profile || !profile.recruitingEligible) {
+			throw new ForbiddenException("CANDIDATE_NOT_OPTED_IN_TO_RECRUITING");
+		}
+
+		await this.idempotencyService.claim(
+			"SavedCandidate:save",
+			`${companyId}:${dto.candidateUserId}`,
+		);
+
+		const existing = await this.prisma.savedCandidate.findFirst({
+			where: {
+				companyId,
+				candidateUserId: dto.candidateUserId,
+				deletedAt: null,
+			},
+		});
+		if (existing) return existing;
+
+		return this.prisma.$transaction(async (tx) => {
+			const saved = await tx.savedCandidate.create({
+				data: {
+					companyId,
+					candidateUserId: dto.candidateUserId,
+					savedByUserId: userId,
+					sourceId: dto.sourceId ?? null,
+					note: dto.note ?? null,
+				},
+			});
+
+			await tx.auditLog.create({
+				data: {
+					actorUserId: userId,
+					action: "recruiting.candidate.save",
+					entityType: "SavedCandidate",
+					entityId: saved.id,
+					metadata: { companyId, candidateUserId: dto.candidateUserId },
+				},
+			});
+
+			await this.outboxService.emit(tx as PrismaTransaction, {
+				eventType: "CandidateSaved",
+				aggregateType: "SavedCandidate",
+				aggregateId: saved.id,
+				payload: {
+					savedCandidateId: saved.id,
+					companyId,
+					candidateUserId: dto.candidateUserId,
+					savedByUserId: userId,
+				},
+			});
+
+			return saved;
+		});
+	}
+
+	async unsaveCandidate(
+		userId: string,
+		companyId: string,
+		candidateUserId: string,
+	) {
+		await this.assertEmployerRole(companyId, userId);
+
+		const existing = await this.prisma.savedCandidate.findFirst({
+			where: { companyId, candidateUserId, deletedAt: null },
+		});
+		if (!existing) return;
+
+		await this.prisma.savedCandidate.update({
+			where: { id: existing.id },
+			data: { deletedAt: new Date() },
+		});
+	}
+
+	async listSavedCandidates(
+		userId: string,
+		companyId: string,
+		query: { cursor?: string; limit?: number },
+	) {
+		await this.assertEmployerRole(companyId, userId);
+		const limit = query.limit ?? 20;
+
+		let cursorWhere: Prisma.SavedCandidateWhereInput = {};
+		if (query.cursor) {
+			const decoded = decodeCursor(query.cursor);
+			if (decoded) {
+				const cursorDate = new Date(decoded.createdAt);
+				cursorWhere = {
+					OR: [
+						{ createdAt: { lt: cursorDate } },
+						{
+							AND: [{ createdAt: cursorDate }, { id: { lt: decoded.id } }],
+						},
+					],
+				};
+			}
+		}
+
+		const rows = await this.prisma.savedCandidate.findMany({
+			where: { AND: [{ companyId, deletedAt: null }, cursorWhere] },
+			orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+			take: limit + 1,
+		});
+
+		const hasMore = rows.length > limit;
+		const items = hasMore ? rows.slice(0, limit) : rows;
+		const last = items.at(-1);
+		const nextCursor =
+			hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
+
+		return { data: items, meta: { nextCursor, hasMore } };
+	}
+
+	// ─────────────────────── Talent pools ───────────────────────────────────
+
+	async createTalentPool(
+		userId: string,
+		companyId: string,
+		dto: CreateTalentPoolDto,
+	) {
+		await this.assertEmployerRole(companyId, userId);
+
+		try {
+			return await this.prisma.talentPool.create({
+				data: {
+					companyId,
+					name: dto.name,
+					description: dto.description ?? null,
+					createdByUserId: userId,
+				},
+			});
+		} catch (err) {
+			if (
+				err instanceof Prisma.PrismaClientKnownRequestError &&
+				err.code === "P2002"
+			) {
+				throw new ConflictException("TALENT_POOL_NAME_TAKEN");
+			}
+			throw err;
+		}
+	}
+
+	async listTalentPools(userId: string, companyId: string) {
+		await this.assertEmployerRole(companyId, userId);
+		return this.prisma.talentPool.findMany({
+			where: { companyId, deletedAt: null },
+			orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+		});
+	}
+
+	async updateTalentPool(
+		userId: string,
+		companyId: string,
+		poolId: string,
+		dto: UpdateTalentPoolDto,
+	) {
+		await this.assertEmployerRole(companyId, userId);
+		const pool = await this.prisma.talentPool.findFirst({
+			where: { id: poolId, companyId, deletedAt: null },
+		});
+		if (!pool) throw new NotFoundException("TALENT_POOL_NOT_FOUND");
+
+		try {
+			return await this.prisma.talentPool.update({
+				where: { id: poolId },
+				data: {
+					...(dto.name !== undefined && { name: dto.name }),
+					...(dto.description !== undefined && {
+						description: dto.description,
+					}),
+				},
+			});
+		} catch (err) {
+			if (
+				err instanceof Prisma.PrismaClientKnownRequestError &&
+				err.code === "P2002"
+			) {
+				throw new ConflictException("TALENT_POOL_NAME_TAKEN");
+			}
+			throw err;
+		}
+	}
+
+	async deleteTalentPool(userId: string, companyId: string, poolId: string) {
+		await this.assertEmployerRole(companyId, userId);
+		const pool = await this.prisma.talentPool.findFirst({
+			where: { id: poolId, companyId, deletedAt: null },
+		});
+		if (!pool) throw new NotFoundException("TALENT_POOL_NOT_FOUND");
+
+		await this.prisma.talentPool.update({
+			where: { id: poolId },
+			data: { deletedAt: new Date() },
+		});
+	}
+
+	async addCandidateToPool(
+		userId: string,
+		companyId: string,
+		poolId: string,
+		dto: AddCandidateToPoolDto,
+	) {
+		await this.assertEmployerRole(companyId, userId);
+		const pool = await this.prisma.talentPool.findFirst({
+			where: { id: poolId, companyId, deletedAt: null },
+		});
+		if (!pool) throw new NotFoundException("TALENT_POOL_NOT_FOUND");
+
+		await this.idempotencyService.claim(
+			"TalentPoolCandidate:add",
+			`${poolId}:${dto.candidateUserId}`,
+		);
+
+		const existing = await this.prisma.talentPoolCandidate.findFirst({
+			where: {
+				talentPoolId: poolId,
+				candidateUserId: dto.candidateUserId,
+				deletedAt: null,
+			},
+		});
+		if (existing) return existing;
+
+		return this.prisma.$transaction(async (tx) => {
+			const created = await tx.talentPoolCandidate.create({
+				data: {
+					talentPoolId: poolId,
+					candidateUserId: dto.candidateUserId,
+					addedByUserId: userId,
+				},
+			});
+
+			await tx.auditLog.create({
+				data: {
+					actorUserId: userId,
+					action: "recruiting.pool.add",
+					entityType: "TalentPoolCandidate",
+					entityId: created.id,
+					metadata: {
+						companyId,
+						poolId,
+						candidateUserId: dto.candidateUserId,
+					},
+				},
+			});
+
+			await this.outboxService.emit(tx as PrismaTransaction, {
+				eventType: "CandidateAddedToTalentPool",
+				aggregateType: "TalentPoolCandidate",
+				aggregateId: created.id,
+				payload: {
+					talentPoolCandidateId: created.id,
+					talentPoolId: poolId,
+					companyId,
+					candidateUserId: dto.candidateUserId,
+				},
+			});
+
+			return created;
+		});
+	}
+
+	async removeCandidateFromPool(
+		userId: string,
+		companyId: string,
+		poolId: string,
+		candidateUserId: string,
+	) {
+		await this.assertEmployerRole(companyId, userId);
+		const existing = await this.prisma.talentPoolCandidate.findFirst({
+			where: {
+				talentPoolId: poolId,
+				candidateUserId,
+				deletedAt: null,
+				talentPool: { companyId, deletedAt: null },
+			},
+		});
+		if (!existing) return;
+		await this.prisma.talentPoolCandidate.update({
+			where: { id: existing.id },
+			data: { deletedAt: new Date() },
+		});
+	}
+}
