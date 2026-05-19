@@ -276,6 +276,7 @@ model Experience {
 
   profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  @@index([profileId])
   @@map("experiences")
 }
 
@@ -293,6 +294,7 @@ model Education {
 
   profile       Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  @@index([profileId])
   @@map("educations")
 }
 
@@ -309,6 +311,7 @@ model Certification {
 
   profile             Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
+  @@index([profileId])
   @@map("certifications")
 }
 

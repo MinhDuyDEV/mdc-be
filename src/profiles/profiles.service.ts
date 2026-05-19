@@ -214,7 +214,6 @@ export class ProfilesService {
         try {
           await tx.profileSkill.createMany({
             data: skills.map((s) => ({ profileId, ...s })),
-            skipDuplicates: true,
           });
         } catch (error) {
           if (isPrismaUniqueViolation(error)) {
@@ -246,7 +245,6 @@ export class ProfilesService {
             endDate: e.endDate ? new Date(e.endDate) : null,
             isCurrent: e.isCurrent ?? false,
           })),
-          skipDuplicates: true,
         });
       }
       return tx.experience.findMany({ where: { profileId } });
@@ -268,7 +266,6 @@ export class ProfilesService {
             grade: e.grade,
             activities: e.activities,
           })),
-          skipDuplicates: true,
         });
       }
       return tx.education.findMany({ where: { profileId } });
@@ -294,7 +291,6 @@ export class ProfilesService {
             credentialId: c.credentialId,
             credentialUrl: c.credentialUrl,
           })),
-          skipDuplicates: true,
         });
       }
       return tx.certification.findMany({ where: { profileId } });
@@ -308,7 +304,6 @@ export class ProfilesService {
         try {
           await tx.profileLanguage.createMany({
             data: languages.map((l) => ({ profileId, ...l })),
-            skipDuplicates: true,
           });
         } catch (error) {
           if (isPrismaUniqueViolation(error)) {

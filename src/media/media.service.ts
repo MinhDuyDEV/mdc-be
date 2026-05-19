@@ -34,11 +34,9 @@ export class MediaService {
     }
 
     // Validate size
-    if (sizeBytes !== undefined) {
-      const maxSizeBytes = this.getMaxSizeBytes(purpose);
-      if (sizeBytes > maxSizeBytes) {
-        throw new BadRequestException('File size exceeds maximum allowed');
-      }
+    const maxSizeBytes = this.getMaxSizeBytes(purpose);
+    if (sizeBytes > maxSizeBytes) {
+      throw new BadRequestException('File size exceeds maximum allowed');
     }
 
     const bucket = this.config.get('s3Bucket', { infer: true });
@@ -103,6 +101,12 @@ export class MediaService {
 
     if (metadata.contentType !== asset.contentType) {
       throw new BadRequestException('Content type mismatch');
+    }
+
+    // Enforce size limit at confirmation time (belts and suspenders)
+    const maxSizeBytes = this.getMaxSizeBytes(asset.purpose);
+    if (metadata.contentLength > maxSizeBytes) {
+      throw new BadRequestException('File size exceeds maximum allowed');
     }
 
     // Atomic: update status + emit event in one transaction

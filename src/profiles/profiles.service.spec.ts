@@ -570,7 +570,6 @@ describe("ProfilesService", () => {
 						proficiency: "INTERMEDIATE",
 					},
 				],
-				skipDuplicates: true,
 			});
 			expect(result).toHaveLength(2);
 		});
@@ -784,7 +783,7 @@ describe("ProfilesService", () => {
 				},
 			];
 
-			jest.spyOn(prisma, "$queryRaw").mockResolvedValue(rawRows as any);
+			jest.spyOn(prisma, "$queryRaw").mockResolvedValue(rawRows);
 
 			const result = await service.searchProfiles("react developer", 20, 0);
 
@@ -832,7 +831,7 @@ describe("ProfilesService", () => {
 				},
 			];
 
-			jest.spyOn(prisma, "$queryRaw").mockResolvedValue(rawRows as any);
+			jest.spyOn(prisma, "$queryRaw").mockResolvedValue(rawRows);
 
 			const result = await service.searchProfiles("react", 5, 10);
 
@@ -863,7 +862,7 @@ describe("ProfilesService", () => {
 				.mockResolvedValue(skill as any);
 			jest
 				.spyOn(prisma.endorsement, "create")
-				.mockResolvedValue(createdEndorsement as any);
+				.mockResolvedValue(createdEndorsement);
 
 			const result = await service.endorseSkill("skill-1", endorser);
 
@@ -939,10 +938,8 @@ describe("ProfilesService", () => {
 
 			jest
 				.spyOn(prisma.endorsement, "findUnique")
-				.mockResolvedValue(endorsement as any);
-			jest
-				.spyOn(prisma.endorsement, "delete")
-				.mockResolvedValue(endorsement as any);
+				.mockResolvedValue(endorsement);
+			jest.spyOn(prisma.endorsement, "delete").mockResolvedValue(endorsement);
 
 			const result = await service.removeEndorsement("skill-1", endorser);
 
