@@ -1,6 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import { InjectPinoLogger, type PinoLogger } from "nestjs-pino";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../../infra/prisma/prisma.service";
 
 interface ApplicationStatusChangedPayload {
 	applicationId: string;
@@ -10,11 +9,9 @@ interface ApplicationStatusChangedPayload {
 
 @Injectable()
 export class ApplicationEmailProcessor {
-	constructor(
-    private readonly prisma: PrismaService,
-    @InjectPinoLogger(ApplicationEmailProcessor.name)
-    private readonly logger: PinoLogger,
-  ) {}
+	private readonly logger = new Logger(ApplicationEmailProcessor.name);
+
+	constructor(private readonly prisma: PrismaService) {}
 
 	async processApplicationStatusChanged(
 		payload: ApplicationStatusChangedPayload,
@@ -23,16 +20,13 @@ export class ApplicationEmailProcessor {
 			where: { id: payload.applicationId },
 			include: {
 				user: true,
-				job: {
-					include: { company: true },
-				},
+				job: { include: { company: true } },
 			},
 		});
 
 		if (!application) {
 			this.logger.warn(
-				"Application %s not found for ApplicationStatusChanged email — skipping",
-				payload.applicationId,
+				`Application ${payload.applicationId} not found for ApplicationStatusChanged email — skipping`,
 			);
 			return;
 		}
@@ -55,9 +49,7 @@ export class ApplicationEmailProcessor {
 		});
 
 		this.logger.debug(
-			"ApplicationStatusChanged email delivery created id=%s for application=%s",
-			delivery.id,
-			payload.applicationId,
+			`ApplicationStatusChanged email delivery created id=${delivery.id} for application=${payload.applicationId}`,
 		);
 	}
 }

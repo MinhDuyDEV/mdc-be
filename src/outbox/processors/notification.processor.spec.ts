@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { NotificationProcessor } from "./notification.processor";
 
 interface MockPrisma {
@@ -42,7 +43,6 @@ function createProcessor() {
 	const processor = new NotificationProcessor(
 		prisma as never,
 		idempotency as never,
-		logger as never,
 	);
 	return { processor, prisma, idempotency, logger };
 }
@@ -54,6 +54,18 @@ function makeP2002(): Error {
 }
 
 describe("NotificationProcessor", () => {
+	let warnSpy: jest.SpyInstance;
+	let debugSpy: jest.SpyInstance;
+
+	beforeEach(() => {
+		warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation();
+		debugSpy = jest.spyOn(Logger.prototype, "debug").mockImplementation();
+	});
+
+	afterEach(() => {
+		warnSpy.mockRestore();
+		debugSpy.mockRestore();
+	});
 	describe("processApplicationSubmitted", () => {
 		it("inserts notifications for OWNER + ADMIN + active seat holders", async () => {
 			const { processor, prisma } = createProcessor();
@@ -121,7 +133,7 @@ describe("NotificationProcessor", () => {
 			});
 
 			expect(prisma.notification.create).not.toHaveBeenCalled();
-			expect(logger.warn).toHaveBeenCalled();
+			expect(warnSpy).toHaveBeenCalled();
 		});
 	});
 
@@ -216,7 +228,7 @@ describe("NotificationProcessor", () => {
 		});
 
 		it("is a no-op when seat is not found", async () => {
-			const { processor, prisma, logger } = createProcessor();
+			const { processor, prisma } = createProcessor();
 			prisma.recruiterSeat.findFirst.mockResolvedValue(null);
 
 			await processor.processRecruiterSeatAllocated({
@@ -225,7 +237,7 @@ describe("NotificationProcessor", () => {
 			});
 
 			expect(prisma.notification.create).not.toHaveBeenCalled();
-			expect(logger.warn).toHaveBeenCalled();
+			expect(warnSpy).toHaveBeenCalled();
 		});
 	});
 

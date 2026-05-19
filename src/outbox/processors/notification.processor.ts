@@ -1,7 +1,6 @@
-import { Injectable } from "@nestjs/common";
-import { InjectPinoLogger, type PinoLogger } from "nestjs-pino";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
-import type { IdempotencyService } from "../idempotency.service";
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../../infra/prisma/prisma.service";
+import { IdempotencyService } from "../idempotency.service";
 
 interface ApplicationSubmittedPayload {
 	applicationId: string;
@@ -79,12 +78,12 @@ async function resolveCompanyRecruiters(
  */
 @Injectable()
 export class NotificationProcessor {
+	private readonly logger = new Logger(NotificationProcessor.name);
+
 	constructor(
-    private readonly prisma: PrismaService,
-    private readonly idempotencyService: IdempotencyService,
-    @InjectPinoLogger(NotificationProcessor.name)
-    private readonly logger: PinoLogger,
-  ) {}
+		private readonly prisma: PrismaService,
+		private readonly idempotencyService: IdempotencyService,
+	) {}
 
 	async processApplicationSubmitted(
 		payload: ApplicationSubmittedPayload,

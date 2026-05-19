@@ -4,7 +4,7 @@ import {
 	NotFoundException,
 } from "@nestjs/common";
 import type { CursorPaginationMeta } from "../common/pagination/cursor-pagination.dto";
-import type { PrismaService } from "../infra/prisma/prisma.service";
+import { PrismaService } from "../infra/prisma/prisma.service";
 import {
 	type NotificationResponseDto,
 	toNotificationResponse,

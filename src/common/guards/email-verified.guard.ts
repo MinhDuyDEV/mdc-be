@@ -4,8 +4,8 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
+import { Reflector } from '@nestjs/core';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/current-user.interface';
 import { VERIFIED_EMAIL_METADATA_KEY } from '../decorators/verified-email.decorator';
 

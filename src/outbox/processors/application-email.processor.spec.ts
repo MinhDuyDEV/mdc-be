@@ -1,3 +1,4 @@
+import { Logger } from "@nestjs/common";
 import { ApplicationEmailProcessor } from "./application-email.processor";
 
 describe("ApplicationEmailProcessor", () => {
@@ -15,6 +16,9 @@ describe("ApplicationEmailProcessor", () => {
 		},
 	};
 
+	let debugSpy: jest.SpyInstance;
+	let warnSpy: jest.SpyInstance;
+
 	function createProcessor() {
 		const mockPrisma = {
 			application: {
@@ -24,19 +28,22 @@ describe("ApplicationEmailProcessor", () => {
 				create: jest.fn().mockResolvedValue({ id: "delivery-1" }),
 			},
 		};
-		const mockLogger = {
-			debug: jest.fn(),
-			warn: jest.fn(),
-		};
-		const processor = new ApplicationEmailProcessor(
-			mockPrisma as any,
-			mockLogger as any,
-		);
-		return { processor, mockPrisma, mockLogger };
+		const processor = new ApplicationEmailProcessor(mockPrisma as never);
+		return { processor, mockPrisma };
 	}
 
+	beforeEach(() => {
+		debugSpy = jest.spyOn(Logger.prototype, "debug").mockImplementation();
+		warnSpy = jest.spyOn(Logger.prototype, "warn").mockImplementation();
+	});
+
+	afterEach(() => {
+		debugSpy.mockRestore();
+		warnSpy.mockRestore();
+	});
+
 	it("warns and skips email creation when application is not found", async () => {
-		const { processor, mockPrisma, mockLogger } = createProcessor();
+		const { processor, mockPrisma } = createProcessor();
 		mockPrisma.application.findUnique.mockResolvedValue(null);
 
 		await processor.processApplicationStatusChanged({
@@ -44,11 +51,11 @@ describe("ApplicationEmailProcessor", () => {
 			toStatus: "REJECTED",
 		});
 
-		expect(mockLogger.warn).toHaveBeenCalled();
+		expect(warnSpy).toHaveBeenCalled();
 		expect(mockPrisma.emailDelivery.create).not.toHaveBeenCalled();
 	});
 
-	it("creates a PENDING EmailDelivery row with correct shape for a valid application", async () => {
+	it("creates an EmailDelivery row with correct shape for a valid application", async () => {
 		const { processor, mockPrisma } = createProcessor();
 
 		await processor.processApplicationStatusChanged({

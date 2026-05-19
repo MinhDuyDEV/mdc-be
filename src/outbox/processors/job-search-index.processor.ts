@@ -1,14 +1,11 @@
-import { Injectable } from "@nestjs/common";
-import { InjectPinoLogger, type PinoLogger } from "nestjs-pino";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../../infra/prisma/prisma.service";
 
 @Injectable()
 export class JobSearchIndexProcessor {
-	constructor(
-    private readonly prisma: PrismaService,
-    @InjectPinoLogger(JobSearchIndexProcessor.name)
-    private readonly logger: PinoLogger,
-  ) {}
+	private readonly logger = new Logger(JobSearchIndexProcessor.name);
+
+	constructor(private readonly prisma: PrismaService) {}
 
 	async processJobCreated(payload: { jobId: string }): Promise<void> {
 		const job = await this.prisma.job.findUnique({
@@ -17,14 +14,12 @@ export class JobSearchIndexProcessor {
 		});
 		if (!job) {
 			this.logger.warn(
-				"Job %s not found for JobCreated indexing — skipping",
-				payload.jobId,
+				`Job ${payload.jobId} not found for JobCreated indexing — skipping`,
 			);
 			return;
 		}
 		this.logger.debug(
-			"JobCreated indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=%s",
-			job.id,
+			`JobCreated indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
 		);
 	}
 
@@ -35,14 +30,12 @@ export class JobSearchIndexProcessor {
 		});
 		if (!job) {
 			this.logger.warn(
-				"Job %s not found for JobUpdated indexing — skipping",
-				payload.jobId,
+				`Job ${payload.jobId} not found for JobUpdated indexing — skipping`,
 			);
 			return;
 		}
 		this.logger.debug(
-			"JobUpdated indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=%s",
-			job.id,
+			`JobUpdated indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
 		);
 	}
 
@@ -53,14 +46,12 @@ export class JobSearchIndexProcessor {
 		});
 		if (!job) {
 			this.logger.warn(
-				"Job %s not found for JobPublished indexing — skipping",
-				payload.jobId,
+				`Job ${payload.jobId} not found for JobPublished indexing — skipping`,
 			);
 			return;
 		}
 		this.logger.debug(
-			"JobPublished indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=%s",
-			job.id,
+			`JobPublished indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
 		);
 	}
 
@@ -71,14 +62,12 @@ export class JobSearchIndexProcessor {
 		});
 		if (!job) {
 			this.logger.warn(
-				"Job %s not found for JobClosed indexing — skipping",
-				payload.jobId,
+				`Job ${payload.jobId} not found for JobClosed indexing — skipping`,
 			);
 			return;
 		}
 		this.logger.debug(
-			"JobClosed indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=%s",
-			job.id,
+			`JobClosed indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
 		);
 	}
 
@@ -89,14 +78,12 @@ export class JobSearchIndexProcessor {
 		});
 		if (!job) {
 			this.logger.warn(
-				"Job %s not found for JobDeleted indexing — skipping",
-				payload.jobId,
+				`Job ${payload.jobId} not found for JobDeleted indexing — skipping`,
 			);
 			return;
 		}
 		this.logger.debug(
-			"JobDeleted indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=%s",
-			job.id,
+			`JobDeleted indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
 		);
 	}
 }
