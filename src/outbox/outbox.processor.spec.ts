@@ -42,6 +42,12 @@ describe("OutboxProcessor", () => {
 		const mockApplicationEmail = {
 			processApplicationStatusChanged: jest.fn().mockResolvedValue(undefined),
 		};
+		const mockNotification = {
+			processApplicationSubmitted: jest.fn().mockResolvedValue(undefined),
+			processApplicationStatusChanged: jest.fn().mockResolvedValue(undefined),
+			processApplicationNoteAdded: jest.fn().mockResolvedValue(undefined),
+			processRecruiterSeatAllocated: jest.fn().mockResolvedValue(undefined),
+		};
 		const mockLogger = {
 			debug: jest.fn(),
 			warn: jest.fn(),
@@ -55,6 +61,7 @@ describe("OutboxProcessor", () => {
 			mockCompanySearchIndex as any,
 			mockJobSearchIndex as any,
 			mockApplicationEmail as any,
+			mockNotification as any,
 			mockLogger as any,
 		);
 		return {
@@ -65,6 +72,7 @@ describe("OutboxProcessor", () => {
 			mockCompanySearchIndex,
 			mockJobSearchIndex,
 			mockApplicationEmail,
+			mockNotification,
 			mockLogger,
 		};
 	}
@@ -281,8 +289,6 @@ describe("OutboxProcessor", () => {
 
 	describe("Phase 4 event types", () => {
 		const PHASE_4_STUB_EVENTS = [
-			"ApplicationSubmitted",
-			"ApplicationNoteAdded",
 			"ExternalApplyClicked",
 			"CandidateSaved",
 			"CandidateAddedToTalentPool",
@@ -317,12 +323,13 @@ describe("OutboxProcessor", () => {
 			).toBe(false);
 		});
 
-		it("does NOT add a duplicate RecruiterSeatAllocated case (still routes to company search index)", async () => {
-			const { processor, mockCompanySearchIndex } = createProcessor();
+		it("RecruiterSeatAllocated routes to companySearchIndex AND notification", async () => {
+			const { processor, mockCompanySearchIndex, mockNotification } =
+				createProcessor();
 			const event = {
 				id: "evt-rs",
 				eventType: "RecruiterSeatAllocated",
-				payload: { companyId: "c1" },
+				payload: { companyId: "c1", recruiterUserId: "u1" },
 				attempts: 0,
 			};
 
@@ -336,6 +343,62 @@ describe("OutboxProcessor", () => {
 				{
 					companyId: "c1",
 				},
+			);
+			expect(
+				mockNotification.processRecruiterSeatAllocated,
+			).toHaveBeenCalledWith({
+				companyId: "c1",
+				recruiterUserId: "u1",
+			});
+		});
+
+		it("ApplicationSubmitted routes to notification.processApplicationSubmitted", async () => {
+			const { processor, mockNotification } = createProcessor();
+			const event = {
+				id: "evt-as",
+				eventType: "ApplicationSubmitted",
+				payload: {
+					applicationId: "app-1",
+					jobId: "job-1",
+					companyId: "company-1",
+					candidateUserId: "candidate-1",
+				},
+				attempts: 0,
+			};
+
+			await (
+				processor as unknown as {
+					dispatch: (e: typeof event) => Promise<void>;
+				}
+			).dispatch(event);
+
+			expect(mockNotification.processApplicationSubmitted).toHaveBeenCalledWith(
+				expect.objectContaining({ applicationId: "app-1" }),
+			);
+		});
+
+		it("ApplicationNoteAdded routes to notification.processApplicationNoteAdded", async () => {
+			const { processor, mockNotification } = createProcessor();
+			const event = {
+				id: "evt-an",
+				eventType: "ApplicationNoteAdded",
+				payload: {
+					applicationId: "app-1",
+					noteId: "note-1",
+					authorUserId: "u1",
+					companyId: "c1",
+				},
+				attempts: 0,
+			};
+
+			await (
+				processor as unknown as {
+					dispatch: (e: typeof event) => Promise<void>;
+				}
+			).dispatch(event);
+
+			expect(mockNotification.processApplicationNoteAdded).toHaveBeenCalledWith(
+				expect.objectContaining({ noteId: "note-1" }),
 			);
 		});
 	});

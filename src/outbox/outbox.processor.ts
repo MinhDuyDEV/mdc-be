@@ -9,6 +9,7 @@ import type { DeadLetterService } from "./dead-letter.service";
 import type { ApplicationEmailProcessor } from "./processors/application-email.processor";
 import type { CompanySearchIndexProcessor } from "./processors/company-search-index.processor";
 import type { JobSearchIndexProcessor } from "./processors/job-search-index.processor";
+import type { NotificationProcessor } from "./processors/notification.processor";
 
 export interface ClaimedEvent {
 	id: string;
@@ -32,6 +33,7 @@ export class OutboxProcessor {
     private readonly companySearchIndex: CompanySearchIndexProcessor,
     private readonly jobSearchIndex: JobSearchIndexProcessor,
     private readonly applicationEmail: ApplicationEmailProcessor,
+    private readonly notification: NotificationProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -159,7 +161,6 @@ export class OutboxProcessor {
 			case "CompanyMemberRemoved":
 			case "MemberInvited":
 			case "MemberJoined":
-			case "RecruiterSeatAllocated":
 			case "RecruiterSeatDeallocated": {
 				const payload = event.payload as { companyId?: string };
 				if (!payload?.companyId) {
@@ -171,6 +172,29 @@ export class OutboxProcessor {
 				await this.companySearchIndex.processCompanyUpdated({
 					companyId: payload.companyId,
 				});
+				return;
+			}
+			case "RecruiterSeatAllocated": {
+				const payload = event.payload as {
+					companyId?: string;
+					recruiterUserId?: string;
+				};
+				if (!payload?.companyId) {
+					this.logger.warn(
+						`RecruiterSeatAllocated event ${event.id} missing companyId — skipping`,
+					);
+					return;
+				}
+				// Keep existing search-index side-effect.
+				await this.companySearchIndex.processCompanyUpdated({
+					companyId: payload.companyId,
+				});
+				if (payload.recruiterUserId) {
+					await this.notification.processRecruiterSeatAllocated({
+						companyId: payload.companyId,
+						recruiterUserId: payload.recruiterUserId,
+					});
+				}
 				return;
 			}
 			case "JobCreated":
@@ -198,6 +222,16 @@ export class OutboxProcessor {
 					event.payload as { jobId: string },
 				);
 				return;
+			case "ApplicationSubmitted":
+				await this.notification.processApplicationSubmitted(
+					event.payload as {
+						applicationId: string;
+						jobId: string;
+						companyId: string;
+						candidateUserId: string;
+					},
+				);
+				return;
 			case "ApplicationStatusChanged":
 				await this.applicationEmail.processApplicationStatusChanged(
 					event.payload as {
@@ -206,10 +240,29 @@ export class OutboxProcessor {
 						fromStatus?: string;
 					},
 				);
+				await this.notification.processApplicationStatusChanged(
+					event.payload as {
+						applicationId: string;
+						fromStatus?: string;
+						toStatus: string;
+						companyId: string;
+						candidateUserId: string;
+						changedByUserId?: string;
+						reason?: string | null;
+					},
+				);
+				return;
+			case "ApplicationNoteAdded":
+				await this.notification.processApplicationNoteAdded(
+					event.payload as {
+						applicationId: string;
+						noteId: string;
+						authorUserId: string;
+						companyId: string;
+					},
+				);
 				return;
 			// Phase 4 stub remainder — real handlers deferred to later phases.
-			case "ApplicationSubmitted":
-			case "ApplicationNoteAdded":
 			case "ExternalApplyClicked":
 			case "CandidateSaved":
 			case "CandidateAddedToTalentPool":
