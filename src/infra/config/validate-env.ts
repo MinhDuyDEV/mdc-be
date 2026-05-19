@@ -108,6 +108,13 @@ function parseProcessRole(value: string | undefined): ProcessRole {
   return role as ProcessRole;
 }
 
+function parseCommaSeparatedString(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
 export function validateEnv(env: RawEnv): AppConfig {
   const nodeEnv = requireString(env, 'NODE_ENV');
   if (!VALID_NODE_ENVS.has(nodeEnv)) {
@@ -245,6 +252,21 @@ export function validateEnv(env: RawEnv): AppConfig {
       env,
       'THROTTLE_REFRESH_TTL',
       60000,
+    ),
+    // Media upload
+    mediaAvatarMaxSizeBytes: parseOptionalPositiveInteger(
+      env,
+      'MEDIA_AVATAR_MAX_SIZE_BYTES',
+      5_242_880, // 5MB
+    ),
+    mediaResumeMaxSizeBytes: parseOptionalPositiveInteger(
+      env,
+      'MEDIA_RESUME_MAX_SIZE_BYTES',
+      20_971_520, // 20MB
+    ),
+    mediaAllowedContentTypes: parseCommaSeparatedString(
+      parseOptionalString(env, 'MEDIA_ALLOWED_CONTENT_TYPES') ||
+        'image/jpeg,image/png,image/gif,image/webp,application/pdf',
     ),
   };
 }

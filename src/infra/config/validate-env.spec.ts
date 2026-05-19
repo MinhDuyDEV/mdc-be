@@ -95,6 +95,15 @@ describe('validateEnv', () => {
       throttleResendVerificationTtl: 60000,
       throttleRefreshLimit: 10,
       throttleRefreshTtl: 60000,
+      mediaAvatarMaxSizeBytes: 5242880,
+      mediaResumeMaxSizeBytes: 20971520,
+      mediaAllowedContentTypes: [
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/pdf',
+      ],
     });
   });
 
@@ -209,6 +218,36 @@ describe('validateEnv', () => {
       expect(config.outboxMaxBackoffMs).toBe(120000);
       expect(config.outboxLeaseTimeoutMs).toBe(30000);
       expect(config.outboxHealthLagThreshold).toBe(200);
+    });
+  });
+
+  describe('Media config', () => {
+    it('should default media config when unset', () => {
+      const config = validateEnv(validEnv);
+      expect(config.mediaAvatarMaxSizeBytes).toBe(5242880);
+      expect(config.mediaResumeMaxSizeBytes).toBe(20971520);
+      expect(config.mediaAllowedContentTypes).toEqual([
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/pdf',
+      ]);
+    });
+
+    it('should parse all media env vars', () => {
+      const config = validateEnv({
+        ...validEnv,
+        MEDIA_AVATAR_MAX_SIZE_BYTES: '1048576',
+        MEDIA_RESUME_MAX_SIZE_BYTES: '5242880',
+        MEDIA_ALLOWED_CONTENT_TYPES: 'image/jpeg,application/pdf',
+      });
+      expect(config.mediaAvatarMaxSizeBytes).toBe(1048576);
+      expect(config.mediaResumeMaxSizeBytes).toBe(5242880);
+      expect(config.mediaAllowedContentTypes).toEqual([
+        'image/jpeg',
+        'application/pdf',
+      ]);
     });
   });
 });

@@ -61,4 +61,8 @@ export interface AppConfig {
   throttleResendVerificationTtl: number;
   throttleRefreshLimit: number;
   throttleRefreshTtl: number;
+  // Media upload
+  mediaAvatarMaxSizeBytes: number;
+  mediaResumeMaxSizeBytes: number;
+  mediaAllowedContentTypes: string[];
 }

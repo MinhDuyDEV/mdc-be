@@ -11,7 +11,9 @@ import { EmailModule } from './email/email.module';
 import { InfraModule } from './infra';
 import type { AppConfig } from './infra/config';
 import { REDIS_CLIENT } from './infra/redis/redis.constants';
+import { MediaModule } from './media/media.module';
 import { OutboxModule } from './outbox';
+import { ProfilesModule } from './profiles/profiles.module';
 import { SearchModule } from './search';
 import { UsersModule } from './users/users.module';
 
@@ -41,7 +43,9 @@ import { UsersModule } from './users/users.module';
     InfraModule,
     AuthModule,
     EmailModule,
+    MediaModule,
     OutboxModule,
+    ProfilesModule,
     SearchModule,
     UsersModule,
   ],
