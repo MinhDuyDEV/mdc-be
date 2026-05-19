@@ -10,6 +10,12 @@ import { StorageService } from '../infra/storage/storage.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { MediaService } from './media.service';
 
+const mediaAssetMock = {
+  create: jest.fn(),
+  findUnique: jest.fn(),
+  update: jest.fn(),
+};
+
 describe('MediaService', () => {
   let service: MediaService;
   let prisma: PrismaService;
@@ -36,12 +42,10 @@ describe('MediaService', () => {
         {
           provide: PrismaService,
           useValue: {
-            mediaAsset: {
-              create: jest.fn(),
-              findUnique: jest.fn(),
-              update: jest.fn(),
-            },
-            $transaction: jest.fn((fn: any) => fn({})),
+            mediaAsset: mediaAssetMock,
+            $transaction: jest.fn((fn: any) =>
+              fn({ mediaAsset: mediaAssetMock }),
+            ),
           },
         },
         {
@@ -62,7 +66,6 @@ describe('MediaService', () => {
     service = module.get<MediaService>(MediaService);
     prisma = module.get<PrismaService>(PrismaService);
     storage = module.get<StorageService>(StorageService);
-    config = module.get<ConfigService>(ConfigService);
   });
 
   it('should be defined', () => {

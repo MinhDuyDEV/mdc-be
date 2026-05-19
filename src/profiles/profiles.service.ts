@@ -6,7 +6,9 @@ import {
 } from '@nestjs/common';
 import { Prisma, ProfileVisibility } from '@prisma/client';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
+
 import { PrismaService } from '../infra/prisma/prisma.service';
+
 import { OutboxService } from '../outbox/outbox.service';
 import type { CertificationDto } from './dto/certification.dto';
 import type { EducationDto } from './dto/education.dto';
@@ -66,7 +68,7 @@ export class ProfilesService {
       ...profileData
     } = data;
 
-    const profileId = await this.prisma.$transaction(async (tx) => {
+    await this.prisma.$transaction(async (tx) => {
       let profile = await tx.profile.findUnique({
         where: { userId: user.id },
       });
