@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common';
+import { CompaniesModule } from './companies/companies.module';
 import { EmailModule } from './email/email.module';
 import { InfraModule } from './infra';
 import type { AppConfig } from './infra/config';
@@ -42,6 +43,7 @@ import { UsersModule } from './users/users.module';
     CommonModule,
     InfraModule,
     AuthModule,
+    CompaniesModule,
     EmailModule,
     MediaModule,
     OutboxModule,

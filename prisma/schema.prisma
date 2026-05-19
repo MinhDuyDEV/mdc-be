@@ -67,6 +67,35 @@ enum LanguageProficiency {
   NATIVE_BILINGUAL
 }
 
+enum Industry {
+  TECHNOLOGY
+  FINANCE
+  HEALTHCARE
+  EDUCATION
+  RETAIL
+  MANUFACTURING
+  CONSULTING
+  REAL_ESTATE
+  HOSPITALITY
+  TRANSPORTATION
+  ENERGY
+  TELECOMMUNICATIONS
+  MEDIA
+  LEGAL
+  NONPROFIT
+  GOVERNMENT
+  AGRICULTURE
+  CONSTRUCTION
+  AUTOMOTIVE
+  OTHER
+}
+
+enum CompanyRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String         @unique
@@ -82,7 +111,13 @@ model User {
   preference         UserPreference?
   profile           Profile?
   mediaAssets       MediaAsset[]
-  endorsements      Endorsement[]
+  endorsements             Endorsement[]
+  companyMembers           CompanyMember[]
+  companyFollowers         CompanyFollower[]
+  verificationsRequested   CompanyVerification[] @relation("VerificationRequester")
+  verificationsReviewed    CompanyVerification[] @relation("VerificationReviewer")
+  recruiterSeats           RecruiterSeat[]
+  memberInvitations        MemberInvitation[]
 
   @@map("users")
 }
@@ -246,6 +281,43 @@ model Profile {
   @@map("profiles")
 }
 
+model Company {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name              String    @db.VarChar(200)
+  slug              String    @db.VarChar(200)
+  industry          Industry?
+  description       String?   @db.Text
+  website           String?   @db.VarChar(500)
+  logoMediaAssetId  String?   @map("logo_media_asset_id") @db.Uuid
+  coverMediaAssetId String?   @map("cover_media_asset_id") @db.Uuid
+  verified          Boolean   @default(false)
+  verifiedAt        DateTime? @map("verified_at") @db.Timestamptz(3)
+  followerCount     Int       @default(0) @map("follower_count")
+  employeeCount     String?   @map("employee_count") @db.VarChar(50)
+  foundedYear       Int?      @map("founded_year")
+  headquarters      String?   @db.VarChar(200)
+  searchVector      Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  logoMediaAsset    MediaAsset? @relation("CompanyLogo", fields: [logoMediaAssetId], references: [id], onDelete: SetNull)
+  coverMediaAsset   MediaAsset? @relation("CompanyCover", fields: [coverMediaAssetId], references: [id], onDelete: SetNull)
+  members           CompanyMember[]
+  followers         CompanyFollower[]
+  verifications     CompanyVerification[]
+  entitlements      CompanyEntitlement[]
+  recruiterSeats    RecruiterSeat[]
+  memberInvitations MemberInvitation[]
+
+  @@index([slug])
+  @@index([industry])
+  @@index([verified])
+  @@index([deletedAt])
+  @@index([searchVector], type: Gin, name: "idx_companies_search")
+  @@map("companies")
+}
+
 model ProfileSkill {
   id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profileId   String            @map("profile_id") @db.Uuid
@@ -358,8 +430,129 @@ model MediaAsset {
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  owner       User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner         User        @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  companyLogos  Company[] @relation("CompanyLogo")
+  companyCovers Company[] @relation("CompanyCover")
 
   @@index([ownerId, status])
   @@map("media_assets")
+}
+
+model CompanyMember {
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String      @map("company_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  role      CompanyRole
+  title     String?     @db.VarChar(200)
+  status    String      @default("active") @db.VarChar(50)
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([companyId])
+  @@index([userId])
+  @@index([status])
+  @@map("company_members")
+}
+
+model CompanyFollower {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company   Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([companyId, userId])
+  @@index([companyId])
+  @@index([userId])
+  @@map("company_followers")
+}
+
+model CompanyVerification {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  requestedByUserId String    @map("requested_by_user_id") @db.Uuid
+  status            String    @default("pending") @db.VarChar(50)
+  documentUrls      String[]  @map("document_urls")
+  notes             String?   @db.Text
+  reviewedByUserId  String?   @map("reviewed_by_user_id") @db.Uuid
+  reviewedAt        DateTime? @map("reviewed_at") @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company           Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  requestedBy       User      @relation("VerificationRequester", fields: [requestedByUserId], references: [id], onDelete: Cascade)
+  reviewedBy        User?     @relation("VerificationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([status])
+  @@map("company_verifications")
+}
+
+model CompanyEntitlement {
+  id               String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId        String   @map("company_id") @db.Uuid
+  entitlementType  String   @map("entitlement_type") @db.VarChar(100)
+  creditsTotal     Int      @map("credits_total")
+  creditsUsed      Int      @default(0) @map("credits_used")
+  creditsRemaining Int      @map("credits_remaining")
+  validFrom        DateTime @map("valid_from") @db.Timestamptz(3)
+  validUntil       DateTime @map("valid_until") @db.Timestamptz(3)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company          Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([entitlementType])
+  @@index([validUntil])
+  @@map("company_entitlements")
+}
+
+model RecruiterSeat {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId   String    @map("company_id") @db.Uuid
+  userId      String?   @map("user_id") @db.Uuid
+  status      String    @default("available") @db.VarChar(50)
+  allocatedAt DateTime? @map("allocated_at") @db.Timestamptz(3)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId])
+  @@index([userId])
+  @@index([status])
+  @@map("recruiter_seats")
+}
+
+model MemberInvitation {
+  id         String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId  String    @map("company_id") @db.Uuid
+  email      String    @db.VarChar(255)
+  role       String    @db.VarChar(50)
+  token      String    @unique @db.VarChar(255)
+  invitedBy  String    @map("invited_by") @db.Uuid
+  status     String    @default("pending") @db.VarChar(50)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(3)
+  acceptedAt DateTime? @map("accepted_at") @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company    Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  inviter    User      @relation(fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@index([companyId])
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("member_invitations")
 }

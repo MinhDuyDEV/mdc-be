@@ -28,6 +28,10 @@ describe('OutboxProcessor', () => {
     const mockDeadLetter = {
       moveToDeadLetter: jest.fn().mockResolvedValue(undefined),
     };
+    const mockCompanySearchIndex = {
+      processCompanyCreated: jest.fn().mockResolvedValue(undefined),
+      processCompanyUpdated: jest.fn().mockResolvedValue(undefined),
+    };
     const mockLogger = {
       debug: jest.fn(),
       warn: jest.fn(),
@@ -38,9 +42,17 @@ describe('OutboxProcessor', () => {
       mockPrisma as any,
       mockConfig as any,
       mockDeadLetter as any,
+      mockCompanySearchIndex as any,
       mockLogger as any,
     );
-    return { processor, mockPrisma, mockConfig, mockDeadLetter, mockLogger };
+    return {
+      processor,
+      mockPrisma,
+      mockConfig,
+      mockDeadLetter,
+      mockCompanySearchIndex,
+      mockLogger,
+    };
   }
 
   describe('claimEvents', () => {
