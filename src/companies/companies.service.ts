@@ -1,8 +1,15 @@
-import { Injectable, ConflictException, NotFoundException } from "@nestjs/common";
-import { type Prisma } from "@prisma/client";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import type { Prisma } from "@prisma/client";
 import { PrismaService } from "../infra/prisma/prisma.service";
 import { OutboxService } from "../outbox/outbox.service";
 import type { CreateCompanyDto } from "./dto/create-company.dto";
+import type { UpdateCompanyDto } from "./dto/update-company.dto";
+import type { InviteMemberDto } from "./dto/invite-member.dto";
 
 function slugify(text: string): string {
   return text
@@ -51,7 +58,7 @@ const COMPANY_INCLUDES = {
       followers: true,
     },
   },
-} satisfies Prisma.CompanyInclude;
+} as const;
 
 @Injectable()
 export class CompaniesService {
@@ -181,5 +188,42 @@ export class CompaniesService {
         payload: { companyId, userId },
       });
     });
+  }
+
+  // Stub: to be implemented later
+  async updateCompany(_userId: string, _id: string, _data: UpdateCompanyDto) {
+    throw new BadRequestException("Not yet implemented");
+  }
+
+  // Stub: to be implemented later
+  async inviteMember(
+    _userId: string,
+    _companyId: string,
+    _data: InviteMemberDto,
+  ) {
+    throw new BadRequestException("Not yet implemented");
+  }
+
+  // Stub: to be implemented later
+  async acceptInvitation(_userId: string, _token: string) {
+    throw new BadRequestException("Not yet implemented");
+  }
+
+  // Stub: to be implemented later
+  async allocateRecruiterSeat(
+    _userId: string,
+    _companyId: string,
+    _targetUserId: string,
+  ) {
+    throw new BadRequestException("Not yet implemented");
+  }
+
+  // Stub: to be implemented later
+  async deallocateRecruiterSeat(
+    _userId: string,
+    _companyId: string,
+    _seatId: string,
+  ) {
+    throw new BadRequestException("Not yet implemented");
   }
 }
