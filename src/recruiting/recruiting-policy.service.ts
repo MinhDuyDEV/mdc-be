@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ApplicationStatus } from "@prisma/client";
-import type { PrismaService } from "../infra/prisma/prisma.service";
+import { PrismaService } from "../infra/prisma/prisma.service";
 
 /**
  * Discriminated decision returned by `canMessageCandidate`. Phase 7 messaging

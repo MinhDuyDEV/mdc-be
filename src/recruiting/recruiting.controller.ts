@@ -22,7 +22,7 @@ import type {
 	CreateTalentPoolDto,
 	UpdateTalentPoolDto,
 } from "./dto/talent-pool.dto";
-import type { RecruitingService } from "./recruiting.service";
+import { RecruitingService } from "./recruiting.service";
 
 @Controller("companies/:companyId")
 export class RecruitingController {

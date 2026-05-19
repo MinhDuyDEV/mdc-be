@@ -21,7 +21,7 @@ import type { CursorPaginationQueryDto } from "../common/pagination/cursor-pagin
 import type { CreateJobDto } from "./dto/create-job.dto";
 import type { ListJobsQueryDto } from "./dto/list-jobs.query.dto";
 import type { UpdateJobDto } from "./dto/update-job.dto";
-import type { JobsService } from "./jobs.service";
+import { JobsService } from "./jobs.service";
 
 @Controller("jobs")
 export class JobsController {

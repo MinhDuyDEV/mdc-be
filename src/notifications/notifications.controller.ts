@@ -7,16 +7,13 @@ import {
 	Patch,
 	Post,
 	Query,
-	UseGuards,
 } from "@nestjs/common";
-import { AuthGuard } from "../auth/auth.guard";
 import { CurrentUser } from "../common/auth/current-user.decorator";
 import type { AuthenticatedUser } from "../common/auth/current-user.interface";
 import type { CursorPaginationQueryDto } from "../common/pagination/cursor-pagination.dto";
-import type { NotificationsService } from "./notifications.service";
+import { NotificationsService } from "./notifications.service";
 
 @Controller("notifications")
-@UseGuards(AuthGuard)
 export class NotificationsController {
 	constructor(private readonly notificationsService: NotificationsService) {}
 
