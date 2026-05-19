@@ -6,9 +6,9 @@ import {
 } from '@nestjs/common';
 import { ApplicationStatus, JobStatus, type Prisma } from '@prisma/client';
 import type { PrismaTransaction } from '../infra/prisma';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-import type { IdempotencyService } from '../outbox/idempotency.service';
-import type { OutboxService } from '../outbox/outbox.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { IdempotencyService } from '../outbox/idempotency.service';
+import { OutboxService } from '../outbox/outbox.service';
 import {
   type ApplicationStatusActor,
   evaluateTransition,
