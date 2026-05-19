@@ -4,8 +4,9 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
-import { PrismaService } from '../infra/prisma';
+import type { PrismaService } from '../infra/prisma';
 import type { DeadLetterService } from './dead-letter.service';
+import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -26,6 +27,7 @@ export class OutboxProcessor {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<AppConfig, true>,
     private readonly deadLetter: DeadLetterService,
+    private readonly companySearchIndex: CompanySearchIndexProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -54,7 +56,7 @@ export class OutboxProcessor {
 
       for (const event of events) {
         try {
-          // TODO: dispatch to domain handlers in future phases
+          await this.dispatch(event);
           await this.markProcessed(event.id);
           this.logger.debug(
             'Event %s (%s) marked as processed',
@@ -131,6 +133,49 @@ export class OutboxProcessor {
       })) as ClaimedEvent[];
       return events;
     });
+  }
+
+  private async dispatch(event: ClaimedEvent): Promise<void> {
+    switch (event.eventType) {
+      case 'CompanyCreated':
+        await this.companySearchIndex.processCompanyCreated(
+          event.payload as { companyId: string },
+        );
+        return;
+      case 'CompanyUpdated':
+      // The following events all affect the company search document
+      // (member counts, member names, follower counts, recruiter seats),
+      // so route them through the same reindex path. If a dedicated handler
+      // is needed later, split out below.
+      // eslint-disable-next-line no-fallthrough
+      case 'CompanyFollowed':
+      case 'CompanyUnfollowed':
+      case 'CompanyMemberAdded':
+      case 'CompanyMemberRoleChanged':
+      case 'CompanyMemberRemoved':
+      case 'MemberInvited':
+      case 'MemberJoined':
+      case 'RecruiterSeatAllocated':
+      case 'RecruiterSeatDeallocated': {
+        const payload = event.payload as { companyId?: string };
+        if (!payload?.companyId) {
+          this.logger.warn(
+            `${event.eventType} event ${event.id} missing companyId — skipping`,
+          );
+          return;
+        }
+        await this.companySearchIndex.processCompanyUpdated({
+          companyId: payload.companyId,
+        });
+        return;
+      }
+      default:
+        // No handler registered yet — treat as no-op (will be marked processed).
+        this.logger.debug(
+          `No handler for event type ${event.eventType} (id=${event.id})`,
+        );
+        return;
+    }
   }
 
   private async recoverStaleLocks(): Promise<void> {

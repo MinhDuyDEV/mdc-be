@@ -90,6 +90,12 @@ enum Industry {
   OTHER
 }
 
+enum CompanyRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 model User {
   id              String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email           String         @unique
@@ -278,7 +284,7 @@ model Profile {
 model Company {
   id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name              String    @db.VarChar(200)
-  slug              String    @unique @db.VarChar(200)
+  slug              String    @db.VarChar(200)
   industry          Industry?
   description       String?   @db.Text
   website           String?   @db.VarChar(500)
@@ -291,6 +297,7 @@ model Company {
   foundedYear       Int?      @map("founded_year")
   headquarters      String?   @db.VarChar(200)
   searchVector      Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
+  deletedAt         DateTime? @map("deleted_at") @db.Timestamptz(3)
   createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -306,6 +313,7 @@ model Company {
   @@index([slug])
   @@index([industry])
   @@index([verified])
+  @@index([deletedAt])
   @@index([searchVector], type: Gin, name: "idx_companies_search")
   @@map("companies")
 }
@@ -431,12 +439,12 @@ model MediaAsset {
 }
 
 model CompanyMember {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  companyId String   @map("company_id") @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  role      String   @db.VarChar(50)
-  title     String?  @db.VarChar(200)
-  status    String   @default("active") @db.VarChar(50)
+  id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String      @map("company_id") @db.Uuid
+  userId    String      @map("user_id") @db.Uuid
+  role      CompanyRole
+  title     String?     @db.VarChar(200)
+  status    String      @default("active") @db.VarChar(50)
   joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(3)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)

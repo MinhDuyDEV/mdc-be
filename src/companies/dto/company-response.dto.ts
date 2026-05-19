@@ -1,71 +1,71 @@
-import { Exclude, Expose, Type } from "class-transformer";
+import { Exclude, Expose, Type } from 'class-transformer';
 
 @Exclude()
 export class CompanyMemberResponseDto {
-	@Expose()
-	id!: string;
+  @Expose()
+  id!: string;
 
-	@Expose()
-	userId!: string;
+  @Expose()
+  userId!: string;
 
-	@Expose()
-	role!: string;
+  @Expose()
+  role!: string;
 
-	@Expose()
-	title!: string | null;
+  @Expose()
+  title!: string | null;
 
-	@Expose()
-	status!: string;
+  @Expose()
+  status!: string;
 
-	@Expose()
-	joinedAt!: Date;
+  @Expose()
+  joinedAt!: Date;
 }
 
 @Exclude()
 export class CompanyResponseDto {
-	@Expose()
-	id!: string;
+  @Expose()
+  id!: string;
 
-	@Expose()
-	name!: string;
+  @Expose()
+  name!: string;
 
-	@Expose()
-	slug!: string;
+  @Expose()
+  slug!: string;
 
-	@Expose()
-	industry!: string | null;
+  @Expose()
+  industry!: string | null;
 
-	@Expose()
-	description!: string | null;
+  @Expose()
+  description!: string | null;
 
-	@Expose()
-	website!: string | null;
+  @Expose()
+  website!: string | null;
 
-	@Expose()
-	verified!: boolean;
+  @Expose()
+  verified!: boolean;
 
-	@Expose()
-	verifiedAt!: Date | null;
+  @Expose()
+  verifiedAt!: Date | null;
 
-	@Expose()
-	followerCount!: number;
+  @Expose()
+  followerCount!: number;
 
-	@Expose()
-	employeeCount!: string | null;
+  @Expose()
+  employeeCount!: string | null;
 
-	@Expose()
-	foundedYear!: number | null;
+  @Expose()
+  foundedYear!: number | null;
 
-	@Expose()
-	headquarters!: string | null;
+  @Expose()
+  headquarters!: string | null;
 
-	@Expose()
-	@Type(() => CompanyMemberResponseDto)
-	members?: CompanyMemberResponseDto[];
+  @Expose()
+  @Type(() => CompanyMemberResponseDto)
+  members?: CompanyMemberResponseDto[];
 
-	@Expose()
-	createdAt!: Date;
+  @Expose()
+  createdAt!: Date;
 
-	@Expose()
-	updatedAt!: Date;
+  @Expose()
+  updatedAt!: Date;
 }

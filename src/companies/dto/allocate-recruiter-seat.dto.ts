@@ -1,6 +1,6 @@
-import { IsUUID } from "class-validator";
+import { IsUUID } from 'class-validator';
 
 export class AllocateRecruiterSeatDto {
-	@IsUUID()
-	userId!: string;
+  @IsUUID()
+  userId!: string;
 }
