@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { Cron, CronExpression } from "@nestjs/schedule";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
-import type { SearchEngineService } from "../../infra/search-engine/search-engine.service";
+import { PrismaService } from "../../infra/prisma/prisma.service";
+import { SearchEngineService } from "../../infra/search-engine/search-engine.service";
 
 interface CompanyCreatedPayload {
 	companyId: string;
