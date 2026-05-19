@@ -133,6 +133,24 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum NotificationType {
+  // Applications domain
+  ApplicationSubmitted
+  ApplicationStatusChanged
+  ApplicationNoteAdded
+  ApplicationWithdrawn
+  // Jobs domain
+  JobPublished
+  JobUpdated
+  JobClosed
+  // Recruiting domain
+  CandidateSaved
+  CandidateAddedToTalentPool
+  RecruiterSeatAllocated
+  // System / generic
+  System
+}
+
 model User {
   id                          String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   email                       String                   @unique
@@ -168,6 +186,7 @@ model User {
   talentPoolCandidatesAddedBy TalentPoolCandidate[]    @relation("TalentPoolCandidatesAddedBy")
   candidateNotesAsCandidate   CandidateNote[]          @relation("CandidateNotesAsCandidate")
   candidateNotesByAuthor      CandidateNote[]          @relation("CandidateNotesByAuthor")
+  notifications               Notification[]
 
   @@map("users")
 }
@@ -872,4 +891,26 @@ model CandidateNote {
   @@index([companyId, candidateUserId, createdAt(sort: Desc), deletedAt])
   @@index([authorUserId])
   @@map("candidate_notes")
+}
+
+model Notification {
+  id          String           @id @default(uuid()) @db.Uuid
+  userId      String           @map("user_id") @db.Uuid
+  type        NotificationType
+  // Free-form payload — keeps the table flexible across event types.
+  payloadJson Json             @map("payload_json") @db.JsonB
+  // Optional human-friendly fields populated by the producer for cheap renders.
+  title       String?          @db.VarChar(255)
+  body        String?          @db.Text
+  actionUrl   String?          @map("action_url") @db.VarChar(2048)
+  // Read tracking
+  readAt      DateTime?        @map("read_at") @db.Timestamptz(3)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Composite index for "feed" reads (userId + DESC by createdAt + tie-break on id).
+  @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  // Partial index notifications_unread_idx lives in raw SQL (Prisma can't express WHERE predicates).
+  @@map("notifications")
 }
