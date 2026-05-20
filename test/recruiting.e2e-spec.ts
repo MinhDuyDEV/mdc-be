@@ -117,6 +117,7 @@ describe("Recruiting (e2e)", () => {
 			userId: recruiterUser.id,
 			companyId: company.id,
 			role: "OWNER",
+			status: "ACTIVE",
 		};
 
 		const profile = {
