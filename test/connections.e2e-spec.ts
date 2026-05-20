@@ -621,9 +621,8 @@ describe("Connections (e2e)", () => {
 		});
 
 		it("should return 204 when unblocking", async () => {
-			const prisma = app!.get(PrismaService) as any;
-
-			(prisma.block.findFirst as jest.Mock).mockResolvedValueOnce({
+			const prismaMock = app!.get(PrismaService) as Record<string, any>;
+			(prismaMock.block.findFirst as jest.Mock).mockResolvedValueOnce({
 				id: "11110000-0000-0000-0000-000000000021",
 				blockerId: "aaaa0000-0000-0000-0000-000000000001",
 				blockedId: "bbbb0000-0000-0000-0000-000000000002",
@@ -645,9 +644,8 @@ describe("Connections (e2e)", () => {
 	describe("Block prevents new connection request", () => {
 		it("should return 400 when blocked user tries to connect", async () => {
 			// User B blocked user A. User A tries to connect to user B.
-			const prisma = app!.get(PrismaService) as any;
-
-			(prisma.block.findFirst as jest.Mock).mockResolvedValueOnce({
+			const prismaMock = app!.get(PrismaService) as Record<string, any>;
+			(prismaMock.block.findFirst as jest.Mock).mockResolvedValueOnce({
 				id: "11110000-0000-0000-0000-000000000099",
 				blockerId: "bbbb0000-0000-0000-0000-000000000002",
 				blockedId: "aaaa0000-0000-0000-0000-000000000001",
