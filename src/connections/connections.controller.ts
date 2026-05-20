@@ -13,9 +13,9 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { ConnectionsService } from './connections.service';
-import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
+import { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 @Controller('connections')
 export class ConnectionsController {
@@ -76,9 +76,14 @@ export class ConnectionsController {
   ) {
     await this.connectionsService.removeConnection(user.id, connectionId);
   }
+}
 
-  /** POST /api/v1/connections/users/:id/follow — Follow a user */
-  @Post('users/:id/follow')
+@Controller('users')
+export class ConnectionsUsersController {
+  constructor(private readonly connectionsService: ConnectionsService) {}
+
+  /** POST /api/v1/users/:id/follow — Follow a user */
+  @Post(':id/follow')
   @HttpCode(HttpStatus.CREATED)
   async follow(
     @CurrentUser() user: AuthenticatedUser,
@@ -87,8 +92,8 @@ export class ConnectionsController {
     return this.connectionsService.follow(user.id, followeeId);
   }
 
-  /** DELETE /api/v1/connections/users/:id/follow — Unfollow a user */
-  @Delete('users/:id/follow')
+  /** DELETE /api/v1/users/:id/follow — Unfollow a user */
+  @Delete(':id/follow')
   @HttpCode(HttpStatus.NO_CONTENT)
   async unfollow(
     @CurrentUser() user: AuthenticatedUser,
@@ -97,8 +102,8 @@ export class ConnectionsController {
     await this.connectionsService.unfollow(user.id, followeeId);
   }
 
-  /** POST /api/v1/connections/users/:id/block — Block a user */
-  @Post('users/:id/block')
+  /** POST /api/v1/users/:id/block — Block a user */
+  @Post(':id/block')
   @HttpCode(HttpStatus.CREATED)
   async blockUser(
     @CurrentUser() user: AuthenticatedUser,
@@ -107,8 +112,8 @@ export class ConnectionsController {
     return this.connectionsService.blockUser(user.id, blockedUserId);
   }
 
-  /** DELETE /api/v1/connections/users/:id/block — Unblock a user */
-  @Delete('users/:id/block')
+  /** DELETE /api/v1/users/:id/block — Unblock a user */
+  @Delete(':id/block')
   @HttpCode(HttpStatus.NO_CONTENT)
   async unblockUser(
     @CurrentUser() user: AuthenticatedUser,

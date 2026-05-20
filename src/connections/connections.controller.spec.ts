@@ -1,5 +1,8 @@
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import { ConnectionsController } from './connections.controller';
+import {
+  ConnectionsController,
+  ConnectionsUsersController,
+} from './connections.controller';
 import type { ConnectionsService } from './connections.service';
 
 interface MockService {
@@ -63,6 +66,46 @@ describe('ConnectionsController', () => {
     expect(service.removeConnection).toHaveBeenCalledWith('user-1', 'conn-123');
   });
 
+  it('listConnections delegates to service', async () => {
+    const query = { limit: 20 };
+    await controller.listConnections(mockUser, query);
+    expect(service.listConnections).toHaveBeenCalledWith('user-1', query);
+  });
+
+  it('listPendingRequests delegates to service', async () => {
+    const query = { limit: 20 };
+    await controller.listPendingRequests(mockUser, query);
+    expect(service.listPendingRequests).toHaveBeenCalledWith('user-1', query);
+  });
+});
+
+describe('ConnectionsUsersController', () => {
+  let controller: ConnectionsUsersController;
+  let service: MockService;
+
+  const mockUser: AuthenticatedUser = {
+    id: 'user-1',
+    email: 'test@example.com',
+  };
+
+  beforeEach(() => {
+    service = {
+      sendRequest: jest.fn(),
+      acceptRequest: jest.fn(),
+      declineRequest: jest.fn(),
+      removeConnection: jest.fn(),
+      follow: jest.fn().mockResolvedValue({ id: 'follow-1' }),
+      unfollow: jest.fn().mockResolvedValue(undefined),
+      blockUser: jest.fn().mockResolvedValue({ id: 'block-1' }),
+      unblockUser: jest.fn().mockResolvedValue(undefined),
+      listConnections: jest.fn(),
+      listPendingRequests: jest.fn(),
+    };
+    controller = new ConnectionsUsersController(
+      service as unknown as ConnectionsService,
+    );
+  });
+
   it('follow delegates to service', async () => {
     await controller.follow(mockUser, 'user-2');
     expect(service.follow).toHaveBeenCalledWith('user-1', 'user-2');
@@ -81,17 +124,5 @@ describe('ConnectionsController', () => {
   it('unblockUser delegates to service', async () => {
     await controller.unblockUser(mockUser, 'user-2');
     expect(service.unblockUser).toHaveBeenCalledWith('user-1', 'user-2');
-  });
-
-  it('listConnections delegates to service', async () => {
-    const query = { limit: 20 };
-    await controller.listConnections(mockUser, query);
-    expect(service.listConnections).toHaveBeenCalledWith('user-1', query);
-  });
-
-  it('listPendingRequests delegates to service', async () => {
-    const query = { limit: 20 };
-    await controller.listPendingRequests(mockUser, query);
-    expect(service.listPendingRequests).toHaveBeenCalledWith('user-1', query);
   });
 });

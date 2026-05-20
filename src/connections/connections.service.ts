@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -81,6 +80,11 @@ export class ConnectionsService {
     if (blocked) {
       throw new BadRequestException('BLOCKED_USER');
     }
+
+    await this.idempotencyService.claim(
+      'Connection:sendRequest',
+      `${userId}:${dto.toUserId}`,
+    );
 
     // Check for existing connection
     const existing = await this.prisma.connection.findFirst({
@@ -201,7 +205,7 @@ export class ConnectionsService {
       connection.requesterId !== userId &&
       connection.addresseeId !== userId
     ) {
-      throw new ForbiddenException('NOT_CONNECTION_PARTICIPANT');
+      throw new NotFoundException('NOT_CONNECTION_PARTICIPANT');
     }
 
     if (connection.status !== ConnectionStatus.ACCEPTED) {
@@ -383,6 +387,11 @@ export class ConnectionsService {
     if (existing) {
       throw new ConflictException('BLOCK_ALREADY_EXISTS');
     }
+
+    await this.idempotencyService.claim(
+      'Connection:blockUser',
+      `${userId}:${blockedUserId}`,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       // Create block
