@@ -4,6 +4,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -11,7 +12,7 @@ import {
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import { NotificationsService } from './notifications.service';
+import type { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
 export class NotificationsController {
@@ -58,7 +59,7 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   async markRead(
     @CurrentUser() user: AuthenticatedUser,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.notificationsService.markRead(user.id, id);
   }

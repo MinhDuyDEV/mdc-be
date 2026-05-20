@@ -283,7 +283,8 @@ export class NotificationProcessor {
     // the same user even when the aggregates differ.
     if (opts.aggregateIdJsonField && opts.aggregateId) {
       where.payloadJson = {
-        equals: { [opts.aggregateIdJsonField]: opts.aggregateId },
+        path: [opts.aggregateIdJsonField],
+        equals: opts.aggregateId,
       };
     }
 
