@@ -254,10 +254,6 @@ describe("Recruiting (e2e)", () => {
 				},
 				auditLog: { create: jest.fn() },
 				outboxEvent: { create: jest.fn() },
-				recruiterSeat: {
-					findFirst: jest.fn().mockResolvedValue(null),
-					findMany: jest.fn().mockResolvedValue([]),
-				},
 				notification: {
 					findFirst: jest.fn().mockResolvedValue(null),
 					findMany: jest.fn().mockResolvedValue([]),
