@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type { PinoLogger } from 'nestjs-pino';
-import type { SearchEngineService } from '../infra/search-engine';
+import { SearchEngineService } from '../infra/search-engine';
 
 /**
  * Elasticsearch indexing facade consumed by outbox processors

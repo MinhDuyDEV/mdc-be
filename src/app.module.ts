@@ -11,6 +11,7 @@ import { CommonModule } from './common';
 import { CompaniesModule } from './companies/companies.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { EmailModule } from './email/email.module';
+import { FeedModule } from './feed/feed.module';
 import { InfraModule } from './infra';
 import type { AppConfig } from './infra/config';
 import { REDIS_CLIENT } from './infra/redis/redis.constants';
@@ -18,6 +19,7 @@ import { JobsModule } from './jobs/jobs.module';
 import { MediaModule } from './media/media.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox';
+import { PostsModule } from './posts/posts.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { RecruitingModule } from './recruiting/recruiting.module';
 import { SearchModule } from './search';
@@ -55,7 +57,9 @@ import { UsersModule } from './users/users.module';
     MediaModule,
     NotificationsModule,
     OutboxModule,
+    PostsModule,
     ProfilesModule,
+    FeedModule,
     ConnectionsModule,
     RecruitingModule,
     SearchModule,

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../config';
 import type { StorageClient } from './storage.constants';
 import { STORAGE_CLIENT } from './storage.constants';

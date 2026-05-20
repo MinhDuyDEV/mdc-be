@@ -8,6 +8,7 @@ import { ApplicationEmailProcessor } from './processors/application-email.proces
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
 import { NotificationProcessor } from './processors/notification.processor';
+import { PostInteractionProcessor } from './processors/post-interaction.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
 
@@ -17,6 +18,7 @@ import { ProfileSearchIndexProcessor } from './processors/profile-search-index.p
     DeadLetterService,
     IdempotencyService,
     NotificationProcessor,
+    PostInteractionProcessor,
     OutboxProcessor,
     OutboxService,
     ProfileCreationProcessor,

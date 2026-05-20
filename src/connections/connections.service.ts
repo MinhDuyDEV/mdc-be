@@ -6,10 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConnectionStatus, FollowStatus, Prisma } from '@prisma/client';
 import type { PrismaTransaction } from '../infra/prisma';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-import type { IdempotencyService } from '../outbox/idempotency.service';
-import type { OutboxService } from '../outbox/outbox.service';
-import type { ConnectionsPolicyService } from './connections-policy.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { IdempotencyService } from '../outbox/idempotency.service';
+import { OutboxService } from '../outbox/outbox.service';
+import { ConnectionsPolicyService } from './connections-policy.service';
 import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 interface CursorPayload {

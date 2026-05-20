@@ -48,6 +48,12 @@ describe('OutboxProcessor', () => {
       processApplicationNoteAdded: jest.fn().mockResolvedValue(undefined),
       processRecruiterSeatAllocated: jest.fn().mockResolvedValue(undefined),
     };
+    const mockPostInteraction = {
+      processPostCreated: jest.fn().mockResolvedValue(undefined),
+      processCommentAdded: jest.fn().mockResolvedValue(undefined),
+      processReactionAdded: jest.fn().mockResolvedValue(undefined),
+      processMentionCreated: jest.fn().mockResolvedValue(undefined),
+    };
     const mockLogger = {
       debug: jest.fn(),
       warn: jest.fn(),
@@ -62,6 +68,7 @@ describe('OutboxProcessor', () => {
       mockJobSearchIndex as any,
       mockApplicationEmail as any,
       mockNotification as any,
+      mockPostInteraction as any,
       mockLogger as any,
     );
     return {

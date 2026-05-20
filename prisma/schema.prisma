@@ -165,6 +165,33 @@ enum NotificationType {
   UserBlocked
   // System / generic
   System
+  // Posts domain
+  PostLiked
+  PostCommented
+  MentionedInPost
+  MentionedInComment
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+  DELETED
+}
+
+enum PostVisibility {
+  PUBLIC
+  CONNECTIONS
+  PRIVATE
+}
+
+enum ReactionType {
+  LIKE
+  CELEBRATE
+  SUPPORT
+  LOVE
+  INSIGHTFUL
+  CURIOUS
 }
 
 model User {
@@ -207,8 +234,15 @@ model User {
   connectionsAsAddressee      Connection[]             @relation("ConnectionsAsAddressee")
   followsAsFollower           Follow[]                @relation("FollowsAsFollower")
   followsAsFollowee           Follow[]                @relation("FollowsAsFollowee")
-  blocksAsBlocker             Block[]                 @relation("BlocksAsBlocker")
-  blocksAsBlocked             Block[]                 @relation("BlocksAsBlocked")
+  blocksAsBlocker   Block[]    @relation("BlocksAsBlocker")
+  blocksAsBlocked   Block[]    @relation("BlocksAsBlocked")
+  posts              Post[]    @relation("PostsAsAuthor")
+  comments           Comment[] @relation("CommentsAsAuthor")
+  reactions          Reaction[] @relation("ReactionsAsAuthor")
+  savedPosts         SavedPost[]
+  hiddenPosts        HiddenPost[]
+  mentionsReceived   Mention[] @relation("MentionsAsMentioned")
+  mentionsGiven      Mention[] @relation("MentionsAsMentioner")
 
   @@map("users")
 }
@@ -530,6 +564,7 @@ model MediaAsset {
   companyCovers          Company[]               @relation("CompanyCover")
   applicationResumes     Application[]           @relation("ApplicationResume")
   applicationAttachments ApplicationAttachment[] @relation("ApplicationAttachments")
+  postMedia              PostMedia[]
 
   @@index([ownerId, status])
   @@map("media_assets")
@@ -986,4 +1021,160 @@ model Block {
   @@index([blockerId])
   @@index([blockedId])
   @@map("blocks")
+}
+
+// Posts domain
+model Post {
+  id            String                     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  authorId      String                     @map("author_id") @db.Uuid
+  content       String                     @db.Text
+  visibility    PostVisibility             @default(PUBLIC)
+  status        PostStatus                 @default(PUBLISHED)
+  commentCount  Int                        @default(0) @map("comment_count")
+  reactionCount Int                        @default(0) @map("reaction_count")
+  searchVector  Unsupported("tsvector")?   @default(dbgenerated("''::tsvector")) @map("search_vector")
+  deletedAt     DateTime?                  @map("deleted_at") @db.Timestamptz(3)
+  createdAt     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  author    User         @relation("PostsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  comments  Comment[]
+  reactions Reaction[]
+  hashtags  PostHashtag[]
+  media     PostMedia[]
+  savedBy   SavedPost[]
+  hiddenBy  HiddenPost[]
+  mentions  Mention[]
+
+  @@index([authorId, createdAt(sort: Desc), id(sort: Desc)], name: "idx_posts_author_timeline")
+  @@index([createdAt(sort: Desc), id(sort: Desc)], name: "idx_posts_feed")
+  @@index([visibility, status, deletedAt])
+  @@index([searchVector], type: Gin, name: "idx_posts_search")
+  @@map("posts")
+}
+
+model Comment {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String    @map("post_id") @db.Uuid
+  authorId  String    @map("author_id") @db.Uuid
+  parentId  String?   @map("parent_id") @db.Uuid
+  content   String    @db.Text
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author   User      @relation("CommentsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies  Comment[] @relation("CommentReplies")
+  mentions Mention[]
+
+  @@index([postId, createdAt(sort: Desc)])
+  @@index([authorId])
+  @@index([parentId])
+  @@map("comments")
+}
+
+model Reaction {
+  id        String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String       @map("post_id") @db.Uuid
+  authorId  String       @map("author_id") @db.Uuid
+  type      ReactionType
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  author User @relation("ReactionsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, authorId, type])
+  @@index([postId])
+  @@index([authorId])
+  @@map("reactions")
+}
+
+model Hashtag {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String   @unique @db.VarChar(100)
+  postCount Int      @default(0) @map("post_count")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  posts PostHashtag[]
+
+  @@index([postCount(sort: Desc)])
+  @@map("hashtags")
+}
+
+model PostHashtag {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  hashtagId String   @map("hashtag_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  post    Post    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, hashtagId])
+  @@index([hashtagId])
+  @@map("post_hashtags")
+}
+
+model PostMedia {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId       String   @map("post_id") @db.Uuid
+  mediaAssetId String   @map("media_asset_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  post       Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, mediaAssetId])
+  @@index([mediaAssetId])
+  @@map("post_media")
+}
+
+model SavedPost {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @map("user_id") @db.Uuid
+  postId    String    @map("post_id") @db.Uuid
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("saved_posts")
+}
+
+model HiddenPost {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@index([userId])
+  @@map("hidden_posts")
+}
+
+model Mention {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId          String?  @map("post_id") @db.Uuid
+  commentId       String?  @map("comment_id") @db.Uuid
+  mentionedUserId String   @map("mentioned_user_id") @db.Uuid
+  mentionerUserId String   @map("mentioner_user_id") @db.Uuid
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  post          Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment       Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  mentionedUser User     @relation("MentionsAsMentioned", fields: [mentionedUserId], references: [id], onDelete: Cascade)
+  mentionerUser User     @relation("MentionsAsMentioner", fields: [mentionerUserId], references: [id], onDelete: Cascade)
+
+  @@index([mentionedUserId])
+  @@index([postId])
+  @@index([commentId])
+  @@map("mentions")
 }

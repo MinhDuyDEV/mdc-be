@@ -1,15 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
-import type { PrismaService } from '../infra/prisma';
-import type { DeadLetterService } from './dead-letter.service';
-import type { ApplicationEmailProcessor } from './processors/application-email.processor';
-import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
-import type { JobSearchIndexProcessor } from './processors/job-search-index.processor';
-import type { NotificationProcessor } from './processors/notification.processor';
+import { PrismaService } from '../infra/prisma';
+import { DeadLetterService } from './dead-letter.service';
+import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import { NotificationProcessor } from './processors/notification.processor';
+import { PostInteractionProcessor } from './processors/post-interaction.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -34,6 +35,7 @@ export class OutboxProcessor {
     private readonly jobSearchIndex: JobSearchIndexProcessor,
     private readonly applicationEmail: ApplicationEmailProcessor,
     private readonly notification: NotificationProcessor,
+    private readonly postInteraction: PostInteractionProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -294,6 +296,44 @@ export class OutboxProcessor {
       case 'CandidateAddedToTalentPool':
         this.logger.debug(
           `Phase 4 stub handler for event type ${event.eventType} (id=${event.id})`,
+        );
+        return;
+      // Posts domain — Phase 6
+      case 'PostCreated':
+        await this.postInteraction.processPostCreated(
+          event.payload as {
+            postId: string;
+            authorId: string;
+            visibility: string;
+          },
+        );
+        return;
+      case 'CommentAdded':
+        await this.postInteraction.processCommentAdded(
+          event.payload as {
+            commentId: string;
+            postId: string;
+            authorId: string;
+          },
+        );
+        return;
+      case 'ReactionAdded':
+        await this.postInteraction.processReactionAdded(
+          event.payload as {
+            reactionId: string;
+            postId: string;
+            authorId: string;
+            type: string;
+          },
+        );
+        return;
+      case 'MentionCreated':
+        await this.postInteraction.processMentionCreated(
+          event.payload as {
+            postId: string;
+            mentionedUserId: string;
+            mentionerUserId: string;
+          },
         );
         return;
       default:

@@ -1,11 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../config';
-import type { MailerHealthService } from '../mailer';
-import type { PrismaService } from '../prisma';
-import type { RedisHealthService } from '../redis';
-import type { SearchEngineHealthService } from '../search-engine';
-import type { StorageHealthService } from '../storage';
+import { MailerHealthService } from '../mailer';
+import { PrismaService } from '../prisma';
+import { RedisHealthService } from '../redis';
+import { SearchEngineHealthService } from '../search-engine';
+import { StorageHealthService } from '../storage';
 
 export interface HealthDependencyStatus {
   status: 'up' | 'down';
