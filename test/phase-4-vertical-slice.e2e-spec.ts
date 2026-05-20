@@ -136,7 +136,7 @@ describe('Phase 4 Vertical Slice (e2e)', () => {
     };
 
     const notification = {
-      id: 'notif-1',
+      id: '00000000-0000-0000-0000-0000000000ff',
       userId: candidateUser.id,
       type: 'ApplicationStatusChanged',
       payloadJson: { applicationId: application.id, newStatus: 'REVIEWED' },
@@ -412,7 +412,7 @@ describe('Phase 4 Vertical Slice (e2e)', () => {
 
     // Step 5: Candidate marks notification as read
     const markReadRes = await request(app!.getHttpServer())
-      .patch('/api/v1/notifications/notif-1/read')
+      .patch('/api/v1/notifications/00000000-0000-0000-0000-0000000000ff/read')
       .set('Authorization', `Bearer ${candidateToken}`)
       .expect(200);
     expect(markReadRes.body.data).toBeDefined();
@@ -438,7 +438,7 @@ describe('Phase 4 Vertical Slice (e2e)', () => {
 
     // Other user cannot mark candidate's notification as read
     await request(app!.getHttpServer())
-      .patch('/api/v1/notifications/notif-1/read')
+      .patch('/api/v1/notifications/00000000-0000-0000-0000-0000000000ff/read')
       .set('Authorization', `Bearer ${otherToken}`)
       .expect(404);
   });
