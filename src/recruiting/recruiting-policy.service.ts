@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ApplicationStatus } from '@prisma/client';
-import { PrismaService } from '../infra/prisma/prisma.service';
+import type { ConnectionsPolicyService } from '../connections/connections-policy.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
 
 /**
  * Discriminated decision returned by `canMessageCandidate`. Phase 7 messaging
@@ -16,7 +17,8 @@ export type RecruitingMessageDecision =
       reason:
         | 'NO_RECRUITING_AUTHORIZATION'
         | 'CANDIDATE_NOT_OPTED_IN'
-        | 'SELF_OUTREACH';
+        | 'SELF_OUTREACH'
+        | 'BLOCKED';
     };
 
 /**
@@ -25,7 +27,10 @@ export type RecruitingMessageDecision =
  */
 @Injectable()
 export class RecruitingPolicyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly connectionsPolicy: ConnectionsPolicyService,
+  ) {}
 
   /**
    * Returns a discriminated decision about whether `recruiterUserId` may
@@ -106,11 +111,18 @@ export class RecruitingPolicyService {
       return { allowed: false, reason: 'CANDIDATE_NOT_OPTED_IN' };
     }
 
-    // Phase 5 will check Block here. Phase 4 stub: never blocked.
-    const isBlocked = false;
+    // Check if either party has blocked the other.
+    const isBlocked = await this.connectionsPolicy.isBlocked(
+      recruiterUserId,
+      candidateUserId,
+    );
 
     if (profile.recruitingEligible && !isBlocked) {
       return { allowed: true, reason: 'OPT_IN' };
+    }
+
+    if (isBlocked) {
+      return { allowed: false, reason: 'BLOCKED' };
     }
 
     return { allowed: false, reason: 'CANDIDATE_NOT_OPTED_IN' };

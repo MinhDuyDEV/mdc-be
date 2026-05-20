@@ -1,15 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
-import { PrismaService } from '../infra/prisma';
-import { DeadLetterService } from './dead-letter.service';
-import { ApplicationEmailProcessor } from './processors/application-email.processor';
-import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
-import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
-import { NotificationProcessor } from './processors/notification.processor';
+import type { PrismaService } from '../infra/prisma';
+import type { DeadLetterService } from './dead-letter.service';
+import type { ApplicationEmailProcessor } from './processors/application-email.processor';
+import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import type { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import type { NotificationProcessor } from './processors/notification.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -259,6 +259,32 @@ export class OutboxProcessor {
             noteId: string;
             authorUserId: string;
             companyId: string;
+          },
+        );
+        return;
+      case 'ConnectionRequested':
+        await this.notification.processConnectionRequested(
+          event.payload as {
+            connectionId: string;
+            requesterUserId: string;
+            targetUserId: string;
+          },
+        );
+        return;
+      case 'ConnectionAccepted':
+        await this.notification.processConnectionAccepted(
+          event.payload as {
+            connectionId: string;
+            requesterUserId: string;
+            targetUserId: string;
+          },
+        );
+        return;
+      case 'UserBlocked':
+        this.notification.processUserBlocked(
+          event.payload as {
+            blockerUserId: string;
+            blockedUserId: string;
           },
         );
         return;
