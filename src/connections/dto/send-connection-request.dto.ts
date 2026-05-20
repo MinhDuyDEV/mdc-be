@@ -1,6 +1,6 @@
-import { IsUUID } from "class-validator";
+import { IsUUID } from 'class-validator';
 
 export class SendConnectionRequestDto {
-	@IsUUID()
-	toUserId: string;
+  @IsUUID()
+  toUserId: string;
 }
