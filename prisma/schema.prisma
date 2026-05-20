@@ -170,6 +170,23 @@ enum NotificationType {
   PostCommented
   MentionedInPost
   MentionedInComment
+  // Messaging domain
+  NewMessage
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+}
+
+enum ParticipantRole {
+  ADMIN
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  SYSTEM
 }
 
 enum PostStatus {
@@ -243,6 +260,9 @@ model User {
   hiddenPosts        HiddenPost[]
   mentionsReceived   Mention[] @relation("MentionsAsMentioned")
   mentionsGiven      Mention[] @relation("MentionsAsMentioner")
+  conversationParticipants ConversationParticipant[]
+  messagesSent             Message[]                 @relation("MessagesSent")
+  messageReadStates        MessageReadState[]
 
   @@map("users")
 }
@@ -565,6 +585,7 @@ model MediaAsset {
   applicationResumes     Application[]           @relation("ApplicationResume")
   applicationAttachments ApplicationAttachment[] @relation("ApplicationAttachments")
   postMedia              PostMedia[]
+  messageAttachments     MessageAttachment[]
 
   @@index([ownerId, status])
   @@map("media_assets")
@@ -1177,4 +1198,91 @@ model Mention {
   @@index([postId])
   @@index([commentId])
   @@map("mentions")
+}
+
+model Conversation {
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  type               ConversationType @default(DIRECT)
+  title              String?          @db.VarChar(255)
+  lastMessageAt      DateTime?        @map("last_message_at") @db.Timestamptz(3)
+  lastMessagePreview String?          @map("last_message_preview") @db.VarChar(500)
+  createdAt          DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  participants ConversationParticipant[]
+  messages     Message[]
+
+  @@index([lastMessageAt(sort: Desc), id(sort: Desc)])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String          @map("conversation_id") @db.Uuid
+  userId         String          @map("user_id") @db.Uuid
+  role           ParticipantRole @default(MEMBER)
+  lastReadAt     DateTime?       @map("last_read_at") @db.Timestamptz(3)
+  leftAt         DateTime?       @map("left_at") @db.Timestamptz(3)
+  joinedAt       DateTime        @default(now()) @map("joined_at") @db.Timestamptz(3)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([conversationId])
+  @@index([userId])
+  @@index([leftAt])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String      @map("conversation_id") @db.Uuid
+  senderId       String      @map("sender_id") @db.Uuid
+  content        String      @db.Text
+  type           MessageType @default(TEXT)
+  deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(3)
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  conversation Conversation        @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User                @relation("MessagesSent", fields: [senderId], references: [id], onDelete: Cascade)
+  attachments  MessageAttachment[]
+  readStates   MessageReadState[]
+
+  @@index([conversationId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId    String   @map("message_id") @db.Uuid
+  mediaAssetId String   @map("media_asset_id") @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  message    Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  mediaAsset MediaAsset @relation(fields: [mediaAssetId], references: [id], onDelete: Restrict)
+
+  @@unique([messageId, mediaAssetId])
+  @@index([messageId])
+  @@index([mediaAssetId])
+  @@map("message_attachments")
+}
+
+model MessageReadState {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  messageId String   @map("message_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  readAt    DateTime @default(now()) @map("read_at") @db.Timestamptz(3)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([messageId])
+  @@index([userId])
+  @@map("message_read_states")
 }
