@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { ApplicationsModule } from './applications/applications.module';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common';
 import { CompaniesModule } from './companies/companies.module';
@@ -12,9 +13,12 @@ import { EmailModule } from './email/email.module';
 import { InfraModule } from './infra';
 import type { AppConfig } from './infra/config';
 import { REDIS_CLIENT } from './infra/redis/redis.constants';
+import { JobsModule } from './jobs/jobs.module';
 import { MediaModule } from './media/media.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox';
 import { ProfilesModule } from './profiles/profiles.module';
+import { RecruitingModule } from './recruiting/recruiting.module';
 import { SearchModule } from './search';
 import { UsersModule } from './users/users.module';
 
@@ -42,12 +46,16 @@ import { UsersModule } from './users/users.module';
     }),
     CommonModule,
     InfraModule,
+    ApplicationsModule,
     AuthModule,
     CompaniesModule,
     EmailModule,
+    JobsModule,
     MediaModule,
+    NotificationsModule,
     OutboxModule,
     ProfilesModule,
+    RecruitingModule,
     SearchModule,
     UsersModule,
   ],

@@ -1,12 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
-import type { PrismaService } from '../infra/prisma';
-import type { DeadLetterService } from './dead-letter.service';
-import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import { PrismaService } from '../infra/prisma';
+import { DeadLetterService } from './dead-letter.service';
+import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import { NotificationProcessor } from './processors/notification.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -28,6 +31,9 @@ export class OutboxProcessor {
     private readonly config: ConfigService<AppConfig, true>,
     private readonly deadLetter: DeadLetterService,
     private readonly companySearchIndex: CompanySearchIndexProcessor,
+    private readonly jobSearchIndex: JobSearchIndexProcessor,
+    private readonly applicationEmail: ApplicationEmailProcessor,
+    private readonly notification: NotificationProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -155,7 +161,6 @@ export class OutboxProcessor {
       case 'CompanyMemberRemoved':
       case 'MemberInvited':
       case 'MemberJoined':
-      case 'RecruiterSeatAllocated':
       case 'RecruiterSeatDeallocated': {
         const payload = event.payload as { companyId?: string };
         if (!payload?.companyId) {
@@ -169,6 +174,102 @@ export class OutboxProcessor {
         });
         return;
       }
+      case 'RecruiterSeatAllocated': {
+        const payload = event.payload as {
+          companyId?: string;
+          recruiterUserId?: string;
+        };
+        if (!payload?.companyId) {
+          this.logger.warn(
+            `RecruiterSeatAllocated event ${event.id} missing companyId — skipping`,
+          );
+          return;
+        }
+        // Keep existing search-index side-effect.
+        await this.companySearchIndex.processCompanyUpdated({
+          companyId: payload.companyId,
+        });
+        if (payload.recruiterUserId) {
+          await this.notification.processRecruiterSeatAllocated({
+            companyId: payload.companyId,
+            recruiterUserId: payload.recruiterUserId,
+          });
+        }
+        return;
+      }
+      case 'JobCreated':
+        await this.jobSearchIndex.processJobCreated(
+          event.payload as { jobId: string },
+        );
+        return;
+      case 'JobUpdated':
+        await this.jobSearchIndex.processJobUpdated(
+          event.payload as { jobId: string },
+        );
+        return;
+      case 'JobPublished':
+        await this.jobSearchIndex.processJobPublished(
+          event.payload as { jobId: string },
+        );
+        return;
+      case 'JobClosed':
+        await this.jobSearchIndex.processJobClosed(
+          event.payload as { jobId: string },
+        );
+        return;
+      case 'JobDeleted':
+        await this.jobSearchIndex.processJobDeleted(
+          event.payload as { jobId: string },
+        );
+        return;
+      case 'ApplicationSubmitted':
+        await this.notification.processApplicationSubmitted(
+          event.payload as {
+            applicationId: string;
+            jobId: string;
+            companyId: string;
+            candidateUserId: string;
+          },
+        );
+        return;
+      case 'ApplicationStatusChanged':
+        await this.applicationEmail.processApplicationStatusChanged(
+          event.payload as {
+            applicationId: string;
+            toStatus: string;
+            fromStatus?: string;
+          },
+        );
+        await this.notification.processApplicationStatusChanged(
+          event.payload as {
+            applicationId: string;
+            fromStatus?: string;
+            toStatus: string;
+            companyId: string;
+            candidateUserId: string;
+            changedByUserId?: string;
+            reason?: string | null;
+          },
+        );
+        return;
+      case 'ApplicationNoteAdded':
+        await this.notification.processApplicationNoteAdded(
+          event.payload as {
+            applicationId: string;
+            noteId: string;
+            authorUserId: string;
+            companyId: string;
+          },
+        );
+        return;
+      // Phase 4 stub remainder — real handlers deferred to later phases.
+      case 'ExternalApplyClicked':
+      case 'CandidateSaved':
+      case 'CandidateAddedToTalentPool':
+        this.logger.debug(
+          `Phase 4 stub handler for event type ${event.eventType} (id=${event.id})`,
+        );
+        return;
       default:
         // No handler registered yet — treat as no-op (will be marked processed).
         this.logger.debug(

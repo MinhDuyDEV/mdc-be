@@ -1,0 +1,165 @@
+import { ApplicationStatus } from '@prisma/client';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import { RecruitingPolicyService } from './recruiting-policy.service';
+
+interface MockPrisma {
+  companyMember: { findMany: jest.Mock };
+  recruiterSeat: { findMany: jest.Mock };
+  application: { findFirst: jest.Mock };
+  talentPoolCandidate: { findFirst: jest.Mock };
+  profile: { findUnique: jest.Mock };
+}
+
+function buildMockPrisma(): MockPrisma {
+  return {
+    companyMember: { findMany: jest.fn().mockResolvedValue([]) },
+    recruiterSeat: { findMany: jest.fn().mockResolvedValue([]) },
+    application: { findFirst: jest.fn().mockResolvedValue(null) },
+    talentPoolCandidate: { findFirst: jest.fn().mockResolvedValue(null) },
+    profile: { findUnique: jest.fn().mockResolvedValue(null) },
+  };
+}
+
+describe('RecruitingPolicyService', () => {
+  let prisma: MockPrisma;
+  let service: RecruitingPolicyService;
+
+  beforeEach(() => {
+    prisma = buildMockPrisma();
+    service = new RecruitingPolicyService(prisma as unknown as PrismaService);
+  });
+
+  describe('SELF_OUTREACH', () => {
+    it('denies when recruiter and candidate are the same user', async () => {
+      const decision = await service.canMessageCandidate('u-1', 'u-1');
+      expect(decision).toEqual({ allowed: false, reason: 'SELF_OUTREACH' });
+    });
+  });
+
+  describe('NO_RECRUITING_AUTHORIZATION', () => {
+    it('denies when caller has no admin/owner role and no seats', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([]);
+      prisma.recruiterSeat.findMany.mockResolvedValue([]);
+
+      const decision = await service.canMessageCandidate('recruiter', 'cand');
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'NO_RECRUITING_AUTHORIZATION',
+      });
+    });
+  });
+
+  describe('APPLICATION_CONTEXT', () => {
+    it("allows when candidate has an active application at recruiter's company", async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.application.findFirst.mockResolvedValue({ id: 'app-1' });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision).toEqual({
+        allowed: true,
+        reason: 'APPLICATION_CONTEXT',
+      });
+    });
+
+    it('ignores WITHDRAWN/REJECTED applications (uses notIn filter)', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      // application.findFirst should be called with status notIn list
+      prisma.application.findFirst.mockResolvedValue(null);
+      prisma.profile.findUnique.mockResolvedValue({
+        recruitingEligible: false,
+      });
+
+      await service.canMessageCandidate('rec', 'cand');
+
+      const args = prisma.application.findFirst.mock.calls[0][0];
+      expect(args.where.status.notIn).toContain(ApplicationStatus.WITHDRAWN);
+      expect(args.where.status.notIn).toContain(ApplicationStatus.REJECTED);
+    });
+  });
+
+  describe('TALENT_POOL_CONTEXT', () => {
+    it("allows when candidate is in a TalentPool of recruiter's company", async () => {
+      prisma.recruiterSeat.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.application.findFirst.mockResolvedValue(null);
+      prisma.talentPoolCandidate.findFirst.mockResolvedValue({ id: 'tpc-1' });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision).toEqual({
+        allowed: true,
+        reason: 'TALENT_POOL_CONTEXT',
+      });
+    });
+  });
+
+  describe('OPT_IN', () => {
+    it('allows when candidate Profile.recruitingEligible=true and no other context', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.application.findFirst.mockResolvedValue(null);
+      prisma.talentPoolCandidate.findFirst.mockResolvedValue(null);
+      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision).toEqual({ allowed: true, reason: 'OPT_IN' });
+    });
+
+    it('denies CANDIDATE_NOT_OPTED_IN when profile.recruitingEligible=false', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.profile.findUnique.mockResolvedValue({
+        recruitingEligible: false,
+      });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'CANDIDATE_NOT_OPTED_IN',
+      });
+    });
+
+    it('denies CANDIDATE_NOT_OPTED_IN when profile is missing entirely', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.profile.findUnique.mockResolvedValue(null);
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision).toEqual({
+        allowed: false,
+        reason: 'CANDIDATE_NOT_OPTED_IN',
+      });
+    });
+  });
+
+  describe('recruiter source — admin OR seat', () => {
+    it('admin role alone grants recruiter authorization', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([
+        { companyId: 'c-admin' },
+      ]);
+      prisma.recruiterSeat.findMany.mockResolvedValue([]);
+      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision.allowed).toBe(true);
+    });
+
+    it('active RecruiterSeat alone grants recruiter authorization', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([]);
+      prisma.recruiterSeat.findMany.mockResolvedValue([
+        { companyId: 'c-seat' },
+      ]);
+      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision.allowed).toBe(true);
+    });
+
+    it('dedupes overlapping companyIds across admin role + seat', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.recruiterSeat.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.application.findFirst.mockResolvedValue({ id: 'app-1' });
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision.allowed).toBe(true);
+
+      const findFirstCall = prisma.application.findFirst.mock.calls[0][0];
+      expect(findFirstCall.where.job.companyId.in).toEqual(['c-1']);
+    });
+  });
+});
