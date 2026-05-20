@@ -1,38 +1,38 @@
 import {
-	BadRequestException,
-	ForbiddenException,
-	Injectable,
-	NotFoundException,
-} from "@nestjs/common";
-import { PostStatus, PostVisibility } from "@prisma/client";
-import type { PrismaTransaction } from "../infra/prisma";
-import type { PrismaService } from "../infra/prisma/prisma.service";
-import type { IdempotencyService } from "../outbox/idempotency.service";
-import type { OutboxService } from "../outbox/outbox.service";
-import { CreateCommentDto } from "./dto/create-comment.dto";
-import type { CreatePostDto } from "./dto/create-post.dto";
-import { CreateReactionDto } from "./dto/create-reaction.dto";
-import { UpdateCommentDto } from "./dto/update-comment.dto";
-import type { UpdatePostDto } from "./dto/update-post.dto";
-import { extractHashtags, extractMentions } from "./mention-hashtag.util";
-import type { PostsPolicyService } from "./posts-policy.service";
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { PostStatus, PostVisibility } from '@prisma/client';
+import type { PrismaTransaction } from '../infra/prisma';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../outbox/idempotency.service';
+import type { OutboxService } from '../outbox/outbox.service';
+import type { CreateCommentDto } from './dto/create-comment.dto';
+import type { CreatePostDto } from './dto/create-post.dto';
+import type { CreateReactionDto } from './dto/create-reaction.dto';
+import type { UpdateCommentDto } from './dto/update-comment.dto';
+import type { UpdatePostDto } from './dto/update-post.dto';
+import { extractHashtags, extractMentions } from './mention-hashtag.util';
+import type { PostsPolicyService } from './posts-policy.service';
 
 const POST_INCLUDE = {
-	author: {
-		select: {
-			id: true,
-			email: true,
-			profile: {
-				select: { firstName: true, lastName: true, headline: true },
-			},
-		},
-	},
-	hashtags: { include: { hashtag: { select: { name: true } } } },
-	media: {
-		include: {
-			mediaAsset: { select: { id: true, url: true, type: true } },
-		},
-	},
+  author: {
+    select: {
+      id: true,
+      email: true,
+      profile: {
+        select: { firstName: true, lastName: true, headline: true },
+      },
+    },
+  },
+  hashtags: { include: { hashtag: { select: { name: true } } } },
+  media: {
+    include: {
+      mediaAsset: { select: { id: true, url: true, type: true } },
+    },
+  },
 } as const;
 
 @Injectable()
@@ -48,7 +48,10 @@ export class PostsService {
    * Create a post with mentions, hashtags, and media
    */
   async createPost(userId: string, dto: CreatePostDto) {
-    await this.idempotencyService.claim('Post:create', `${userId}:${Date.now()}`);
+    await this.idempotencyService.claim(
+      'Post:create',
+      `${userId}:${Date.now()}`,
+    );
 
     return this.prisma.$transaction(async (tx) => {
       const post = await tx.post.create({
@@ -87,8 +90,8 @@ export class PostsService {
       // Extract and create mentions
       const mentions = extractMentions(dto.content);
       for (const username of mentions) {
-        const mentionedUser = await tx.user.findUnique({
-          where: { email: username },
+        const mentionedUser = await tx.user.findFirst({
+          where: { displayName: { equals: username, mode: 'insensitive' } },
           select: { id: true },
         });
         if (mentionedUser) {
@@ -271,7 +274,11 @@ export class PostsService {
   /**
    * Update comment (author only)
    */
-  async updateComment(userId: string, commentId: string, dto: UpdateCommentDto) {
+  async updateComment(
+    userId: string,
+    commentId: string,
+    dto: UpdateCommentDto,
+  ) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       select: { authorId: true, deletedAt: true },
@@ -347,6 +354,17 @@ export class PostsService {
           where: { id: postId },
           data: { reactionCount: { decrement: 1 } },
         });
+        await this.outboxService.emit(tx as PrismaTransaction, {
+          eventType: 'ReactionRemoved',
+          aggregateType: 'Reaction',
+          aggregateId: existing.id,
+          payload: {
+            reactionId: existing.id,
+            postId,
+            authorId: userId,
+            type: dto.type,
+          },
+        });
         return null;
       }
 
@@ -363,7 +381,12 @@ export class PostsService {
           eventType: 'ReactionAdded',
           aggregateType: 'Reaction',
           aggregateId: updated.id,
-          payload: { reactionId: updated.id, postId, authorId: userId, type: dto.type },
+          payload: {
+            reactionId: updated.id,
+            postId,
+            authorId: userId,
+            type: dto.type,
+          },
         });
         return updated;
       }
@@ -381,7 +404,12 @@ export class PostsService {
         eventType: 'ReactionAdded',
         aggregateType: 'Reaction',
         aggregateId: reaction.id,
-        payload: { reactionId: reaction.id, postId, authorId: userId, type: dto.type },
+        payload: {
+          reactionId: reaction.id,
+          postId,
+          authorId: userId,
+          type: dto.type,
+        },
       });
 
       return reaction;
@@ -394,7 +422,7 @@ export class PostsService {
   async removeReaction(userId: string, reactionId: string): Promise<void> {
     const reaction = await this.prisma.reaction.findUnique({
       where: { id: reactionId },
-      select: { authorId: true, postId: true },
+      select: { authorId: true, postId: true, type: true },
     });
 
     if (!reaction) {
@@ -410,6 +438,17 @@ export class PostsService {
       await tx.post.update({
         where: { id: reaction.postId },
         data: { reactionCount: { decrement: 1 } },
+      });
+      await this.outboxService.emit(tx as PrismaTransaction, {
+        eventType: 'ReactionRemoved',
+        aggregateType: 'Reaction',
+        aggregateId: reactionId,
+        payload: {
+          reactionId,
+          postId: reaction.postId,
+          authorId: userId,
+          type: reaction.type,
+        },
       });
     });
   }
