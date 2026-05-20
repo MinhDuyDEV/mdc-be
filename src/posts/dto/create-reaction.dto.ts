@@ -1,7 +1,7 @@
-import { ReactionType } from "@prisma/client";
-import { IsEnum } from "class-validator";
+import { ReactionType } from '@prisma/client';
+import { IsEnum } from 'class-validator';
 
 export class CreateReactionDto {
-	@IsEnum(ReactionType)
-	type: ReactionType;
+  @IsEnum(ReactionType)
+  type: ReactionType;
 }
