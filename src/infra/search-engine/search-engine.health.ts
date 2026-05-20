@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../config';
 import { SEARCH_ENGINE_CLIENT } from './search-engine.constants';
 import type { SearchEngineClient } from './search-engine.provider';

@@ -6,8 +6,8 @@ import {
   PostVisibility,
   type Prisma,
 } from '@prisma/client';
-import type { ConnectionsPolicyService } from '../connections/connections-policy.service';
-import type { PrismaService } from '../infra/prisma/prisma.service';
+import { ConnectionsPolicyService } from '../connections/connections-policy.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type { FeedQueryDto } from './dto/feed-query.dto';
 
 function encodeCursor(createdAt: Date, id: string): string {

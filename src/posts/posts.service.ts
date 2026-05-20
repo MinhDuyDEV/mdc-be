@@ -6,16 +6,16 @@ import {
 } from '@nestjs/common';
 import { PostStatus, PostVisibility } from '@prisma/client';
 import type { PrismaTransaction } from '../infra/prisma';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-import type { IdempotencyService } from '../outbox/idempotency.service';
-import type { OutboxService } from '../outbox/outbox.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { IdempotencyService } from '../outbox/idempotency.service';
+import { OutboxService } from '../outbox/outbox.service';
 import type { CreateCommentDto } from './dto/create-comment.dto';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { CreateReactionDto } from './dto/create-reaction.dto';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import { extractHashtags, extractMentions } from './mention-hashtag.util';
-import type { PostsPolicyService } from './posts-policy.service';
+import { PostsPolicyService } from './posts-policy.service';
 
 const POST_INCLUDE = {
   author: {

@@ -1,5 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../config';
 import type { MailerTransporter } from './mailer.constants';
 import { MAILER_TRANSPORTER } from './mailer.constants';
