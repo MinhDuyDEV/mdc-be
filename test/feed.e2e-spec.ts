@@ -10,8 +10,8 @@ describe('Feed (e2e)', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let PrismaService: Type<unknown>;
 
-  const userId = 'aaaa0000-0000-0000-0000-000000000001';
-  const postId = 'post0000-0000-0000-0000-000000000001';
+  const userId = 'aaaa0000-0000-4000-8000-000000000001';
+  const postId = 'a0010001-0000-4000-8000-000000000001';
 
   const mockUser = {
     id: userId,
@@ -406,7 +406,7 @@ describe('Feed (e2e)', () => {
     const token = await generateToken();
 
     await request(app!.getHttpServer())
-      .get('/api/v1/feed/company/cccc0000-0000-0000-0000-000000000003')
+      .get('/api/v1/feed/company/cccc0000-0000-4000-8000-000000000003')
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
   });

@@ -101,7 +101,7 @@ describe('Connections (e2e)', () => {
     }>('./../src/outbox/outbox.service');
 
     const userA = {
-      id: 'aaaa0000-0000-0000-0000-000000000001',
+      id: 'aaaa0000-0000-4000-8000-000000000001',
       email: 'usera@example.com',
       passwordHash: null,
       displayName: 'User A',
@@ -112,7 +112,7 @@ describe('Connections (e2e)', () => {
     };
 
     const userB = {
-      id: 'bbbb0000-0000-0000-0000-000000000002',
+      id: 'bbbb0000-0000-4000-8000-000000000002',
       email: 'userb@example.com',
       passwordHash: null,
       displayName: 'User B',
@@ -123,7 +123,7 @@ describe('Connections (e2e)', () => {
     };
 
     const userC = {
-      id: 'cccc0000-0000-0000-0000-000000000003',
+      id: 'cccc0000-0000-4000-8000-000000000003',
       email: 'userc@example.com',
       passwordHash: null,
       displayName: 'User C',
@@ -135,7 +135,7 @@ describe('Connections (e2e)', () => {
 
     // Accepted connection: User A ==requester==> User B
     const mockConnection = {
-      id: '11110000-0000-0000-0000-000000000001',
+      id: '11110000-0000-4000-8000-000000000001',
       requesterId: userA.id,
       addresseeId: userB.id,
       status: ConnectionStatus.ACCEPTED,
@@ -163,7 +163,7 @@ describe('Connections (e2e)', () => {
 
     // Pending connection: User A ==requester==> User C
     const mockPendingConnection = {
-      id: '11110000-0000-0000-0000-000000000002',
+      id: '11110000-0000-4000-8000-000000000002',
       requesterId: userA.id,
       addresseeId: userC.id,
       status: ConnectionStatus.PENDING,
@@ -183,7 +183,7 @@ describe('Connections (e2e)', () => {
 
     // Active follow: User A follows User B
     const mockFollow = {
-      id: '11110000-0000-0000-0000-000000000011',
+      id: '11110000-0000-4000-8000-000000000011',
       followerId: userA.id,
       followeeId: userB.id,
       status: FollowStatus.ACTIVE,
@@ -193,7 +193,7 @@ describe('Connections (e2e)', () => {
 
     // Block: User A blocked User B
     const mockBlock = {
-      id: '11110000-0000-0000-0000-000000000021',
+      id: '11110000-0000-4000-8000-000000000021',
       blockerId: userA.id,
       blockedId: userB.id,
       createdAt: new Date('2024-01-01'),
@@ -453,7 +453,7 @@ describe('Connections (e2e)', () => {
 
   const generateToken = async () => {
     const jwtService = app!.get(JwtService);
-    return jwtService.sign({ sub: 'aaaa0000-0000-0000-0000-000000000001' });
+    return jwtService.sign({ sub: 'aaaa0000-0000-4000-8000-000000000001' });
   };
 
   // Helper: get the Prisma mock from the DI container (with a type-safe wrapper)
@@ -469,7 +469,7 @@ describe('Connections (e2e)', () => {
     it('should return 401 without auth token', async () => {
       await request(app!.getHttpServer())
         .post('/api/v1/connections')
-        .send({ toUserId: 'bbbb0000-0000-0000-0000-000000000002' })
+        .send({ toUserId: 'bbbb0000-0000-4000-8000-000000000002' })
         .expect(401);
     });
 
@@ -478,7 +478,7 @@ describe('Connections (e2e)', () => {
       const response = await request(app!.getHttpServer())
         .post('/api/v1/connections')
         .set('Authorization', `Bearer ${token}`)
-        .send({ toUserId: 'bbbb0000-0000-0000-0000-000000000002' })
+        .send({ toUserId: 'bbbb0000-0000-4000-8000-000000000002' })
         .expect(201);
 
       expect(response.body).toHaveProperty('data');
@@ -578,14 +578,14 @@ describe('Connections (e2e)', () => {
   describe('POST /api/v1/users/:id/follow', () => {
     it('should return 401 without auth token', async () => {
       await request(app!.getHttpServer())
-        .post('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/follow')
+        .post('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/follow')
         .expect(401);
     });
 
     it('should return 201 when following a user', async () => {
       const token = await generateToken();
       const response = await request(app!.getHttpServer())
-        .post('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/follow')
+        .post('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/follow')
         .set('Authorization', `Bearer ${token}`)
         .expect(201);
 
@@ -600,14 +600,14 @@ describe('Connections (e2e)', () => {
   describe('DELETE /api/v1/users/:id/follow', () => {
     it('should return 401 without auth token', async () => {
       await request(app!.getHttpServer())
-        .delete('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/follow')
+        .delete('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/follow')
         .expect(401);
     });
 
     it('should return 204 when unfollowing', async () => {
       const token = await generateToken();
       await request(app!.getHttpServer())
-        .delete('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/follow')
+        .delete('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/follow')
         .set('Authorization', `Bearer ${token}`)
         .expect(204);
     });
@@ -620,14 +620,14 @@ describe('Connections (e2e)', () => {
   describe('POST /api/v1/users/:id/block', () => {
     it('should return 401 without auth token', async () => {
       await request(app!.getHttpServer())
-        .post('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/block')
+        .post('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/block')
         .expect(401);
     });
 
     it('should return 201 when blocking a user', async () => {
       const token = await generateToken();
       const response = await request(app!.getHttpServer())
-        .post('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/block')
+        .post('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/block')
         .set('Authorization', `Bearer ${token}`)
         .expect(201);
 
@@ -642,7 +642,7 @@ describe('Connections (e2e)', () => {
   describe('DELETE /api/v1/users/:id/block', () => {
     it('should return 401 without auth token', async () => {
       await request(app!.getHttpServer())
-        .delete('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/block')
+        .delete('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/block')
         .expect(401);
     });
 
@@ -651,15 +651,15 @@ describe('Connections (e2e)', () => {
       (
         prisma.block as Record<string, jest.Mock>
       ).findFirst.mockResolvedValueOnce({
-        id: '11110000-0000-0000-0000-000000000021',
-        blockerId: 'aaaa0000-0000-0000-0000-000000000001',
-        blockedId: 'bbbb0000-0000-0000-0000-000000000002',
+        id: '11110000-0000-4000-8000-000000000021',
+        blockerId: 'aaaa0000-0000-4000-8000-000000000001',
+        blockedId: 'bbbb0000-0000-4000-8000-000000000002',
         createdAt: new Date(),
       });
 
       const token = await generateToken();
       await request(app!.getHttpServer())
-        .delete('/api/v1/users/bbbb0000-0000-0000-0000-000000000002/block')
+        .delete('/api/v1/users/bbbb0000-0000-4000-8000-000000000002/block')
         .set('Authorization', `Bearer ${token}`)
         .expect(204);
     });
@@ -675,9 +675,9 @@ describe('Connections (e2e)', () => {
       (
         prisma.block as Record<string, jest.Mock>
       ).findFirst.mockResolvedValueOnce({
-        id: '11110000-0000-0000-0000-000000000099',
-        blockerId: 'bbbb0000-0000-0000-0000-000000000002',
-        blockedId: 'aaaa0000-0000-0000-0000-000000000001',
+        id: '11110000-0000-4000-8000-000000000099',
+        blockerId: 'bbbb0000-0000-4000-8000-000000000002',
+        blockedId: 'aaaa0000-0000-4000-8000-000000000001',
         createdAt: new Date(),
       });
 
@@ -685,7 +685,7 @@ describe('Connections (e2e)', () => {
       await request(app!.getHttpServer())
         .post('/api/v1/connections')
         .set('Authorization', `Bearer ${token}`)
-        .send({ toUserId: 'bbbb0000-0000-0000-0000-000000000002' })
+        .send({ toUserId: 'bbbb0000-0000-4000-8000-000000000002' })
         .expect(400);
     });
   });

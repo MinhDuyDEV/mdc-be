@@ -10,10 +10,10 @@ describe('Posts (e2e)', () => {
   let originalEnv: NodeJS.ProcessEnv;
   let PrismaService: Type<unknown>;
 
-  const userId = 'aaaa0000-0000-0000-0000-000000000001';
-  const postId = 'post0000-0000-0000-0000-000000000001';
-  const commentId = 'comm0000-0000-0000-0000-000000000001';
-  const reactionId = 'reac0000-0000-0000-0000-000000000001';
+  const userId = 'aaaa0000-0000-4000-8000-000000000001';
+  const postId = 'a0010001-0000-4000-8000-000000000001';
+  const commentId = 'a0020001-0000-4000-8000-000000000001';
+  const reactionId = 'a0030001-0000-4000-8000-000000000001';
 
   const mockUser = {
     id: userId,
@@ -66,7 +66,7 @@ describe('Posts (e2e)', () => {
   };
 
   const mockSavedPost = {
-    id: 'save0000-0000-0000-0000-000000000001',
+    id: 'a0040001-0000-4000-8000-000000000001',
     postId,
     userId,
     createdAt: new Date(),
@@ -641,7 +641,7 @@ describe('Posts (e2e)', () => {
     const token = await generateToken();
 
     await request(app!.getHttpServer())
-      .delete(`/api/v1/comments/${commentId}`)
+      .delete(`/api/v1/posts/comments/${commentId}`)
       .set('Authorization', `Bearer ${token}`)
       .expect(204);
   });
@@ -662,7 +662,7 @@ describe('Posts (e2e)', () => {
     const token = await generateToken();
 
     await request(app!.getHttpServer())
-      .delete(`/api/v1/reactions/${reactionId}`)
+      .delete(`/api/v1/posts/reactions/${reactionId}`)
       .set('Authorization', `Bearer ${token}`)
       .expect(204);
   });
