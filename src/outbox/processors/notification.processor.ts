@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { IdempotencyService } from '../idempotency.service';
+import type { PrismaService } from '../../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../idempotency.service';
 
 interface ApplicationSubmittedPayload {
   applicationId: string;
@@ -30,6 +30,23 @@ interface RecruiterSeatAllocatedPayload {
   recruiterUserId: string;
   companyId: string;
   seatId?: string;
+}
+
+interface ConnectionRequestedPayload {
+  connectionId: string;
+  requesterUserId: string;
+  targetUserId: string;
+}
+
+interface ConnectionAcceptedPayload {
+  connectionId: string;
+  requesterUserId: string;
+  targetUserId: string;
+}
+
+interface UserBlockedPayload {
+  blockerUserId: string;
+  blockedUserId: string;
 }
 
 interface PrismaForRecipients {
@@ -247,6 +264,53 @@ export class NotificationProcessor {
 
     this.logger.debug(
       `RecruiterSeatAllocated: ${created ? 'inserted' : 'skipped (duplicate)'} notification row for user=${payload.recruiterUserId}`,
+    );
+  }
+
+  async processConnectionRequested(
+    payload: ConnectionRequestedPayload,
+  ): Promise<void> {
+    const created = await this.insertNotification({
+      recipientUserId: payload.targetUserId,
+      eventType: 'ConnectionRequested',
+      aggregateId: payload.connectionId,
+      type: 'ConnectionRequested',
+      payloadJson: payload as unknown as Record<string, unknown>,
+      title: 'New connection request',
+      body: 'You have a new connection request',
+      actionUrl: '/connections/pending',
+      aggregateIdJsonField: 'connectionId',
+    });
+
+    this.logger.debug(
+      `ConnectionRequested: ${created ? 'inserted' : 'skipped'} notification for target=${payload.targetUserId}`,
+    );
+  }
+
+  async processConnectionAccepted(
+    payload: ConnectionAcceptedPayload,
+  ): Promise<void> {
+    const created = await this.insertNotification({
+      recipientUserId: payload.requesterUserId,
+      eventType: 'ConnectionAccepted',
+      aggregateId: payload.connectionId,
+      type: 'ConnectionAccepted',
+      payloadJson: payload as unknown as Record<string, unknown>,
+      title: 'Connection accepted',
+      body: 'Your connection request was accepted',
+      actionUrl: '/connections',
+      aggregateIdJsonField: 'connectionId',
+    });
+
+    this.logger.debug(
+      `ConnectionAccepted: ${created ? 'inserted' : 'skipped'} notification for requester=${payload.requesterUserId}`,
+    );
+  }
+
+  processUserBlocked(payload: UserBlockedPayload): Promise<void> {
+    // Phase 5 stub: log only, no notification sent to blocked user
+    this.logger.debug(
+      `UserBlocked: blocker=${payload.blockerUserId}, blocked=${payload.blockedUserId} (Phase 5 stub — no notification)`,
     );
   }
 

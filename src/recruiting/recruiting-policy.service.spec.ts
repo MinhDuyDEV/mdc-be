@@ -1,4 +1,5 @@
 import { ApplicationStatus } from '@prisma/client';
+import type { ConnectionsPolicyService } from '../connections/connections-policy.service';
 import type { PrismaService } from '../infra/prisma/prisma.service';
 import { RecruitingPolicyService } from './recruiting-policy.service';
 
@@ -8,6 +9,10 @@ interface MockPrisma {
   application: { findFirst: jest.Mock };
   talentPoolCandidate: { findFirst: jest.Mock };
   profile: { findUnique: jest.Mock };
+}
+
+interface MockConnectionsPolicy {
+  isBlocked: jest.Mock;
 }
 
 function buildMockPrisma(): MockPrisma {
@@ -20,13 +25,24 @@ function buildMockPrisma(): MockPrisma {
   };
 }
 
+function buildMockConnectionsPolicy(): MockConnectionsPolicy {
+  return {
+    isBlocked: jest.fn().mockResolvedValue(false),
+  };
+}
+
 describe('RecruitingPolicyService', () => {
   let prisma: MockPrisma;
+  let connectionsPolicy: MockConnectionsPolicy;
   let service: RecruitingPolicyService;
 
   beforeEach(() => {
     prisma = buildMockPrisma();
-    service = new RecruitingPolicyService(prisma as unknown as PrismaService);
+    connectionsPolicy = buildMockConnectionsPolicy();
+    service = new RecruitingPolicyService(
+      prisma as unknown as PrismaService,
+      connectionsPolicy as unknown as ConnectionsPolicyService,
+    );
   });
 
   describe('SELF_OUTREACH', () => {
@@ -124,6 +140,19 @@ describe('RecruitingPolicyService', () => {
         allowed: false,
         reason: 'CANDIDATE_NOT_OPTED_IN',
       });
+    });
+  });
+
+  describe('BLOCKED', () => {
+    it('denies with BLOCKED reason when either party has blocked the other', async () => {
+      prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
+      prisma.application.findFirst.mockResolvedValue(null);
+      prisma.talentPoolCandidate.findFirst.mockResolvedValue(null);
+      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+      connectionsPolicy.isBlocked.mockResolvedValue(true);
+
+      const decision = await service.canMessageCandidate('rec', 'cand');
+      expect(decision).toEqual({ allowed: false, reason: 'BLOCKED' });
     });
   });
 

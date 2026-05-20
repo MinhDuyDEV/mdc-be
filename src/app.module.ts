@@ -9,6 +9,7 @@ import { ApplicationsModule } from './applications/applications.module';
 import { AuthModule } from './auth/auth.module';
 import { CommonModule } from './common';
 import { CompaniesModule } from './companies/companies.module';
+import { ConnectionsModule } from './connections/connections.module';
 import { EmailModule } from './email/email.module';
 import { InfraModule } from './infra';
 import type { AppConfig } from './infra/config';
@@ -55,6 +56,7 @@ import { UsersModule } from './users/users.module';
     NotificationsModule,
     OutboxModule,
     ProfilesModule,
+    ConnectionsModule,
     RecruitingModule,
     SearchModule,
     UsersModule,

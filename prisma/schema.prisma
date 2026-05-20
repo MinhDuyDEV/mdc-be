@@ -133,6 +133,18 @@ enum ApplicationStatus {
   WITHDRAWN
 }
 
+enum ConnectionStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REMOVED
+}
+
+enum FollowStatus {
+  ACTIVE
+  INACTIVE
+}
+
 enum NotificationType {
   // Applications domain
   ApplicationSubmitted
@@ -147,6 +159,10 @@ enum NotificationType {
   CandidateSaved
   CandidateAddedToTalentPool
   RecruiterSeatAllocated
+  // Connections domain
+  ConnectionRequested
+  ConnectionAccepted
+  UserBlocked
   // System / generic
   System
 }
@@ -187,6 +203,12 @@ model User {
   candidateNotesAsCandidate   CandidateNote[]          @relation("CandidateNotesAsCandidate")
   candidateNotesByAuthor      CandidateNote[]          @relation("CandidateNotesByAuthor")
   notifications               Notification[]
+  connectionsAsRequester      Connection[]             @relation("ConnectionsAsRequester")
+  connectionsAsAddressee      Connection[]             @relation("ConnectionsAsAddressee")
+  followsAsFollower           Follow[]                @relation("FollowsAsFollower")
+  followsAsFollowee           Follow[]                @relation("FollowsAsFollowee")
+  blocksAsBlocker             Block[]                 @relation("BlocksAsBlocker")
+  blocksAsBlocked             Block[]                 @relation("BlocksAsBlocked")
 
   @@map("users")
 }
@@ -913,4 +935,55 @@ model Notification {
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
   // Partial index notifications_unread_idx lives in raw SQL (Prisma can't express WHERE predicates).
   @@map("notifications")
+}
+
+model Connection {
+  id          String           @id @default(uuid()) @db.Uuid
+  requesterId String           @map("requester_id") @db.Uuid
+  addresseeId String           @map("addressee_id") @db.Uuid
+  status      ConnectionStatus @default(PENDING)
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  requester User @relation("ConnectionsAsRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  addressee User @relation("ConnectionsAsAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
+
+  @@unique([requesterId, addresseeId, status], name: "unique_active_connection")
+  @@index([requesterId])
+  @@index([addresseeId])
+  @@index([status])
+  @@map("connections")
+}
+
+model Follow {
+  id         String       @id @default(uuid()) @db.Uuid
+  followerId String       @map("follower_id") @db.Uuid
+  followeeId String       @map("followee_id") @db.Uuid
+  status     FollowStatus @default(ACTIVE)
+  createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  follower User @relation("FollowsAsFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  followee User @relation("FollowsAsFollowee", fields: [followeeId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followeeId], name: "unique_follow")
+  @@index([followerId])
+  @@index([followeeId])
+  @@index([status])
+  @@map("follows")
+}
+
+model Block {
+  id        String   @id @default(uuid()) @db.Uuid
+  blockerId String   @map("blocker_id") @db.Uuid
+  blockedId String   @map("blocked_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  blocker User @relation("BlocksAsBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked User @relation("BlocksAsBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId], name: "unique_block")
+  @@index([blockerId])
+  @@index([blockedId])
+  @@map("blocks")
 }
