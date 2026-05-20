@@ -621,8 +621,14 @@ describe("Connections (e2e)", () => {
 		});
 
 		it("should return 204 when unblocking", async () => {
-			const prismaMock = app!.get(PrismaService) as Record<string, any>;
-			(prismaMock.block.findFirst as jest.Mock).mockResolvedValueOnce({
+			// Access the mocked PrismaService via DI container — cast through unknown
+			const prismaMock = app!.get(PrismaService) as unknown as Record<
+				string,
+				jest.Mock | Record<string, jest.Mock>
+			>;
+			(
+				prismaMock.block as Record<string, jest.Mock>
+			).findFirst.mockResolvedValueOnce({
 				id: "11110000-0000-0000-0000-000000000021",
 				blockerId: "aaaa0000-0000-0000-0000-000000000001",
 				blockedId: "bbbb0000-0000-0000-0000-000000000002",
@@ -644,8 +650,14 @@ describe("Connections (e2e)", () => {
 	describe("Block prevents new connection request", () => {
 		it("should return 400 when blocked user tries to connect", async () => {
 			// User B blocked user A. User A tries to connect to user B.
-			const prismaMock = app!.get(PrismaService) as Record<string, any>;
-			(prismaMock.block.findFirst as jest.Mock).mockResolvedValueOnce({
+			// Access the mocked PrismaService via DI container — cast through unknown
+			const prismaMock = app!.get(PrismaService) as unknown as Record<
+				string,
+				jest.Mock | Record<string, jest.Mock>
+			>;
+			(
+				prismaMock.block as Record<string, jest.Mock>
+			).findFirst.mockResolvedValueOnce({
 				id: "11110000-0000-0000-0000-000000000099",
 				blockerId: "bbbb0000-0000-0000-0000-000000000002",
 				blockedId: "aaaa0000-0000-0000-0000-000000000001",
