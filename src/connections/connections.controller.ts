@@ -14,7 +14,7 @@ import {
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import type { ConnectionsService } from './connections.service';
+import { ConnectionsService } from './connections.service';
 import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 @Controller('connections')

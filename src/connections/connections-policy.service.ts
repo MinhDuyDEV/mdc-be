@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ConnectionStatus, FollowStatus } from '@prisma/client';
-import type { PrismaService } from '../infra/prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 @Injectable()
 export class ConnectionsPolicyService {
