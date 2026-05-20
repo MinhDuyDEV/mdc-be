@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { NotificationType } from '@prisma/client';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { IdempotencyService } from '../idempotency.service';
+import type { PrismaService } from '../../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../idempotency.service';
 
 interface ApplicationSubmittedPayload {
   applicationId: string;
@@ -30,6 +29,7 @@ interface ApplicationNoteAddedPayload {
 interface RecruiterSeatAllocatedPayload {
   recruiterUserId: string;
   companyId: string;
+  seatId?: string;
 }
 
 interface PrismaForRecipients {
@@ -116,6 +116,7 @@ export class NotificationProcessor {
         title: 'New application',
         body: `A new application was submitted for job ${payload.jobId}`,
         actionUrl: `/applications/${payload.applicationId}`,
+        aggregateIdJsonField: 'applicationId',
       });
       if (created) inserted++;
     }
@@ -161,6 +162,7 @@ export class NotificationProcessor {
         title: 'Application status updated',
         body: `Application status changed to ${payload.toStatus}`,
         actionUrl: `/applications/${payload.applicationId}`,
+        aggregateIdJsonField: 'applicationId',
       });
       if (created) inserted++;
     }
@@ -203,6 +205,7 @@ export class NotificationProcessor {
         title: 'New note on application',
         body: `A note was added to application ${payload.applicationId}`,
         actionUrl: `/applications/${payload.applicationId}`,
+        aggregateIdJsonField: 'noteId',
       });
       if (created) inserted++;
     }
@@ -235,10 +238,11 @@ export class NotificationProcessor {
       eventType: 'RecruiterSeatAllocated',
       aggregateId: seat.id,
       type: 'RecruiterSeatAllocated',
-      payloadJson: payload as unknown as Record<string, unknown>,
+      payloadJson: { ...payload, seatId: seat.id },
       title: 'You were allocated a recruiter seat',
       body: `You have been granted a recruiter seat for company ${payload.companyId}`,
       actionUrl: `/companies/${payload.companyId}`,
+      aggregateIdJsonField: 'seatId',
     });
 
     this.logger.debug(
@@ -255,6 +259,10 @@ export class NotificationProcessor {
     title: string;
     body: string;
     actionUrl: string;
+    /** JSON field name inside payloadJson whose value equals aggregateId —
+     *  used to scope the dedup query to the specific aggregate instance
+     *  (e.g. 'applicationId', 'noteId', 'seatId'). */
+    aggregateIdJsonField?: string;
   }): Promise<boolean> {
     const key = `${opts.recipientUserId}:${opts.eventType}:${opts.aggregateId}`;
 
@@ -264,11 +272,23 @@ export class NotificationProcessor {
     // produces a duplicate Notification row.
     await this.idempotencyService.claim('Notification', key);
 
+    const where: Record<string, unknown> = {
+      userId: opts.recipientUserId,
+      type: opts.type,
+    };
+
+    // Scope the dedup lookup to the specific aggregate instance by matching
+    // the aggregateId inside the JSON payload.  Without this, a notification
+    // of type T for aggregate A would block all future T notifications for
+    // the same user even when the aggregates differ.
+    if (opts.aggregateIdJsonField && opts.aggregateId) {
+      where.payloadJson = {
+        equals: { [opts.aggregateIdJsonField]: opts.aggregateId },
+      };
+    }
+
     const existing = await this.prisma.notification.findFirst({
-      where: {
-        userId: opts.recipientUserId,
-        type: opts.type as NotificationType,
-      },
+      where,
       select: { id: true },
     });
 

@@ -57,18 +57,30 @@ npm run prisma:migrate     # dev migrate
 
 ## CODE NAVIGATION
 
-`srcwalk` (tree-sitter CLI) — run `srcwalk guide` first.
+**ALWAYS use `srcwalk` first.** It is the primary code navigator (tree-sitter based). Fall back to `grep`/`find`/`fd` ONLY when srcwalk fails or cannot answer the question.
+
+Run `srcwalk guide` to see the full routing policy.
+
+### Core commands
 
 ```bash
-srcwalk map                   # repo structure + dependency groups
-srcwalk find <symbol|text>    # definitions/usages
-srcwalk callers <symbol>      # who calls it
-srcwalk callees <symbol>      # what it calls
-srcwalk deps <file>           # imports + dependents
-srcwalk <path>[:line]         # smart read
+srcwalk map --scope <dir>              # repo structure + dependency groups
+srcwalk find <symbol|text> --scope <dir>  # definitions + usages
+srcwalk find '*Pattern*' --scope <dir> --filter kind:fn  # symbol globs
+srcwalk files '<glob>' --scope <dir>   # file discovery by name/glob
+srcwalk callers <symbol> --scope <dir> # who calls it
+srcwalk callees <symbol> --scope <dir> # what it calls
+srcwalk deps <file>                    # imports + dependents
+srcwalk flow <symbol> --scope <dir>    # bidirectional slice
+srcwalk impact <symbol> --scope <dir>  # blast-radius before change
+srcwalk <path>[:line]                  # smart token-aware read
 ```
 
-Use it before raw `grep`/`cat` for code-structure questions.
+### Fallback rules
+
+- **shell `find`/`fd`**: ONLY for filesystem metadata (permissions, mtimes, empty dirs, symlinks, binary assets, generated outputs). Never for code discovery.
+- **raw `grep`**: ONLY for last-mile text confirmation after `srcwalk find` has narrowed scope.
+- **shell `tree`/`ls`**: NEVER for orientation — use `srcwalk map` instead.
 
 ## BOUNDARIES
 

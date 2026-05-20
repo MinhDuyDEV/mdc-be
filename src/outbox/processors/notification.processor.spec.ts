@@ -48,12 +48,6 @@ function createProcessor() {
   return { processor, prisma, idempotency, logger };
 }
 
-function makeP2002(): Error {
-  const err = new Error('Unique constraint failed');
-  (err as Error & { code: string }).code = 'P2002';
-  return err;
-}
-
 describe('NotificationProcessor', () => {
   let warnSpy: jest.SpyInstance;
   let debugSpy: jest.SpyInstance;
