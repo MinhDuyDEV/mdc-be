@@ -6,10 +6,10 @@ import {
 } from '@nestjs/common';
 import { ConnectionStatus, FollowStatus, Prisma } from '@prisma/client';
 import type { PrismaTransaction } from '../infra/prisma';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
-import { ConnectionsPolicyService } from './connections-policy.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../outbox/idempotency.service';
+import type { OutboxService } from '../outbox/outbox.service';
+import type { ConnectionsPolicyService } from './connections-policy.service';
 import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 interface CursorPayload {
@@ -86,32 +86,32 @@ export class ConnectionsService {
       `${userId}:${dto.toUserId}`,
     );
 
-    // Check for existing connection
-    const existing = await this.prisma.connection.findFirst({
-      where: {
-        OR: [
-          {
-            requesterId: userId,
-            addresseeId: dto.toUserId,
-            status: {
-              in: [ConnectionStatus.PENDING, ConnectionStatus.ACCEPTED],
-            },
-          },
-          {
-            requesterId: dto.toUserId,
-            addresseeId: userId,
-            status: {
-              in: [ConnectionStatus.PENDING, ConnectionStatus.ACCEPTED],
-            },
-          },
-        ],
-      },
-    });
-    if (existing) {
-      throw new ConflictException('CONNECTION_ALREADY_EXISTS');
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      // Check for existing connection (inside transaction to prevent race)
+      const existing = await tx.connection.findFirst({
+        where: {
+          OR: [
+            {
+              requesterId: userId,
+              addresseeId: dto.toUserId,
+              status: {
+                in: [ConnectionStatus.PENDING, ConnectionStatus.ACCEPTED],
+              },
+            },
+            {
+              requesterId: dto.toUserId,
+              addresseeId: userId,
+              status: {
+                in: [ConnectionStatus.PENDING, ConnectionStatus.ACCEPTED],
+              },
+            },
+          ],
+        },
+      });
+      if (existing) {
+        throw new ConflictException('CONNECTION_ALREADY_EXISTS');
+      }
+
       const connection = await tx.connection.create({
         data: {
           requesterId: userId,
@@ -263,7 +263,7 @@ export class ConnectionsService {
     const nextCursor =
       hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
 
-    return { data: items, meta: { nextCursor, hasMore } };
+    return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
   }
 
   async listPendingRequests(
@@ -309,7 +309,7 @@ export class ConnectionsService {
     const nextCursor =
       hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
 
-    return { data: items, meta: { nextCursor, hasMore } };
+    return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
   }
 
   // ─────────────────────── Follows ────────────────────────────────────────
@@ -380,20 +380,20 @@ export class ConnectionsService {
       throw new BadRequestException('CANNOT_BLOCK_SELF');
     }
 
-    // Check for existing block
-    const existing = await this.prisma.block.findFirst({
-      where: { blockerId: userId, blockedId: blockedUserId },
-    });
-    if (existing) {
-      throw new ConflictException('BLOCK_ALREADY_EXISTS');
-    }
-
     await this.idempotencyService.claim(
       'Connection:blockUser',
       `${userId}:${blockedUserId}`,
     );
 
     return this.prisma.$transaction(async (tx) => {
+      // Check for existing block (inside transaction to prevent race)
+      const existing = await tx.block.findFirst({
+        where: { blockerId: userId, blockedId: blockedUserId },
+      });
+      if (existing) {
+        throw new ConflictException('BLOCK_ALREADY_EXISTS');
+      }
+
       // Create block
       const block = await tx.block.create({
         data: {

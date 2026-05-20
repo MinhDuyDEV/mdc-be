@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { IdempotencyService } from '../idempotency.service';
+import type { PrismaService } from '../../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../idempotency.service';
 
 interface ApplicationSubmittedPayload {
   applicationId: string;
@@ -307,7 +307,7 @@ export class NotificationProcessor {
     );
   }
 
-  processUserBlocked(payload: UserBlockedPayload): void {
+  processUserBlocked(payload: UserBlockedPayload): Promise<void> {
     // Phase 5 stub: log only, no notification sent to blocked user
     this.logger.debug(
       `UserBlocked: blocker=${payload.blockerUserId}, blocked=${payload.blockedUserId} (Phase 5 stub — no notification)`,

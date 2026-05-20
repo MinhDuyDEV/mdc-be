@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ApplicationStatus } from '@prisma/client';
-import { ConnectionsPolicyService } from '../connections/connections-policy.service';
-import { PrismaService } from '../infra/prisma/prisma.service';
+import type { ConnectionsPolicyService } from '../connections/connections-policy.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
 
 /**
  * Discriminated decision returned by `canMessageCandidate`. Phase 7 messaging
@@ -112,17 +112,18 @@ export class RecruitingPolicyService {
     }
 
     // Check if either party has blocked the other.
+    // Block check MUST come before recruitingEligible check —
+    // a blocked candidate should get BLOCKED even if not opted in.
     const isBlocked = await this.connectionsPolicy.isBlocked(
       recruiterUserId,
       candidateUserId,
     );
-
-    if (profile.recruitingEligible && !isBlocked) {
-      return { allowed: true, reason: 'OPT_IN' };
-    }
-
     if (isBlocked) {
       return { allowed: false, reason: 'BLOCKED' };
+    }
+
+    if (profile.recruitingEligible) {
+      return { allowed: true, reason: 'OPT_IN' };
     }
 
     return { allowed: false, reason: 'CANDIDATE_NOT_OPTED_IN' };
