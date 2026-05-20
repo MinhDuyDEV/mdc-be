@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
+import { PrismaService } from "../../infra/prisma/prisma.service";
 import type { IdempotencyService } from "../idempotency.service";
 
 interface MessageSentPayload {
