@@ -60,14 +60,27 @@ export class FeedService {
     let where: Prisma.PostWhereInput;
 
     if (userId) {
-      // Bidirectional accepted connections
-      const connections = await this.prisma.connection.findMany({
-        where: {
-          OR: [{ requesterId: userId }, { addresseeId: userId }],
-          status: ConnectionStatus.ACCEPTED,
-        },
-        select: { requesterId: true, addresseeId: true },
-      });
+      // Bidirectional accepted connections, active follows, and blocks
+      const [connections, follows, blocks] = await Promise.all([
+        this.prisma.connection.findMany({
+          where: {
+            OR: [{ requesterId: userId }, { addresseeId: userId }],
+            status: ConnectionStatus.ACCEPTED,
+          },
+          select: { requesterId: true, addresseeId: true },
+        }),
+        this.prisma.follow.findMany({
+          where: { followerId: userId, status: FollowStatus.ACTIVE },
+          select: { followeeId: true },
+        }),
+        this.prisma.block.findMany({
+          where: {
+            OR: [{ blockerId: userId }, { blockedId: userId }],
+          },
+          select: { blockerId: true, blockedId: true },
+        }),
+      ]);
+
       const connectedIds = new Set<string>();
       for (const conn of connections) {
         connectedIds.add(
@@ -75,20 +88,8 @@ export class FeedService {
         );
       }
 
-      // Active follows
-      const follows = await this.prisma.follow.findMany({
-        where: { followerId: userId, status: FollowStatus.ACTIVE },
-        select: { followeeId: true },
-      });
       const followedIds = follows.map((f) => f.followeeId);
 
-      // Bidirectional blocks
-      const blocks = await this.prisma.block.findMany({
-        where: {
-          OR: [{ blockerId: userId }, { blockedId: userId }],
-        },
-        select: { blockerId: true, blockedId: true },
-      });
       const blockedIds = new Set<string>();
       for (const block of blocks) {
         blockedIds.add(
@@ -137,6 +138,20 @@ export class FeedService {
           cursorWhere,
         ],
       };
+
+      // Exclude posts the user has hidden
+      const hiddenPosts = await this.prisma.hiddenPost.findMany({
+        where: { userId },
+        select: { postId: true },
+      });
+      if (hiddenPosts.length > 0) {
+        const hiddenPostIds = hiddenPosts.map((h) => h.postId);
+        // Push into AND so the notIn is always applied
+        (where as Record<string, unknown>).AND = [
+          ...((where as Record<string, unknown>).AND as unknown[]),
+          { id: { notIn: hiddenPostIds } },
+        ];
+      }
     } else {
       where = {
         AND: [
@@ -170,6 +185,17 @@ export class FeedService {
   ) {
     const limit = query.limit ?? 20;
     const cursorWhere = buildCursorWhere(query.cursor);
+
+    // Block check: if either party has blocked the other, return empty feed
+    if (viewerId && viewerId !== userId) {
+      const blocked = await this.connectionsPolicy.isBlocked(viewerId, userId);
+      if (blocked) {
+        return {
+          data: [],
+          meta: { nextCursor: undefined, hasNextPage: false, limit },
+        };
+      }
+    }
 
     let isConnected = false;
     if (viewerId && viewerId !== userId) {

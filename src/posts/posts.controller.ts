@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
@@ -16,6 +17,7 @@ import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
 import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
+import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import type { CreateCommentDto } from './dto/create-comment.dto';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { CreateReactionDto } from './dto/create-reaction.dto';
@@ -70,6 +72,21 @@ export class PostsController {
   }
 
   // Comments
+  @Get(':id/comments')
+  @Public()
+  async listComments(
+    @CurrentUser() user: AuthenticatedUser | undefined,
+    @Param('id', ParseUUIDPipe) postId: string,
+    @Query() query: CursorPaginationQueryDto,
+  ) {
+    return this.postsService.listComments(
+      user?.id,
+      postId,
+      query.limit ?? 20,
+      query.cursor,
+    );
+  }
+
   @Post(':id/comments')
   @UseGuards(EmailVerifiedGuard)
   @VerifiedEmail()
@@ -108,7 +125,6 @@ export class PostsController {
   @Post(':id/reactions')
   @UseGuards(EmailVerifiedGuard)
   @VerifiedEmail()
-  @HttpCode(HttpStatus.CREATED)
   async addReaction(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) postId: string,

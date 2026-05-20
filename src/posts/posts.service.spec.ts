@@ -14,11 +14,14 @@ describe('PostsService', () => {
       post: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
       },
       comment: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
       },
       reaction: {
@@ -28,13 +31,21 @@ describe('PostsService', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
-      hashtag: { upsert: jest.fn() },
-      postHashtag: { create: jest.fn() },
+      hashtag: { upsert: jest.fn(), update: jest.fn() },
+      postHashtag: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
       postMedia: { createMany: jest.fn() },
-      mention: { create: jest.fn() },
+      mention: { create: jest.fn(), deleteMany: jest.fn() },
       user: { findUnique: jest.fn(), findFirst: jest.fn() },
       savedPost: { upsert: jest.fn(), updateMany: jest.fn() },
-      hiddenPost: { upsert: jest.fn(), deleteMany: jest.fn() },
+      hiddenPost: {
+        upsert: jest.fn(),
+        deleteMany: jest.fn(),
+        findMany: jest.fn(),
+      },
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma));
@@ -158,6 +169,8 @@ describe('PostsService', () => {
         deletedAt: null,
       });
       prisma.post.update.mockResolvedValue({ id: 'post1', content: 'new' });
+      prisma.postHashtag.findMany.mockResolvedValue([]);
+      prisma.mention.deleteMany.mockResolvedValue({ count: 0 });
 
       await service.updatePost('user1', 'post1', { content: 'new' });
 
@@ -234,7 +247,7 @@ describe('PostsService', () => {
         type: 'LIKE',
       } as any);
 
-      expect(result).toBeNull();
+      expect(result).toEqual({ action: 'removed', reaction: null });
       expect(prisma.reaction.delete).toHaveBeenCalled();
     });
   });

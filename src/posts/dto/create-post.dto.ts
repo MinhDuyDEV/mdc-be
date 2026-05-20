@@ -1,8 +1,16 @@
 import { PostVisibility } from '@prisma/client';
-import { IsArray, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 export class CreatePostDto {
   @IsString()
+  @IsNotEmpty()
   content: string;
 
   @IsEnum(PostVisibility)

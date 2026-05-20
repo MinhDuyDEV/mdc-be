@@ -23,7 +23,7 @@ const POST_INCLUDE = {
       id: true,
       email: true,
       profile: {
-        select: { firstName: true, lastName: true, headline: true },
+        select: { headline: true },
       },
     },
   },
@@ -35,6 +35,24 @@ const POST_INCLUDE = {
   },
 } as const;
 
+function encodeCursor(createdAt: Date, id: string): string {
+  return Buffer.from(
+    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
+  ).toString('base64');
+}
+
+function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(cursor, 'base64').toString('utf8'),
+    ) as { createdAt?: string; id?: string };
+    if (!decoded?.createdAt || !decoded?.id) return null;
+    return { createdAt: new Date(decoded.createdAt), id: decoded.id };
+  } catch {
+    return null;
+  }
+}
+
 @Injectable()
 export class PostsService {
   constructor(
@@ -45,12 +63,13 @@ export class PostsService {
   ) {}
 
   /**
-   * Create a post with mentions, hashtags, and media
+   * Create a post with mentions, hashtags, and media.
+   * Idempotency key derived from userId + content hash + visibility.
    */
   async createPost(userId: string, dto: CreatePostDto) {
     await this.idempotencyService.claim(
       'Post:create',
-      `${userId}:${Date.now()}`,
+      `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? 'PUBLIC'}`,
     );
 
     return this.prisma.$transaction(async (tx) => {
@@ -64,7 +83,6 @@ export class PostsService {
         include: POST_INCLUDE,
       });
 
-      // Extract and link hashtags
       const hashtags = extractHashtags(dto.content);
       for (const tagName of hashtags) {
         const hashtag = await tx.hashtag.upsert({
@@ -77,7 +95,6 @@ export class PostsService {
         });
       }
 
-      // Link media assets
       if (dto.mediaAssetIds?.length) {
         await tx.postMedia.createMany({
           data: dto.mediaAssetIds.map((mediaAssetId) => ({
@@ -87,7 +104,6 @@ export class PostsService {
         });
       }
 
-      // Extract and create mentions
       const mentions = extractMentions(dto.content);
       for (const username of mentions) {
         const mentionedUser = await tx.user.findFirst({
@@ -126,13 +142,13 @@ export class PostsService {
         },
       });
 
-      return post;
+      return tx.post.findUniqueOrThrow({
+        where: { id: post.id },
+        include: POST_INCLUDE,
+      });
     });
   }
 
-  /**
-   * Get post by ID with visibility check
-   */
   async getPost(viewerId: string | undefined, postId: string) {
     const canView = await this.postsPolicy.canViewPost(viewerId, postId);
     if (!canView) {
@@ -151,9 +167,6 @@ export class PostsService {
     return post;
   }
 
-  /**
-   * Update post (author only)
-   */
   async updatePost(userId: string, postId: string, dto: UpdatePostDto) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
@@ -178,6 +191,62 @@ export class PostsService {
         include: POST_INCLUDE,
       });
 
+      if (dto.content !== undefined) {
+        const oldLinks = await tx.postHashtag.findMany({
+          where: { postId },
+          select: { hashtagId: true },
+        });
+        if (oldLinks.length > 0) {
+          await tx.postHashtag.deleteMany({ where: { postId } });
+          for (const link of oldLinks) {
+            await tx.hashtag.update({
+              where: { id: link.hashtagId },
+              data: { postCount: { decrement: 1 } },
+            });
+          }
+        }
+
+        const hashtags = extractHashtags(dto.content);
+        for (const tagName of hashtags) {
+          const hashtag = await tx.hashtag.upsert({
+            where: { name: tagName },
+            create: { name: tagName, postCount: 1 },
+            update: { postCount: { increment: 1 } },
+          });
+          await tx.postHashtag.create({
+            data: { postId, hashtagId: hashtag.id },
+          });
+        }
+
+        await tx.mention.deleteMany({ where: { postId } });
+        const mentions = extractMentions(dto.content);
+        for (const username of mentions) {
+          const mentionedUser = await tx.user.findFirst({
+            where: { displayName: { equals: username, mode: 'insensitive' } },
+            select: { id: true },
+          });
+          if (mentionedUser) {
+            await tx.mention.create({
+              data: {
+                postId,
+                mentionedUserId: mentionedUser.id,
+                mentionerUserId: userId,
+              },
+            });
+            await this.outboxService.emit(tx as PrismaTransaction, {
+              eventType: 'MentionCreated',
+              aggregateType: 'Mention',
+              aggregateId: postId,
+              payload: {
+                postId,
+                mentionedUserId: mentionedUser.id,
+                mentionerUserId: userId,
+              },
+            });
+          }
+        }
+      }
+
       await this.outboxService.emit(tx as PrismaTransaction, {
         eventType: 'PostUpdated',
         aggregateType: 'Post',
@@ -189,9 +258,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Soft delete post (author only)
-   */
   async deletePost(userId: string, postId: string): Promise<void> {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
@@ -221,9 +287,66 @@ export class PostsService {
     });
   }
 
-  /**
-   * Create comment on a post
-   */
+  async listComments(
+    viewerId: string | undefined,
+    postId: string,
+    limit: number,
+    cursor?: string,
+  ) {
+    const canView = await this.postsPolicy.canViewPost(viewerId, postId);
+    if (!canView) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const where: Record<string, unknown> = {
+      postId,
+      deletedAt: null,
+      parentId: null,
+    };
+
+    if (cursor) {
+      const decoded = decodeCursor(cursor);
+      if (decoded) {
+        where.OR = [
+          { createdAt: { lt: decoded.createdAt } },
+          {
+            AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }],
+          },
+        ];
+      }
+    }
+
+    const rows = await this.prisma.comment.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: {
+        author: {
+          select: { id: true, email: true, displayName: true },
+        },
+        replies: {
+          where: { deletedAt: null },
+          orderBy: { createdAt: 'asc' },
+          include: {
+            author: {
+              select: { id: true, email: true, displayName: true },
+            },
+          },
+        },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    const items = hasMore ? rows.slice(0, limit) : rows;
+    const last = items.at(-1);
+    let nextCursor: string | undefined;
+    if (hasMore && last) {
+      nextCursor = encodeCursor(last.createdAt, last.id);
+    }
+
+    return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
+  }
+
   async createComment(userId: string, postId: string, dto: CreateCommentDto) {
     const canView = await this.postsPolicy.canViewPost(userId, postId);
     if (!canView) {
@@ -271,9 +394,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Update comment (author only)
-   */
   async updateComment(
     userId: string,
     commentId: string,
@@ -298,9 +418,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Soft delete comment (author or post author)
-   */
   async deleteComment(userId: string, commentId: string): Promise<void> {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
@@ -333,9 +450,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Add or update reaction (toggle same type, replace different type)
-   */
   async addReaction(userId: string, postId: string, dto: CreateReactionDto) {
     const canView = await this.postsPolicy.canViewPost(userId, postId);
     if (!canView) {
@@ -348,7 +462,6 @@ export class PostsService {
       });
 
       if (existing) {
-        // Same type = toggle off
         await tx.reaction.delete({ where: { id: existing.id } });
         await tx.post.update({
           where: { id: postId },
@@ -365,7 +478,7 @@ export class PostsService {
             type: dto.type,
           },
         });
-        return null;
+        return { action: 'removed' as const, reaction: null };
       }
 
       const otherReaction = await tx.reaction.findFirst({
@@ -388,7 +501,7 @@ export class PostsService {
             type: dto.type,
           },
         });
-        return updated;
+        return { action: 'updated' as const, reaction: updated };
       }
 
       const reaction = await tx.reaction.create({
@@ -412,13 +525,10 @@ export class PostsService {
         },
       });
 
-      return reaction;
+      return { action: 'created' as const, reaction };
     });
   }
 
-  /**
-   * Remove reaction
-   */
   async removeReaction(userId: string, reactionId: string): Promise<void> {
     const reaction = await this.prisma.reaction.findUnique({
       where: { id: reactionId },
@@ -453,9 +563,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Save post (upsert with soft-delete restore)
-   */
   async savePost(userId: string, postId: string) {
     const canView = await this.postsPolicy.canViewPost(userId, postId);
     if (!canView) {
@@ -469,9 +576,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Unsave post (soft delete)
-   */
   async unsavePost(userId: string, postId: string): Promise<void> {
     await this.prisma.savedPost.updateMany({
       where: { userId, postId },
@@ -479,9 +583,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Hide post
-   */
   async hidePost(userId: string, postId: string) {
     return this.prisma.hiddenPost.upsert({
       where: { userId_postId: { userId, postId } },
@@ -490,9 +591,6 @@ export class PostsService {
     });
   }
 
-  /**
-   * Unhide post
-   */
   async unhidePost(userId: string, postId: string): Promise<void> {
     await this.prisma.hiddenPost.deleteMany({
       where: { userId, postId },

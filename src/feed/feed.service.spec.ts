@@ -14,10 +14,13 @@ describe('FeedService', () => {
       block: { findMany: jest.fn() },
       companyMember: { findMany: jest.fn() },
       hashtag: { findUnique: jest.fn() },
+      hiddenPost: { findMany: jest.fn() },
     };
     connectionsPolicy = {
       areConnected: jest.fn().mockResolvedValue(false),
+      isBlocked: jest.fn().mockResolvedValue(false),
     };
+    prisma.hiddenPost = { findMany: jest.fn().mockResolvedValue([]) };
     service = new FeedService(prisma, connectionsPolicy);
   });
 

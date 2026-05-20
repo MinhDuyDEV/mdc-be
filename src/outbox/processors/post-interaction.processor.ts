@@ -126,6 +126,14 @@ export class PostInteractionProcessor {
   }
 
   async processMentionCreated(payload: MentionCreatedPayload): Promise<void> {
+    // Don't notify yourself
+    if (payload.mentionedUserId === payload.mentionerUserId) {
+      this.logger.debug(
+        `MentionCreated: self-mention by user=${payload.mentionerUserId} — skipping`,
+      );
+      return;
+    }
+
     const created = await this.insertNotification({
       recipientUserId: payload.mentionedUserId,
       eventType: 'MentionCreated',
