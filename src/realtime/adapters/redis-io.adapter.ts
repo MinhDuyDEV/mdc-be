@@ -20,14 +20,11 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   async connectToRedis(): Promise<void> {
-    // Create separate pub/sub clients (required by redis-adapter)
-    const pubClient = this.redisClient.duplicate();
-    const subClient = this.redisClient.duplicate();
+    // Create separate pub/sub clients with lazyConnect (required by redis-adapter)
+    const pubClient = this.redisClient.duplicate({ lazyConnect: true });
+    const subClient = this.redisClient.duplicate({ lazyConnect: true });
 
-    await Promise.all([
-      pubClient.connect ? pubClient.connect() : Promise.resolve(),
-      subClient.connect ? subClient.connect() : Promise.resolve(),
-    ]);
+    await Promise.all([pubClient.connect(), subClient.connect()]);
 
     this.adapterConstructor = createAdapter(pubClient, subClient);
   }

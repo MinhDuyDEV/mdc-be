@@ -4,6 +4,7 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
+import type { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
@@ -56,18 +57,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly messagingPolicy: MessagingPolicyService) {}
+  constructor(
+    private readonly messagingPolicy: MessagingPolicyService,
+    private readonly jwtService: JwtService,
+  ) {}
 
-  handleConnection(client: Socket) {
+  async handleConnection(client: Socket) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const token = client.handshake.auth?.token ?? client.handshake.query?.token;
+    const rawToken =
+      client.handshake.auth?.token ?? client.handshake.query?.token;
+    const token = typeof rawToken === 'string' ? rawToken : undefined;
 
     if (!token) {
       client.disconnect(true);
       return;
     }
 
-    // User will be attached by WsJwtGuard on first message
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: string;
+        email: string;
+      }>(token);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      client.data.user = { id: payload.sub, email: payload.email };
+    } catch {
+      client.disconnect(true);
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -82,7 +97,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: AuthenticatedSocket,
     @WsCurrentUser() user: AuthenticatedUser,
   ) {
-    // Verify user is an active participant
     const isParticipant = await this.messagingPolicy.isActiveParticipant(
       user.id,
       dto.conversationId,
@@ -92,7 +106,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new WsException('Not authorized to join this conversation');
     }
 
-    // Join conversation room
     client.join(`conversation:${dto.conversationId}`);
 
     return { ok: true, conversationId: dto.conversationId };
@@ -105,7 +118,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @ConnectedSocket() client: AuthenticatedSocket,
     @WsCurrentUser() user: AuthenticatedUser,
   ) {
-    // Verify participation
     const isParticipant = await this.messagingPolicy.isActiveParticipant(
       user.id,
       dto.conversationId,
@@ -115,7 +127,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new WsException('Not authorized');
     }
 
-    // Broadcast to conversation room (excluding sender)
     client.to(`conversation:${dto.conversationId}`).emit('typing:started', {
       conversationId: dto.conversationId,
       userId: user.id,
@@ -164,7 +175,6 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new WsException('Not authorized');
     }
 
-    // Broadcast read receipt to conversation room (excluding sender)
     client.to(`conversation:${dto.conversationId}`).emit('message:read', {
       messageId: dto.messageId,
       conversationId: dto.conversationId,

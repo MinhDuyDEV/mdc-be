@@ -1,4 +1,5 @@
 import { UseFilters } from '@nestjs/common';
+import type { JwtService } from '@nestjs/jwt';
 import {
   type OnGatewayConnection,
   type OnGatewayDisconnect,
@@ -32,11 +33,34 @@ export class RealtimeGateway
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly realtimeService: RealtimeService) {}
+  constructor(
+    private readonly realtimeService: RealtimeService,
+    private readonly jwtService: JwtService,
+  ) {}
 
   afterInit(server: Server) {
-    void server;
-    // Gateway initialized
+    // eslint-disable-next-line @typescript-eslint/no-misused-promises
+    server.use(async (socket, next) => {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      const rawToken =
+        socket.handshake.auth?.token ?? socket.handshake.query?.token;
+      const token = typeof rawToken === 'string' ? rawToken : undefined;
+      if (!token) {
+        next(new Error('Missing authentication token'));
+        return;
+      }
+      try {
+        const payload = await this.jwtService.verifyAsync<{
+          sub: string;
+          email: string;
+        }>(token);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        socket.data.user = { id: payload.sub, email: payload.email };
+        next();
+      } catch {
+        next(new Error('Invalid or expired token'));
+      }
+    });
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -55,7 +79,11 @@ export class RealtimeGateway
 
   async handleDisconnect(client: AuthenticatedSocket) {
     const userId = client.data.user?.id;
-    if (userId) {
+    if (!userId) return;
+
+    // Only clear presence when no remaining sockets for this user
+    const sockets = await this.server.in(`user:${userId}`).fetchSockets();
+    if (sockets.length === 0) {
       await this.realtimeService.setUserOffline(userId);
     }
   }
