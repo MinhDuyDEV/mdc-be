@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+import { forwardRef, Module } from "@nestjs/common";
 import { InfraModule } from "../infra";
 import { RealtimeModule } from "../realtime/realtime.module";
 import { DeadLetterService } from "./dead-letter.service";
@@ -15,7 +15,7 @@ import { ProfileCreationProcessor } from "./processors/profile-creation.processo
 import { ProfileSearchIndexProcessor } from "./processors/profile-search-index.processor";
 
 @Module({
-	imports: [InfraModule, RealtimeModule],
+	imports: [InfraModule, forwardRef(() => RealtimeModule)],
 	providers: [
 		DeadLetterService,
 		IdempotencyService,
