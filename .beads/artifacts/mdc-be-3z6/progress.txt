@@ -1,0 +1,12 @@
+# Progress Log
+
+Bead: mdc-be-3z6
+Started: 2026-05-21
+
+## Codebase Patterns
+
+<!-- Consolidate reusable patterns here -->
+
+---
+
+<!-- Task logs below - APPEND ONLY -->
