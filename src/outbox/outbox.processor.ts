@@ -1,17 +1,19 @@
 import { Injectable } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import type { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
-import { AppConfig } from '../infra/config';
-import { PrismaService } from '../infra/prisma';
-import { DeadLetterService } from './dead-letter.service';
-import { ApplicationEmailProcessor } from './processors/application-email.processor';
-import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
-import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
-import { MessagingProcessor } from './processors/messaging.processor';
-import { NotificationProcessor } from './processors/notification.processor';
-import { PostInteractionProcessor } from './processors/post-interaction.processor';
+import type { AppConfig } from '../infra/config';
+import type { PrismaService } from '../infra/prisma';
+import type { DeadLetterService } from './dead-letter.service';
+import type { ApplicationEmailProcessor } from './processors/application-email.processor';
+import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import type { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import type { MessagingProcessor } from './processors/messaging.processor';
+import type { NotificationProcessor } from './processors/notification.processor';
+import type { PostInteractionProcessor } from './processors/post-interaction.processor';
+import type { PostSearchIndexProcessor } from './processors/post-search-index.processor';
+import type { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -38,6 +40,8 @@ export class OutboxProcessor {
     private readonly notification: NotificationProcessor,
     private readonly messagingProcessor: MessagingProcessor,
     private readonly postInteraction: PostInteractionProcessor,
+    private readonly postSearchIndex: PostSearchIndexProcessor,
+    private readonly profileSearchIndex: ProfileSearchIndexProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -147,6 +151,11 @@ export class OutboxProcessor {
 
   private async dispatch(event: ClaimedEvent): Promise<void> {
     switch (event.eventType) {
+      case 'ProfileUpdated':
+        await this.profileSearchIndex.processProfileUpdated(
+          event.payload as { profileId: string; userId: string },
+        );
+        return;
       case 'CompanyCreated':
         await this.companySearchIndex.processCompanyCreated(
           event.payload as { companyId: string },
@@ -308,6 +317,19 @@ export class OutboxProcessor {
             authorId: string;
             visibility: string;
           },
+        );
+        await this.postSearchIndex.processPostCreated(
+          event.payload as { postId: string },
+        );
+        return;
+      case 'PostUpdated':
+        await this.postSearchIndex.processPostUpdated(
+          event.payload as { postId: string },
+        );
+        return;
+      case 'PostDeleted':
+        await this.postSearchIndex.processPostDeleted(
+          event.payload as { postId: string },
         );
         return;
       case 'CommentAdded':

@@ -1,6 +1,7 @@
 import { forwardRef, Module } from '@nestjs/common';
 import { InfraModule } from '../infra';
 import { RealtimeModule } from '../realtime/realtime.module';
+import { SearchModule } from '../search';
 import { DeadLetterService } from './dead-letter.service';
 import { IdempotencyService } from './idempotency.service';
 import { OutboxProcessor } from './outbox.processor';
@@ -11,16 +12,18 @@ import { JobSearchIndexProcessor } from './processors/job-search-index.processor
 import { MessagingProcessor } from './processors/messaging.processor';
 import { NotificationProcessor } from './processors/notification.processor';
 import { PostInteractionProcessor } from './processors/post-interaction.processor';
+import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
 
 @Module({
-  imports: [InfraModule, forwardRef(() => RealtimeModule)],
+  imports: [InfraModule, forwardRef(() => RealtimeModule), SearchModule],
   providers: [
     DeadLetterService,
     IdempotencyService,
     NotificationProcessor,
     PostInteractionProcessor,
+    PostSearchIndexProcessor,
     OutboxProcessor,
     OutboxService,
     ProfileCreationProcessor,
