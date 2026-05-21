@@ -4,22 +4,22 @@ import {
   UsePipes,
   ValidationPipe,
 } from '@nestjs/common';
-import type { JwtService } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
 import {
   ConnectedSocket,
   MessageBody,
-  type OnGatewayConnection,
-  type OnGatewayDisconnect,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { MessagingPolicyService } from '../messaging/messaging-policy.service';
+import { MessagingPolicyService } from '../messaging/messaging-policy.service';
 import type { ConversationJoinDto } from './dto/conversation-join.dto';
-import type { MessageEventDto } from './dto/message-event.dto';
+import { MessageEventDto } from './dto/message-event.dto';
 import type { MessageReadDto } from './dto/message-read.dto';
 import type { TypingEventDto } from './dto/typing-event.dto';
 import { WsExceptionFilter } from './filters/ws-exception.filter';

@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 import { ChatGateway } from '../../realtime/chat.gateway';
-import type { MessageEventDto } from '../../realtime/dto/message-event.dto';
-import type { NotificationEventDto } from '../../realtime/dto/notification-event.dto';
+import { MessageEventDto } from '../../realtime/dto/message-event.dto';
+import { NotificationEventDto } from '../../realtime/dto/notification-event.dto';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
-import type { IdempotencyService } from '../idempotency.service';
+import { IdempotencyService } from '../idempotency.service';
 
 interface MessageSentPayload {
   messageId: string;

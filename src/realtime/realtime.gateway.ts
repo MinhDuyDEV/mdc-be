@@ -1,16 +1,17 @@
 import { UseFilters } from '@nestjs/common';
-import type { JwtService } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
+import { Interval } from '@nestjs/schedule';
 import {
-  type OnGatewayConnection,
-  type OnGatewayDisconnect,
-  type OnGatewayInit,
+  OnGatewayConnection,
+  OnGatewayDisconnect,
+  OnGatewayInit,
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import type { Server, Socket } from 'socket.io';
-import type { NotificationEventDto } from './dto/notification-event.dto';
+import { Server, Socket } from 'socket.io';
+import { NotificationEventDto } from './dto/notification-event.dto';
 import { WsExceptionFilter } from './filters/ws-exception.filter';
-import type { RealtimeService } from './realtime.service';
+import { RealtimeService } from './realtime.service';
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -85,6 +86,24 @@ export class RealtimeGateway
     const sockets = await this.server.in(`user:${userId}`).fetchSockets();
     if (sockets.length === 0) {
       await this.realtimeService.setUserOffline(userId);
+    }
+  }
+
+  /**
+   * Refresh Redis presence TTL for all connected users every 30 seconds.
+   * Without this, keys expire after 60s and users appear offline even with
+   * active WebSocket connections.
+   */
+  @Interval(30_000)
+  async refreshPresence() {
+    const sockets = await this.server.fetchSockets();
+    const seen = new Set<string>();
+    for (const socket of sockets) {
+      const userId = (socket as unknown as AuthenticatedSocket).data?.user?.id;
+      if (userId && !seen.has(userId)) {
+        seen.add(userId);
+        await this.realtimeService.refreshPresence(userId);
+      }
     }
   }
 
