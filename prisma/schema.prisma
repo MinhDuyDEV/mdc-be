@@ -266,6 +266,8 @@ model User {
   notificationPreference   NotificationPreference?
   realtimeDeliveryReceipts RealtimeDeliveryReceipt[]
   devices                  UserDevice[]
+  recommendationFeedback   RecommendationFeedback[]  @relation("RecommendationFeedback")
+  recommendationDismissals RecommendationDismissal[] @relation("RecommendationDismissal")
 
   @@map("users")
 }
@@ -403,6 +405,37 @@ model NotificationPreference {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("notification_preferences")
+}
+
+model RecommendationFeedback {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  entityType String   @db.VarChar(50) // 'person', 'job', 'company'
+  entityId   String   @db.Uuid
+  feedback   String   @db.VarChar(20) // 'helpful', 'not_helpful', 'irrelevant'
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation("RecommendationFeedback", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityType, entityId], name: "unique_recommendation_feedback")
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("recommendation_feedback")
+}
+
+model RecommendationDismissal {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String   @db.Uuid
+  entityType String   @db.VarChar(50) // 'person', 'job', 'company'
+  entityId   String   @db.Uuid
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation("RecommendationDismissal", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityType, entityId], name: "unique_recommendation_dismissal")
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("recommendation_dismissals")
 }
 
 model RealtimeDeliveryReceipt {
