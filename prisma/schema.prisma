@@ -1257,6 +1257,8 @@ model Message {
   @@map("messages")
 }
 
+// DEFERRED: MessageAttachment API is planned for Phase 7.1 (media attachments in messages).
+// Schema model exists for migration forward-compatibility.
 model MessageAttachment {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   messageId    String   @map("message_id") @db.Uuid
@@ -1272,6 +1274,8 @@ model MessageAttachment {
   @@map("message_attachments")
 }
 
+// DEFERRED: MessageReadState API is planned for Phase 7.1 or Phase 8 (read receipts).
+// Schema model exists for migration forward-compatibility.
 model MessageReadState {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   messageId String   @map("message_id") @db.Uuid

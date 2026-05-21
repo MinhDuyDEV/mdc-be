@@ -18,6 +18,7 @@ describe('MessagingService', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       conversationParticipant: {
         createMany: jest.fn(),
@@ -37,6 +38,7 @@ describe('MessagingService', () => {
     messagingPolicy = {
       isActiveParticipant: jest.fn().mockResolvedValue(true),
       canCreateConversation: jest.fn().mockResolvedValue(true),
+      canSendMessage: jest.fn().mockResolvedValue(true),
     };
     recruitingPolicy = {
       canMessageCandidate: jest
@@ -138,6 +140,14 @@ describe('MessagingService', () => {
       ).rejects.toThrow(new ForbiddenException('NOT_A_PARTICIPANT'));
     });
 
+    it('rejects blocked users with BLOCKED_USER', async () => {
+      messagingPolicy.canSendMessage.mockResolvedValue(false);
+      await expect(
+        service.sendMessage('user-1', 'conv-1', { content: 'Hello' }),
+      ).rejects.toThrow(new ForbiddenException('BLOCKED_USER'));
+      expect(prisma.message.create).not.toHaveBeenCalled();
+    });
+
     it('creates message and emits MessageSent event', async () => {
       prisma.conversation.findUnique.mockResolvedValue({
         id: 'conv-1',
@@ -148,7 +158,7 @@ describe('MessagingService', () => {
         content: 'Hello',
         createdAt: new Date(),
       });
-      prisma.conversation.update.mockResolvedValue({});
+      prisma.conversation.updateMany.mockResolvedValue({ count: 1 });
 
       await service.sendMessage('user-1', 'conv-1', { content: 'Hello' });
 
@@ -157,6 +167,38 @@ describe('MessagingService', () => {
         prisma,
         expect.objectContaining({ eventType: 'MessageSent' }),
       );
+    });
+
+    it('does not overwrite lastMessageAt with older messages (monotonic guard)', async () => {
+      const olderDate = new Date('2026-01-01T00:00:00.000Z');
+
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'conv-1',
+        participants: [{ userId: 'user-1' }, { userId: 'user-2' }],
+      });
+
+      prisma.message.create.mockResolvedValue({
+        id: 'msg-older',
+        content: 'Older message',
+        createdAt: olderDate,
+      });
+
+      await service.sendMessage('user-1', 'conv-1', { content: 'Hello' });
+
+      // Verify updateMany was called with the monotonic OR guard
+      expect(prisma.conversation.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'conv-1',
+          OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: olderDate } }],
+        },
+        data: {
+          lastMessageAt: olderDate,
+          lastMessagePreview: 'Hello',
+        },
+      });
+
+      // update should NOT be called for conversation denorm
+      expect(prisma.conversation.update).not.toHaveBeenCalled();
     });
   });
 

@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
+import { ConnectionsPolicyService } from '../connections/connections-policy.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 
 @Injectable()
 export class MessagingPolicyService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly connectionsPolicy: ConnectionsPolicyService,
+  ) {}
 
   async isActiveParticipant(
     userId: string,
@@ -24,15 +28,34 @@ export class MessagingPolicyService {
     userId: string,
     targetUserId: string,
   ): Promise<boolean> {
-    const block = await this.prisma.block.findFirst({
-      where: {
-        OR: [
-          { blockerId: userId, blockedId: targetUserId },
-          { blockerId: targetUserId, blockedId: userId },
-        ],
-      },
-      select: { id: true },
+    const blocked = await this.connectionsPolicy.isBlocked(
+      userId,
+      targetUserId,
+    );
+    return !blocked;
+  }
+
+  async canSendMessage(
+    userId: string,
+    conversationId: string,
+  ): Promise<boolean> {
+    const isParticipant = await this.isActiveParticipant(
+      userId,
+      conversationId,
+    );
+    if (!isParticipant) return false;
+
+    const participants = await this.prisma.conversationParticipant.findMany({
+      where: { conversationId, leftAt: null },
+      select: { userId: true },
     });
-    return !block;
+
+    for (const p of participants) {
+      if (p.userId === userId) continue;
+      const blocked = await this.connectionsPolicy.isBlocked(userId, p.userId);
+      if (blocked) return false;
+    }
+
+    return true;
   }
 }

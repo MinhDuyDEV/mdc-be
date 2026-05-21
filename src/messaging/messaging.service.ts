@@ -305,6 +305,14 @@ export class MessagingService {
       throw new ForbiddenException('NOT_A_PARTICIPANT');
     }
 
+    const canSend = await this.messagingPolicy.canSendMessage(
+      userId,
+      conversationId,
+    );
+    if (!canSend) {
+      throw new ForbiddenException('BLOCKED_USER');
+    }
+
     // Get conversation to find other participants
     const conversation = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
@@ -334,15 +342,24 @@ export class MessagingService {
         },
       });
 
-      // Update conversation denorm fields
-      await tx.conversation.update({
-        where: { id: conversationId },
+      const preview =
+        dto.content.length > 500
+          ? dto.content.substring(0, 497) + '...'
+          : dto.content;
+
+      // Monotonic guard: prevents concurrent sendMessage calls from
+      // overwriting lastMessageAt with an older value (last-writer-wins).
+      await tx.conversation.updateMany({
+        where: {
+          id: conversationId,
+          OR: [
+            { lastMessageAt: null },
+            { lastMessageAt: { lt: message.createdAt } },
+          ],
+        },
         data: {
           lastMessageAt: message.createdAt,
-          lastMessagePreview:
-            dto.content.length > 500
-              ? dto.content.substring(0, 497) + '...'
-              : dto.content,
+          lastMessagePreview: preview,
         },
       });
 
