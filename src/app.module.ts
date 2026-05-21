@@ -23,6 +23,7 @@ import { OutboxModule } from './outbox';
 import { PostsModule } from './posts/posts.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { RealtimeModule } from './realtime/realtime.module';
+import { RecommendationsModule } from './recommendations';
 import { RecruitingModule } from './recruiting/recruiting.module';
 import { SearchModule } from './search';
 import { UsersModule } from './users/users.module';
@@ -61,6 +62,7 @@ import { UsersModule } from './users/users.module';
     OutboxModule,
     PostsModule,
     ProfilesModule,
+    RecommendationsModule,
     FeedModule,
     ConnectionsModule,
     MessagingModule,
