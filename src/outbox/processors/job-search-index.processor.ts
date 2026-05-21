@@ -1,89 +1,82 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+import type { PrismaService } from '../../infra/prisma/prisma.service';
+import type { SearchIndexService } from '../../search/search-index.service';
 
 @Injectable()
 export class JobSearchIndexProcessor {
   private readonly logger = new Logger(JobSearchIndexProcessor.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly searchIndex: SearchIndexService,
+  ) {}
 
   async processJobCreated(payload: { jobId: string }): Promise<void> {
-    const job = await this.prisma.job.findUnique({
-      where: { id: payload.jobId },
-      select: { id: true, status: true, deletedAt: true },
-    });
-    if (!job) {
-      this.logger.warn(
-        `Job ${payload.jobId} not found for JobCreated indexing — skipping`,
-      );
-      return;
-    }
-    this.logger.debug(
-      `JobCreated indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
-    );
+    await this.indexJob(payload.jobId, 'JobCreated');
   }
 
   async processJobUpdated(payload: { jobId: string }): Promise<void> {
-    const job = await this.prisma.job.findUnique({
-      where: { id: payload.jobId },
-      select: { id: true, status: true, deletedAt: true },
-    });
-    if (!job) {
-      this.logger.warn(
-        `Job ${payload.jobId} not found for JobUpdated indexing — skipping`,
-      );
-      return;
-    }
-    this.logger.debug(
-      `JobUpdated indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
-    );
+    await this.indexJob(payload.jobId, 'JobUpdated');
   }
 
   async processJobPublished(payload: { jobId: string }): Promise<void> {
-    const job = await this.prisma.job.findUnique({
-      where: { id: payload.jobId },
-      select: { id: true, status: true, deletedAt: true },
-    });
-    if (!job) {
-      this.logger.warn(
-        `Job ${payload.jobId} not found for JobPublished indexing — skipping`,
-      );
-      return;
-    }
-    this.logger.debug(
-      `JobPublished indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
-    );
+    await this.indexJob(payload.jobId, 'JobPublished');
   }
 
   async processJobClosed(payload: { jobId: string }): Promise<void> {
-    const job = await this.prisma.job.findUnique({
-      where: { id: payload.jobId },
-      select: { id: true, status: true, deletedAt: true },
-    });
-    if (!job) {
-      this.logger.warn(
-        `Job ${payload.jobId} not found for JobClosed indexing — skipping`,
-      );
-      return;
-    }
-    this.logger.debug(
-      `JobClosed indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
-    );
+    await this.indexJob(payload.jobId, 'JobClosed');
   }
 
   async processJobDeleted(payload: { jobId: string }): Promise<void> {
-    const job = await this.prisma.job.findUnique({
-      where: { id: payload.jobId },
-      select: { id: true, status: true, deletedAt: true },
+    await this.searchIndex.deleteByQuery('jobs', {
+      term: { id: payload.jobId },
     });
-    if (!job) {
+    this.logger.log(`Removed job ${payload.jobId} from ES index`);
+  }
+
+  private async indexJob(jobId: string, eventType: string): Promise<void> {
+    const job = await this.prisma.job.findUnique({
+      where: { id: jobId },
+      include: {
+        company: {
+          select: { id: true, name: true, slug: true },
+        },
+        skills: true,
+      },
+    });
+
+    if (!job || job.deletedAt) {
       this.logger.warn(
-        `Job ${payload.jobId} not found for JobDeleted indexing — skipping`,
+        `Job ${jobId} not found or deleted for ${eventType} — skipping ES index`,
       );
+      // Remove from ES if soft-deleted
+      if (job?.deletedAt) {
+        await this.searchIndex.deleteByQuery('jobs', { term: { id: jobId } });
+      }
       return;
     }
-    this.logger.debug(
-      `JobDeleted indexed (Postgres FT trigger handles search_vector); ES wiring deferred to Phase 9 — jobId=${job.id}`,
-    );
+
+    await this.searchIndex.indexDocument('jobs', job.id, {
+      id: job.id,
+      title: job.title,
+      description: job.description,
+      companyId: job.companyId,
+      companyName: job.company?.name ?? '',
+      companySlug: job.company?.slug ?? '',
+      location: job.location,
+      salaryMin: job.salaryMin,
+      salaryMax: job.salaryMax,
+      salaryCurrency: job.salaryCurrency,
+      employmentType: job.employmentType,
+      workplaceType: job.workplaceType,
+      skills: job.skills.map((s) => s.skillId),
+      status: job.status,
+      publishedAt: job.publishedAt?.toISOString() ?? null,
+      closedAt: job.closedAt?.toISOString() ?? null,
+      createdAt: job.createdAt.toISOString(),
+      updatedAt: job.updatedAt.toISOString(),
+    });
+
+    this.logger.log(`Indexed job ${jobId} in ES (${eventType})`);
   }
 }

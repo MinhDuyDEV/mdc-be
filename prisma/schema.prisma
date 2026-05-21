@@ -1342,3 +1342,40 @@ model MessageReadState {
   @@index([userId])
   @@map("message_read_states")
 }
+
+// Phase 9 — Search: logs every user-facing search query for analytics and trending
+model SearchQueryLog {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  queryHash   String   @map("query_hash") // SHA-256 of sanitized search terms
+  entityTypes String[] @map("entity_types") // e.g. ["profiles","jobs"]
+  resultCount Int      @map("result_count")
+  latencyMs   Int      @map("latency_ms")
+  engine      String   // elasticsearch | postgres
+  userId      String?  @map("user_id") @db.Uuid
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([queryHash])
+  @@index([createdAt])
+  @@index([engine])
+  @@map("search_query_logs")
+}
+
+// Phase 9 — Search: tracks zero-downtime reindex operations (alias swap)
+model SearchReindexRun {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType    String   @map("entity_type") // profiles | companies | jobs | posts
+  oldIndex      String   @map("old_index")
+  newIndex      String   @map("new_index")
+  status        String   @default("in_progress") // in_progress | completed | failed
+  documentCount Int      @default(0) @map("document_count")
+  durationMs    Int      @default(0) @map("duration_ms")
+  error         String?
+  triggeredBy   String   @map("triggered_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  completedAt   DateTime? @map("completed_at") @db.Timestamptz(3)
+
+  @@index([entityType])
+  @@index([status])
+  @@index([createdAt])
+  @@map("search_reindex_runs")
+}
