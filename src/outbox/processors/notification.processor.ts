@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { NotificationEventDto } from '../../realtime/dto/notification-event.dto';
+import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { IdempotencyService } from '../idempotency.service';
 
 interface ApplicationSubmittedPayload {
@@ -101,6 +103,7 @@ export class NotificationProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async processApplicationSubmitted(
@@ -363,7 +366,7 @@ export class NotificationProcessor {
       return false;
     }
 
-    await this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: {
         userId: opts.recipientUserId,
         type: opts.type as Parameters<
@@ -377,6 +380,18 @@ export class NotificationProcessor {
         actionUrl: opts.actionUrl,
       },
     });
+
+    // Push to connected clients via WebSocket
+    const event: NotificationEventDto = {
+      id: notification.id,
+      type: opts.type,
+      title: opts.title,
+      body: opts.body,
+      actionUrl: opts.actionUrl,
+      createdAt: notification.createdAt,
+    };
+    this.realtimeGateway.pushNotification(opts.recipientUserId, event);
+
     return true;
   }
 }

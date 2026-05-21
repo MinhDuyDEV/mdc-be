@@ -14,12 +14,28 @@ describe('MessagingProcessor', () => {
       },
     };
     idempotency = { claim: jest.fn().mockResolvedValue({}) };
-    processor = new MessagingProcessor(prisma, idempotency);
+    const chatGateway = { pushMessage: jest.fn() } as any;
+    const realtimeGateway = { pushNotification: jest.fn() } as any;
+    processor = new MessagingProcessor(
+      prisma,
+      idempotency,
+      chatGateway,
+      realtimeGateway,
+    );
   });
 
   it('creates NewMessage notifications for all recipients except sender', async () => {
-    prisma.message.findUnique.mockResolvedValue({ id: 'msg-1' });
+    prisma.message.findUnique.mockResolvedValue({
+      id: 'msg-1',
+      content: 'Hello',
+      senderId: 'user-1',
+      createdAt: new Date(),
+    });
     prisma.notification.findFirst.mockResolvedValue(null);
+    prisma.notification.create.mockResolvedValue({
+      id: 'notif-1',
+      createdAt: new Date(),
+    });
 
     await processor.processMessageSent({
       messageId: 'msg-1',
@@ -53,10 +69,19 @@ describe('MessagingProcessor', () => {
   });
 
   it('skips duplicate notifications', async () => {
-    prisma.message.findUnique.mockResolvedValue({ id: 'msg-1' });
+    prisma.message.findUnique.mockResolvedValue({
+      id: 'msg-1',
+      content: 'Hello',
+      senderId: 'user-1',
+      createdAt: new Date(),
+    });
     prisma.notification.findFirst
       .mockResolvedValueOnce({ id: 'existing-notif' }) // user-2 has existing
       .mockResolvedValue(null); // user-3 has none
+    prisma.notification.create.mockResolvedValue({
+      id: 'notif-new',
+      createdAt: new Date(),
+    });
 
     await processor.processMessageSent({
       messageId: 'msg-1',

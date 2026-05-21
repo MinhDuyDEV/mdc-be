@@ -1,5 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { ChatGateway } from '../../realtime/chat.gateway';
+import { MessageEventDto } from '../../realtime/dto/message-event.dto';
+import { NotificationEventDto } from '../../realtime/dto/notification-event.dto';
+import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { IdempotencyService } from '../idempotency.service';
 
 interface MessageSentPayload {
@@ -16,6 +20,8 @@ export class MessagingProcessor {
   constructor(
     private readonly prisma: PrismaService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly chatGateway: ChatGateway,
+    private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
   async processMessageSent(payload: MessageSentPayload): Promise<void> {
@@ -24,7 +30,7 @@ export class MessagingProcessor {
     // Verify message exists
     const message = await this.prisma.message.findUnique({
       where: { id: messageId },
-      select: { id: true },
+      select: { id: true, content: true, senderId: true, createdAt: true },
     });
 
     if (!message) {
@@ -38,10 +44,7 @@ export class MessagingProcessor {
     for (const recipientId of recipientIds) {
       if (recipientId === senderId) continue;
 
-      const key = `${recipientId}:MessageSent:${messageId}`;
-      await this.idempotencyService.claim('Notification', key);
-
-      // Check for duplicate (payloadJson will contain the messageId)
+      // Check for duplicate first (payloadJson will contain the messageId)
       const existing = await this.prisma.notification.findFirst({
         where: {
           userId: recipientId,
@@ -58,8 +61,11 @@ export class MessagingProcessor {
         continue;
       }
 
+      const key = `${recipientId}:MessageSent:${messageId}`;
+      await this.idempotencyService.claim('Notification', key);
+
       // Create notification
-      await this.prisma.notification.create({
+      const notification = await this.prisma.notification.create({
         data: {
           userId: recipientId,
           type: 'NewMessage',
@@ -74,9 +80,30 @@ export class MessagingProcessor {
         },
       });
 
+      // Push notification to recipient's user room
+      const notificationEvent: NotificationEventDto = {
+        id: notification.id,
+        type: 'NewMessage',
+        title: 'New message',
+        body: 'You have a new message',
+        actionUrl: `/conversations/${conversationId}`,
+        createdAt: notification.createdAt,
+      };
+      this.realtimeGateway.pushNotification(recipientId, notificationEvent);
+
       this.logger.debug(
         `Created NewMessage notification for user ${recipientId}`,
       );
     }
+
+    // Push message to conversation room once (after all notifications)
+    const messageEvent: MessageEventDto = {
+      id: messageId,
+      conversationId,
+      senderId,
+      content: message.content,
+      createdAt: message.createdAt,
+    };
+    this.chatGateway.pushMessage(conversationId, messageEvent);
   }
 }

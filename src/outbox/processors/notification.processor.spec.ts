@@ -28,7 +28,10 @@ function createProcessor() {
       findFirst: jest.fn(),
     },
     notification: {
-      create: jest.fn().mockResolvedValue({ id: 'notif-1' }),
+      create: jest.fn().mockResolvedValue({
+        id: 'notif-1',
+        createdAt: new Date(),
+      }),
       findFirst: jest.fn().mockResolvedValue(null),
     },
   };
@@ -41,11 +44,15 @@ function createProcessor() {
     error: jest.fn(),
     info: jest.fn(),
   };
+  const realtimeGateway = {
+    pushNotification: jest.fn(),
+  };
   const processor = new NotificationProcessor(
     prisma as never,
     idempotency as never,
+    realtimeGateway as never,
   );
-  return { processor, prisma, idempotency, logger };
+  return { processor, prisma, idempotency, logger, realtimeGateway };
 }
 
 describe('NotificationProcessor', () => {
