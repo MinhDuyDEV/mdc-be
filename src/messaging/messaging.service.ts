@@ -5,14 +5,14 @@ import {
 } from '@nestjs/common';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import type { PrismaTransaction } from '../infra/prisma';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
-import { RecruitingPolicyService } from '../recruiting/recruiting-policy.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../outbox/idempotency.service';
+import type { OutboxService } from '../outbox/outbox.service';
+import type { RecruitingPolicyService } from '../recruiting/recruiting-policy.service';
 import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
 import type { SendMessageDto } from './dto/send-message.dto';
-import { MessagingPolicyService } from './messaging-policy.service';
+import type { MessagingPolicyService } from './messaging-policy.service';
 
 interface CursorPayload {
   createdAt: string;
@@ -303,6 +303,14 @@ export class MessagingService {
     );
     if (!isActive) {
       throw new ForbiddenException('NOT_A_PARTICIPANT');
+    }
+
+    const canSend = await this.messagingPolicy.canSendMessage(
+      userId,
+      conversationId,
+    );
+    if (!canSend) {
+      throw new ForbiddenException('BLOCKED_USER');
     }
 
     // Get conversation to find other participants

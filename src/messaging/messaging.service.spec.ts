@@ -37,6 +37,7 @@ describe('MessagingService', () => {
     messagingPolicy = {
       isActiveParticipant: jest.fn().mockResolvedValue(true),
       canCreateConversation: jest.fn().mockResolvedValue(true),
+      canSendMessage: jest.fn().mockResolvedValue(true),
     };
     recruitingPolicy = {
       canMessageCandidate: jest
@@ -136,6 +137,14 @@ describe('MessagingService', () => {
       await expect(
         service.sendMessage('user-1', 'conv-1', { content: 'Hello' }),
       ).rejects.toThrow(new ForbiddenException('NOT_A_PARTICIPANT'));
+    });
+
+    it('rejects blocked users with BLOCKED_USER', async () => {
+      messagingPolicy.canSendMessage.mockResolvedValue(false);
+      await expect(
+        service.sendMessage('user-1', 'conv-1', { content: 'Hello' }),
+      ).rejects.toThrow(new ForbiddenException('BLOCKED_USER'));
+      expect(prisma.message.create).not.toHaveBeenCalled();
     });
 
     it('creates message and emits MessageSent event', async () => {
