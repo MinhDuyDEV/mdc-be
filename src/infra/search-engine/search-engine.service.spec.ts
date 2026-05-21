@@ -2,6 +2,16 @@ import { SearchEngineService } from './search-engine.service';
 
 interface MockClient {
   cluster: { health: jest.Mock };
+  indices: {
+    create: jest.Mock;
+    putMapping: jest.Mock;
+    delete: jest.Mock;
+    updateAliases: jest.Mock;
+  };
+  helpers: {
+    bulk: jest.Mock;
+  };
+  count: jest.Mock;
   index: jest.Mock;
   search: jest.Mock;
   deleteByQuery: jest.Mock;
@@ -15,6 +25,16 @@ describe('SearchEngineService', () => {
   beforeEach(() => {
     mockClient = {
       cluster: { health: jest.fn() },
+      indices: {
+        create: jest.fn().mockResolvedValue({}),
+        putMapping: jest.fn().mockResolvedValue({}),
+        delete: jest.fn().mockResolvedValue({}),
+        updateAliases: jest.fn().mockResolvedValue({}),
+      },
+      helpers: {
+        bulk: jest.fn().mockResolvedValue({ total: 42 }),
+      },
+      count: jest.fn().mockResolvedValue({ count: 42 }),
       index: jest.fn(),
       search: jest.fn(),
       deleteByQuery: jest.fn(),
@@ -95,6 +115,101 @@ describe('SearchEngineService', () => {
       expect(mockClient.deleteByQuery).toHaveBeenCalledWith({
         index: 'posts',
         body: { query: { match: { title: 'Hello' } } },
+      });
+    });
+  });
+
+  describe('createIndex', () => {
+    it('creates index with mappings and settings', async () => {
+      await service.createIndex(
+        'test-index',
+        { properties: { title: { type: 'text' } } },
+        { number_of_shards: 1 },
+      );
+      expect(mockClient.indices.create).toHaveBeenCalledWith({
+        index: 'test-index',
+        mappings: { properties: { title: { type: 'text' } } },
+        settings: { number_of_shards: 1 },
+      });
+    });
+
+    it('creates index without mappings or settings when omitted', async () => {
+      await service.createIndex('test-index');
+      expect(mockClient.indices.create).toHaveBeenCalledWith({
+        index: 'test-index',
+      });
+    });
+  });
+
+  describe('putMapping', () => {
+    it('updates index mappings', async () => {
+      await service.putMapping('test-index', {
+        properties: { title: { type: 'text' } },
+      });
+      expect(mockClient.indices.putMapping).toHaveBeenCalledWith({
+        index: 'test-index',
+        properties: { title: { type: 'text' } },
+      });
+    });
+  });
+
+  describe('deleteIndex', () => {
+    it('deletes an index', async () => {
+      await service.deleteIndex('test-index');
+      expect(mockClient.indices.delete).toHaveBeenCalledWith({
+        index: 'test-index',
+      });
+    });
+  });
+
+  describe('updateAliases', () => {
+    it('updates aliases atomically', async () => {
+      const actions = [
+        { add: { index: 'posts-v2', alias: 'posts' } },
+        { remove: { index: 'posts-v1', alias: 'posts' } },
+      ];
+      await service.updateAliases(actions);
+      expect(mockClient.indices.updateAliases).toHaveBeenCalledWith({
+        body: { actions },
+      });
+    });
+  });
+
+  describe('bulkIndex', () => {
+    it('bulk indexes documents and returns total count', async () => {
+      const datasource = [
+        { id: '1', body: { title: 'Doc 1' } },
+        { id: '2', body: { title: 'Doc 2' } },
+      ];
+      const total = await service.bulkIndex(datasource, {
+        index: 'test-index',
+      });
+      expect(total).toBe(42);
+      expect(mockClient.helpers.bulk).toHaveBeenCalledWith({
+        datasource,
+        onDocument: expect.any(Function),
+        retries: 3,
+      });
+    });
+  });
+
+  describe('getCount', () => {
+    it('returns document count without query', async () => {
+      const count = await service.getCount('test-index');
+      expect(count).toBe(42);
+      expect(mockClient.count).toHaveBeenCalledWith({
+        index: 'test-index',
+      });
+    });
+
+    it('returns document count with query', async () => {
+      const count = await service.getCount('test-index', {
+        match: { status: 'active' },
+      });
+      expect(count).toBe(42);
+      expect(mockClient.count).toHaveBeenCalledWith({
+        index: 'test-index',
+        body: { query: { match: { status: 'active' } } },
       });
     });
   });

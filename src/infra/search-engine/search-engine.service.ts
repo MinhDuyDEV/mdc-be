@@ -54,6 +54,81 @@ export class SearchEngineService implements OnApplicationShutdown {
     await this.client.deleteByQuery({ index, body: query });
   }
 
+  /**
+   * Create an Elasticsearch index with mappings and settings.
+   */
+  async createIndex(
+    index: string,
+    mappings?: Record<string, unknown>,
+    settings?: Record<string, unknown>,
+  ): Promise<void> {
+    await this.client.indices.create({
+      index,
+      ...(mappings ? { mappings } : {}),
+      ...(settings ? { settings } : {}),
+    });
+  }
+
+  /**
+   * Update mappings for an existing index.
+   */
+  async putMapping(
+    index: string,
+    mappings: Record<string, unknown>,
+  ): Promise<void> {
+    await this.client.indices.putMapping({
+      index,
+      ...mappings,
+    });
+  }
+
+  /**
+   * Delete an index.
+   */
+  async deleteIndex(index: string): Promise<void> {
+    await this.client.indices.delete({ index });
+  }
+
+  /**
+   * Atomically update aliases (add/remove).
+   */
+  async updateAliases(actions: Array<Record<string, unknown>>): Promise<void> {
+    await this.client.indices.updateAliases({
+      body: { actions },
+    });
+  }
+
+  /**
+   * Bulk index documents from an iterable data source.
+   */
+  async bulkIndex<T extends Record<string, unknown>>(
+    datasource: Array<{ id: string; body: T }>,
+    options: { index: string },
+  ): Promise<number> {
+    const result = await this.client.helpers.bulk({
+      datasource,
+      onDocument(doc: { id: string; body: T }) {
+        return [{ index: { _index: options.index, _id: doc.id } }, doc.body];
+      },
+      retries: 3,
+    });
+    return result.total ?? 0;
+  }
+
+  /**
+   * Get document count for an index.
+   */
+  async getCount(
+    index: string,
+    query?: Record<string, unknown>,
+  ): Promise<number> {
+    const result = await this.client.count({
+      index,
+      ...(query ? { body: { query } } : {}),
+    });
+    return result.count;
+  }
+
   async onApplicationShutdown(): Promise<void> {
     await this.client.close();
   }
