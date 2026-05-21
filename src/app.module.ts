@@ -17,6 +17,7 @@ import type { AppConfig } from './infra/config';
 import { REDIS_CLIENT } from './infra/redis/redis.constants';
 import { JobsModule } from './jobs/jobs.module';
 import { MediaModule } from './media/media.module';
+import { MessagingModule } from './messaging/messaging.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox';
 import { PostsModule } from './posts/posts.module';
@@ -61,6 +62,7 @@ import { UsersModule } from './users/users.module';
     ProfilesModule,
     FeedModule,
     ConnectionsModule,
+    MessagingModule,
     RecruitingModule,
     SearchModule,
     UsersModule,

@@ -7,6 +7,7 @@ import { OutboxService } from './outbox.service';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import { MessagingProcessor } from './processors/messaging.processor';
 import { NotificationProcessor } from './processors/notification.processor';
 import { PostInteractionProcessor } from './processors/post-interaction.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
@@ -25,6 +26,7 @@ import { ProfileSearchIndexProcessor } from './processors/profile-search-index.p
     ProfileSearchIndexProcessor,
     CompanySearchIndexProcessor,
     JobSearchIndexProcessor,
+    MessagingProcessor,
     ApplicationEmailProcessor,
   ],
   exports: [DeadLetterService, IdempotencyService, OutboxService],
