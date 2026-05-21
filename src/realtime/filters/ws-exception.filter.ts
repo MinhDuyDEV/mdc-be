@@ -10,10 +10,13 @@ export class WsExceptionFilter extends BaseWsExceptionFilter {
     // Convert HttpException to WsException (ValidationPipe throws HttpException)
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
-      const message =
-        typeof response === 'string'
-          ? response
-          : (response as { message?: string }).message || 'Validation failed';
+      let message: string = 'Validation failed';
+      if (typeof response === 'string') {
+        message = response;
+      } else if (response !== null && typeof response === 'object') {
+        const msg = (response as { message?: string | string[] }).message;
+        message = Array.isArray(msg) ? msg.join('; ') : (msg ?? message);
+      }
 
       client.emit('exception', {
         status: 'error',
