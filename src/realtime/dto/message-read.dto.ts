@@ -1,9 +1,9 @@
-import { IsUUID } from "class-validator";
+import { IsUUID } from 'class-validator';
 
 export class MessageReadDto {
-	@IsUUID()
-	messageId: string;
+  @IsUUID()
+  messageId: string;
 
-	@IsUUID()
-	conversationId: string;
+  @IsUUID()
+  conversationId: string;
 }

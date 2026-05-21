@@ -1,6 +1,6 @@
-import { IsUUID } from "class-validator";
+import { IsUUID } from 'class-validator';
 
 export class TypingEventDto {
-	@IsUUID()
-	conversationId: string;
+  @IsUUID()
+  conversationId: string;
 }

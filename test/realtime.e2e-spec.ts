@@ -9,14 +9,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { JwtModule, JwtService } from '@nestjs/jwt';
+import { JwtModule, type JwtService } from '@nestjs/jwt';
+import { Test, type TestingModule } from '@nestjs/testing';
 import {
-  WebSocketGateway,
-  WebSocketServer,
   type OnGatewayConnection,
   type OnGatewayDisconnect,
+  WebSocketGateway,
+  WebSocketServer,
 } from '@nestjs/websockets';
-import { Test, type TestingModule } from '@nestjs/testing';
 import type { Server, Socket } from 'socket.io';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -98,8 +98,7 @@ class TestRealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(private readonly jwtService: JwtService) {}
 
   async handleConnection(client: Socket) {
-    const token =
-      client.handshake.auth?.token ?? client.handshake.query?.token;
+    const token = client.handshake.auth?.token ?? client.handshake.query?.token;
 
     if (!token) {
       client.disconnect(true);
@@ -118,7 +117,8 @@ class TestRealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  async handleDisconnect(_client: Socket) {
+  handleDisconnect(client: Socket) {
+    void client;
     // no-op in test
   }
 }
@@ -138,10 +138,7 @@ describe('Realtime & Notifications (e2e)', () => {
           signOptions: { expiresIn: '1h' },
         }),
       ],
-      controllers: [
-        TestAuthController,
-        TestNotificationPreferenceController,
-      ],
+      controllers: [TestAuthController, TestNotificationPreferenceController],
       providers: [TestRealtimeGateway, AuthGuard],
     }).compile();
 
