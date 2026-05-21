@@ -96,7 +96,10 @@ export class SearchIndexService {
         'Created index aliases',
       );
     } catch (error) {
-      this.logger.error({ error, indexName }, 'Failed to create search index');
+      this.logger.error(
+        { error: String(error), indexName },
+        'Failed to create search index',
+      );
       throw error;
     }
   }
@@ -200,7 +203,10 @@ export class SearchIndexService {
           },
         })
         .catch(() => {});
-      this.logger.error({ error, runId, entityType }, 'Reindex failed');
+      this.logger.error(
+        { error: String(error), runId, entityType },
+        'Reindex failed',
+      );
       throw error;
     }
   }

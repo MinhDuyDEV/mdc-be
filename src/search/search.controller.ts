@@ -16,6 +16,10 @@ import type { SearchResponseDto } from './dto/search.response.dto';
 import type { SearchIndexService } from './search-index.service';
 import type { SearchQueryService } from './search-query.service';
 
+interface AuthenticatedRequest {
+  user?: { id: string };
+}
+
 @Controller('search')
 export class SearchController {
   constructor(
@@ -30,7 +34,7 @@ export class SearchController {
   @Get()
   async search(
     @Query() query: SearchQueryDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<SearchResponseDto> {
     const userId = req.user?.id;
     return this.searchQuery.search(query, userId);
@@ -43,7 +47,7 @@ export class SearchController {
   @Get('users')
   async searchUsers(
     @Query() query: SearchQueryDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<SearchResponseDto> {
     const userId = req.user?.id;
     return this.searchQuery.search({ ...query, type: ['profiles'] }, userId);
@@ -56,7 +60,7 @@ export class SearchController {
   @Get('companies')
   async searchCompanies(
     @Query() query: SearchQueryDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<SearchResponseDto> {
     const userId = req.user?.id;
     return this.searchQuery.search({ ...query, type: ['companies'] }, userId);
@@ -69,7 +73,7 @@ export class SearchController {
   @Get('jobs')
   async searchJobs(
     @Query() query: SearchQueryDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<SearchResponseDto> {
     const userId = req.user?.id;
     return this.searchQuery.search({ ...query, type: ['jobs'] }, userId);
@@ -82,7 +86,7 @@ export class SearchController {
   @Get('posts')
   async searchPosts(
     @Query() query: SearchQueryDto,
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<SearchResponseDto> {
     const userId = req.user?.id;
     return this.searchQuery.search({ ...query, type: ['posts'] }, userId);
@@ -99,9 +103,9 @@ export class SearchController {
   async reindex(
     @Query('entityType')
     entityType: 'profiles' | 'companies' | 'jobs' | 'posts',
-    @Request() req: any,
+    @Request() req: AuthenticatedRequest,
   ): Promise<{ message: string; runId: string }> {
-    const userId = req.user.id;
+    const userId = req.user?.id ?? '';
     const runId = await this.searchIndex.reindexEntity(entityType, userId);
     return {
       message: `Reindex started for ${entityType}`,

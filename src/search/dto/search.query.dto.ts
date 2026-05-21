@@ -13,7 +13,7 @@ export class SearchQueryDto {
   q: string;
 
   @IsOptional()
-  @Transform(({ value }) =>
+  @Transform(({ value }: { value: unknown }): unknown =>
     typeof value === 'string' ? value.split(',') : value,
   )
   @IsArray()
@@ -21,7 +21,9 @@ export class SearchQueryDto {
   type?: string[];
 
   @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
+  @Transform(({ value }: { value: unknown }): unknown =>
+    typeof value === 'string' ? parseInt(value, 10) : value,
+  )
   @IsInt()
   @Min(1)
   @Max(100)

@@ -1,3 +1,4 @@
+import type { estypes } from '@elastic/elasticsearch';
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { createHash } from 'crypto';
@@ -12,6 +13,9 @@ import type {
 import type { SearchService } from './search.service';
 import type { SearchFallbackService } from './search-fallback.service';
 import type { SearchIndexService } from './search-index.service';
+
+type EsSearchHit = estypes.SearchHit<Record<string, unknown>>;
+type EsSearchResponse = estypes.SearchResponse<Record<string, unknown>>;
 
 @Injectable()
 export class SearchQueryService {
@@ -54,7 +58,7 @@ export class SearchQueryService {
         engine = 'elasticsearch';
       } catch (error) {
         this.logger.warn(
-          { error },
+          { error: String(error) },
           'ES search failed, falling back to Postgres',
         );
         this.fallback.recordFailure(error);
@@ -123,7 +127,7 @@ export class SearchQueryService {
         },
       });
     } catch (error) {
-      this.logger.warn({ error }, 'Failed to log search query');
+      this.logger.warn({ error: String(error) }, 'Failed to log search query');
     }
   }
 
@@ -146,7 +150,10 @@ export class SearchQueryService {
         'Cleaned up old search query logs',
       );
     } catch (error) {
-      this.logger.error({ error }, 'Failed to cleanup old search query logs');
+      this.logger.error(
+        { error: String(error) },
+        'Failed to cleanup old search query logs',
+      );
     }
   }
 
@@ -172,19 +179,26 @@ export class SearchQueryService {
       size: query.limit ?? 20,
     });
 
-    let response: unknown;
+    let response: EsSearchResponse | undefined;
     try {
-      response = await this.searchEngine.search(indices.join(','), body);
+      response = (await this.searchEngine.search(
+        indices.join(','),
+        body,
+      )) as EsSearchResponse;
     } catch {
       // Try individual indices if multi-index search fails
       const hits: SearchHitDto[] = [];
       let total = 0;
       for (const idx of indices) {
         try {
-          const singleResponse = await this.searchEngine.search(idx, body);
+          const singleResponse = (await this.searchEngine.search(
+            idx,
+            body,
+          )) as EsSearchResponse;
           const singleHits = this.normalizeSearchResponse(singleResponse, idx);
           hits.push(...singleHits);
-          total += (singleResponse as any)?.hits?.total?.value ?? 0;
+          total +=
+            (singleResponse.hits.total as estypes.SearchTotalHits)?.value ?? 0;
         } catch {
           this.logger.warn(`ES search failed for index ${idx}, skipping`);
         }
@@ -208,7 +222,7 @@ export class SearchQueryService {
       response,
       entityTypes[0] ?? 'profiles',
     );
-    const total = (response as any)?.hits?.total?.value ?? 0;
+    const total = (response.hits.total as estypes.SearchTotalHits)?.value ?? 0;
 
     return {
       data: hits,
@@ -225,12 +239,12 @@ export class SearchQueryService {
    * Normalize raw ES response to SearchHitDto array.
    */
   private normalizeSearchResponse(
-    response: unknown,
+    response: EsSearchResponse,
     entityType: string,
   ): SearchHitDto[] {
-    const hits = (response as any)?.hits?.hits ?? [];
-    return hits.map((hit: any) => ({
-      id: hit._id,
+    const hits: EsSearchHit[] = response.hits.hits;
+    return hits.map((hit) => ({
+      id: hit._id ?? '',
       type: entityType.slice(0, -1) as SearchHitDto['type'], // 'profiles' → 'profile'
       score: hit._score ?? 0,
       data: hit._source ?? {},
@@ -272,7 +286,7 @@ export class SearchQueryService {
         allHits.push(...hits);
       } catch (error) {
         this.logger.warn(
-          { error, entityType },
+          { error: String(error), entityType },
           'PG FTS search failed for entity type, skipping',
         );
       }
