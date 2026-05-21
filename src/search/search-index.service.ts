@@ -282,7 +282,7 @@ export class SearchIndexService {
 					content: { type: "text", analyzer: "english" },
 					hashtags: { type: "keyword" },
 					visibility: { type: "keyword" },
-					likeCount: { type: "integer" },
+					reactionCount: { type: "integer" },
 					commentCount: { type: "integer" },
 				},
 			},
