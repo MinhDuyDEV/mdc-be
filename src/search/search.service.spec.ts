@@ -56,18 +56,21 @@ describe('SearchService', () => {
   });
 
   describe('buildMultiMatchQuery', () => {
-    it('returns correct field boosting for valid entity types', () => {
+    it('returns per-index bool.should with per-field boosting', () => {
       const result = service.buildMultiMatchQuery('senior engineer', [
         'profiles',
         'companies',
       ]);
-      const { multi_match: mm } = result as {
-        multi_match: { fields: string[] };
+      const { bool } = result as {
+        bool: { should: Array<{ multi_match: { fields: string[] } }> };
       };
-      expect(mm.fields).toContain('profiles_displayName^3');
-      expect(mm.fields).toContain('companies_name^3');
-      expect(mm.fields).toContain('profiles_about^1');
-      expect(mm.fields).not.toContain('jobs_title^3');
+      expect(bool.should).toHaveLength(2);
+      // Each entity's should clause has its own multi_match with unprefixed fields
+      expect(bool.should[0].multi_match.fields).toContain('displayName^3');
+      expect(bool.should[0].multi_match.fields).toContain('headline^2');
+      expect(bool.should[0].multi_match.fields).toContain('about^1');
+      expect(bool.should[1].multi_match.fields).toContain('name^3');
+      expect(bool.should[1].multi_match.fields).toContain('industry^2');
     });
 
     it('falls back to _all for unknown entity types', () => {

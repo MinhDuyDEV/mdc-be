@@ -1343,25 +1343,6 @@ model MessageReadState {
   @@map("message_read_states")
 }
 
-// Phase 9 — Search: tracks individual entity indexing/deletion tasks
-model SearchIndexTask {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  entityType String   @map("entity_type") // profiles | companies | jobs | posts
-  entityId   String   @map("entity_id") @db.Uuid
-  operation  String   // index | delete
-  status     String   @default("pending") // pending | processing | completed | failed
-  error      String?  // error message if failed
-  attempts   Int      @default(0)
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
-  lockedAt   DateTime? @map("locked_at") @db.Timestamptz(3)
-  lockedBy   String?  @map("locked_by")
-
-  @@index([status, createdAt])
-  @@index([entityType, entityId])
-  @@map("search_index_tasks")
-}
-
 // Phase 9 — Search: logs every user-facing search query for analytics and trending
 model SearchQueryLog {
   id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

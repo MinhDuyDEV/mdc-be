@@ -1,15 +1,20 @@
 import { Transform } from 'class-transformer';
 import {
   IsArray,
+  IsIn,
   IsInt,
   IsOptional,
   IsString,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
+const VALID_ENTITY_TYPES = ['profiles', 'companies', 'jobs', 'posts'] as const;
+
 export class SearchQueryDto {
   @IsString()
+  @MaxLength(500)
   q: string;
 
   @IsOptional()
@@ -18,6 +23,7 @@ export class SearchQueryDto {
   )
   @IsArray()
   @IsString({ each: true })
+  @IsIn(VALID_ENTITY_TYPES, { each: true })
   type?: string[];
 
   @IsOptional()
@@ -28,8 +34,4 @@ export class SearchQueryDto {
   @Min(1)
   @Max(100)
   limit?: number = 20;
-
-  @IsOptional()
-  @IsString()
-  cursor?: string;
 }

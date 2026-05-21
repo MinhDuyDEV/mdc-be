@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { SearchEngineService } from '../../infra/search-engine/search-engine.service';
+import type { PrismaService } from '../../infra/prisma/prisma.service';
+import type { SearchIndexService } from '../../search/search-index.service';
 
 interface CompanyCreatedPayload {
   companyId: string;
@@ -18,7 +18,7 @@ export class CompanySearchIndexProcessor {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly searchEngine: SearchEngineService,
+    private readonly searchIndex: SearchIndexService,
   ) {}
 
   async processCompanyCreated(payload: CompanyCreatedPayload): Promise<void> {
@@ -40,7 +40,7 @@ export class CompanySearchIndexProcessor {
       return;
     }
 
-    await this.searchEngine.index('companies', company.id, {
+    await this.searchIndex.indexDocument('companies', company.id, {
       name: company.name,
       slug: company.slug,
       industry: company.industry,

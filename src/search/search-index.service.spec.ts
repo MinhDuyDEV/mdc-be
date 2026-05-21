@@ -19,6 +19,7 @@ describe('SearchIndexService', () => {
 
     mockPrisma = {
       searchReindexRun: {
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn().mockResolvedValue({ id: 'run-1' }),
         update: jest.fn().mockResolvedValue({}),
       },

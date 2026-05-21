@@ -52,15 +52,20 @@ export class SearchFallbackService {
     this.failureCount++;
     this.lastFailureTime = Date.now();
 
-    if (
-      this.failureCount >= this.failureThreshold &&
-      this.circuitState === 'CLOSED'
-    ) {
-      this.circuitState = 'OPEN';
-      this.logger.error(
-        { failureCount: this.failureCount, error },
-        'Circuit breaker OPEN — falling back to Postgres FTS',
-      );
+    if (this.failureCount >= this.failureThreshold) {
+      if (this.circuitState === 'CLOSED') {
+        this.circuitState = 'OPEN';
+        this.logger.error(
+          { failureCount: this.failureCount, error },
+          'Circuit breaker OPEN — falling back to Postgres FTS',
+        );
+      } else if (this.circuitState === 'HALF_OPEN') {
+        this.circuitState = 'OPEN';
+        this.logger.error(
+          { failureCount: this.failureCount, error },
+          'Circuit breaker re-OPENED from HALF_OPEN — probe failed',
+        );
+      }
     }
   }
 

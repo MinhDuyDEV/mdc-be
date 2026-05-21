@@ -5,7 +5,6 @@ describe('SearchQueryService', () => {
   let service: SearchQueryService;
   let mockSearchEngine: any;
   let mockSearchService: any;
-  let mockSearchIndex: any;
   let mockFallback: any;
   let mockLogger: any;
 
@@ -27,12 +26,6 @@ describe('SearchQueryService', () => {
       buildSearchBody: jest.fn().mockReturnValue({ query: {}, size: 20 }),
     };
 
-    mockSearchIndex = {
-      search: jest.fn(),
-      indexDocument: jest.fn(),
-      deleteByQuery: jest.fn(),
-    };
-
     mockFallback = {
       isCircuitOpen: jest.fn().mockReturnValue(false),
       recordSuccess: jest.fn(),
@@ -48,7 +41,7 @@ describe('SearchQueryService', () => {
     };
 
     const mockPrisma = {
-      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       searchQueryLog: {
         create: jest.fn().mockResolvedValue({}),
         deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
@@ -58,7 +51,6 @@ describe('SearchQueryService', () => {
     service = new SearchQueryService(
       mockSearchEngine,
       mockSearchService,
-      mockSearchIndex,
       mockFallback,
       mockPrisma as never,
       mockLogger as never,

@@ -4,7 +4,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import type { Reflector } from '@nestjs/core';
 import type { AuthenticatedUser } from '../auth/current-user.interface';
 import {
   ROLES_METADATA_KEY,
@@ -36,12 +36,15 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('Authentication required');
     }
 
-    // Check if user has admin role
-    // In this codebase, admin check is via user metadata
-    // For now, accept any authenticated user since full RBAC is future work
-    const isAdmin = user.id && required.includes('admin');
-    // Simple check: any authenticated user can access admin routes
+    // Admin check: reject all requests until proper RBAC is implemented.
     // TODO: implement proper admin role check when RBAC is in place
-    return !!isAdmin;
+    // (e.g. check user.role === 'admin' or query admin allowlist).
+    if (required.includes('admin')) {
+      throw new ForbiddenException(
+        'Admin access is not yet available. RBAC implementation pending.',
+      );
+    }
+
+    return true;
   }
 }

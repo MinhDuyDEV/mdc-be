@@ -1,6 +1,7 @@
 import type { estypes } from '@elastic/elasticsearch';
 import { Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { PrismaService } from '../infra/prisma/prisma.service';
@@ -12,17 +13,22 @@ import type {
 } from './dto/search.response.dto';
 import type { SearchService } from './search.service';
 import type { SearchFallbackService } from './search-fallback.service';
-import type { SearchIndexService } from './search-index.service';
 
 type EsSearchHit = estypes.SearchHit<Record<string, unknown>>;
 type EsSearchResponse = estypes.SearchResponse<Record<string, unknown>>;
+
+const ENTITY_TYPE_MAP: Record<string, SearchHitDto['type']> = {
+  profiles: 'profile',
+  companies: 'company',
+  jobs: 'job',
+  posts: 'post',
+};
 
 @Injectable()
 export class SearchQueryService {
   constructor(
     private readonly searchEngine: SearchEngineService,
     private readonly searchService: SearchService,
-    private readonly searchIndex: SearchIndexService,
     private readonly fallback: SearchFallbackService,
     private readonly prisma: PrismaService,
     @InjectPinoLogger(SearchQueryService.name)
@@ -245,7 +251,7 @@ export class SearchQueryService {
     const hits: EsSearchHit[] = response.hits.hits;
     return hits.map((hit) => ({
       id: hit._id ?? '',
-      type: entityType.slice(0, -1) as SearchHitDto['type'], // 'profiles' → 'profile'
+      type: ENTITY_TYPE_MAP[entityType] ?? 'profile',
       score: hit._score ?? 0,
       data: hit._source ?? {},
       highlights: hit.highlight,
@@ -333,7 +339,7 @@ export class SearchQueryService {
     tsQuery: string,
     limit: number,
   ): Promise<SearchHitDto[]> {
-    const rows = await this.prisma.$queryRawUnsafe<
+    const rows = await this.prisma.$queryRaw<
       Array<{
         id: string;
         display_name: string | null;
@@ -343,21 +349,19 @@ export class SearchQueryService {
         rank: number;
       }>
     >(
-      `SELECT
+      Prisma.sql`SELECT
         p.id,
         u.display_name,
         p.headline,
         p.about,
         p.location,
-        ts_rank(p.search_vector, plainto_tsquery('english', $1)) AS rank
+        ts_rank(p.search_vector, plainto_tsquery('english', ${tsQuery})) AS rank
       FROM profiles p
       JOIN users u ON u.id = p.user_id
-      WHERE p.search_vector @@ plainto_tsquery('english', $1)
+      WHERE p.search_vector @@ plainto_tsquery('english', ${tsQuery})
         AND p.visibility = 'PUBLIC'
       ORDER BY rank DESC
-      LIMIT $2`,
-      tsQuery,
-      limit,
+      LIMIT ${limit}`,
     );
 
     return rows.map((row) => ({
@@ -377,7 +381,7 @@ export class SearchQueryService {
     tsQuery: string,
     limit: number,
   ): Promise<SearchHitDto[]> {
-    const rows = await this.prisma.$queryRawUnsafe<
+    const rows = await this.prisma.$queryRaw<
       Array<{
         id: string;
         name: string;
@@ -387,20 +391,18 @@ export class SearchQueryService {
         rank: number;
       }>
     >(
-      `SELECT
+      Prisma.sql`SELECT
         id,
         name,
         industry::text,
         description,
         headquarters,
-        ts_rank(search_vector, plainto_tsquery('english', $1)) AS rank
+        ts_rank(search_vector, plainto_tsquery('english', ${tsQuery})) AS rank
       FROM companies
-      WHERE search_vector @@ plainto_tsquery('english', $1)
+      WHERE search_vector @@ plainto_tsquery('english', ${tsQuery})
         AND deleted_at IS NULL
       ORDER BY rank DESC
-      LIMIT $2`,
-      tsQuery,
-      limit,
+      LIMIT ${limit}`,
     );
 
     return rows.map((row) => ({
@@ -420,7 +422,7 @@ export class SearchQueryService {
     tsQuery: string,
     limit: number,
   ): Promise<SearchHitDto[]> {
-    const rows = await this.prisma.$queryRawUnsafe<
+    const rows = await this.prisma.$queryRaw<
       Array<{
         id: string;
         title: string;
@@ -430,22 +432,20 @@ export class SearchQueryService {
         rank: number;
       }>
     >(
-      `SELECT
+      Prisma.sql`SELECT
         j.id,
         j.title,
         j.description,
         j.location,
         c.name AS company_name,
-        ts_rank(j.search_vector, plainto_tsquery('english', $1)) AS rank
+        ts_rank(j.search_vector, plainto_tsquery('english', ${tsQuery})) AS rank
       FROM jobs j
       LEFT JOIN companies c ON c.id = j.company_id
-      WHERE j.search_vector @@ plainto_tsquery('english', $1)
+      WHERE j.search_vector @@ plainto_tsquery('english', ${tsQuery})
         AND j.deleted_at IS NULL
         AND j.status = 'PUBLISHED'
       ORDER BY rank DESC
-      LIMIT $2`,
-      tsQuery,
-      limit,
+      LIMIT ${limit}`,
     );
 
     return rows.map((row) => ({
@@ -465,7 +465,7 @@ export class SearchQueryService {
     tsQuery: string,
     limit: number,
   ): Promise<SearchHitDto[]> {
-    const rows = await this.prisma.$queryRawUnsafe<
+    const rows = await this.prisma.$queryRaw<
       Array<{
         id: string;
         content: string;
@@ -473,21 +473,19 @@ export class SearchQueryService {
         rank: number;
       }>
     >(
-      `SELECT
+      Prisma.sql`SELECT
         p.id,
         p.content,
         u.display_name AS author_name,
-        ts_rank(p.search_vector, plainto_tsquery('english', $1)) AS rank
+        ts_rank(p.search_vector, plainto_tsquery('english', ${tsQuery})) AS rank
       FROM posts p
       JOIN users u ON u.id = p.author_id
-      WHERE p.search_vector @@ plainto_tsquery('english', $1)
+      WHERE p.search_vector @@ plainto_tsquery('english', ${tsQuery})
         AND p.deleted_at IS NULL
         AND p.visibility = 'PUBLIC'
         AND p.status = 'PUBLISHED'
       ORDER BY rank DESC
-      LIMIT $2`,
-      tsQuery,
-      limit,
+      LIMIT ${limit}`,
     );
 
     return rows.map((row) => ({

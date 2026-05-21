@@ -117,6 +117,16 @@ export class SearchIndexService {
     entityType: 'profiles' | 'companies' | 'jobs' | 'posts',
     triggeredBy: string,
   ): Promise<string> {
+    // Prevent concurrent reindex runs for the same entity type
+    const existing = await this.prisma.searchReindexRun.findFirst({
+      where: { entityType, status: 'in_progress' },
+    });
+    if (existing) {
+      throw new Error(
+        `Reindex already in progress for ${entityType} (run ${existing.id})`,
+      );
+    }
+
     const runId = `reindex-${entityType}-${Date.now()}`;
 
     // Derive next version from existing indices (e.g. jobs-v1, jobs-v2 → v3)
@@ -174,6 +184,16 @@ export class SearchIndexService {
         { remove: { index: oldIndex, alias: entityType } },
         { add: { index: newIndex, alias: entityType } },
       ]);
+
+      // Clean up old versioned index (best-effort, non-fatal)
+      try {
+        await this.searchEngine.deleteIndex(oldIndex);
+      } catch {
+        this.logger.warn(
+          { oldIndex },
+          'Failed to delete old index after reindex',
+        );
+      }
 
       const durationMs = Date.now() - startTime;
 

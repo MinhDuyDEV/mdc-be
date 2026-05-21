@@ -79,37 +79,47 @@ export class SearchService {
   /**
    * Build a multi-match query across multiple entity types with per-field boosting.
    *
-   * Converts entity types and their boosted fields into prefixed field expressions
-   * (e.g. `profiles_displayName^3`) for cross-entity search.
+   * Uses per-index queries via `bool.should` so each index resolves its own
+   * field names (e.g. `displayName^3` in the profiles index, `title^3` in jobs).
    */
   buildMultiMatchQuery(
     query: string,
     entityTypes: string[] = ['profiles', 'companies', 'jobs', 'posts'],
     options?: { fuzziness?: string | number; operator?: 'or' | 'and' },
   ): Record<string, unknown> {
-    const fields: string[] = [];
+    const should: Record<string, unknown>[] = [];
 
     for (const entityType of entityTypes) {
       const boosts = SearchService.ENTITY_BOOST[entityType];
       if (!boosts) continue;
-      for (const [field, boost] of Object.entries(boosts)) {
-        fields.push(`${entityType}_${field}^${boost}`);
-      }
+      const fields = Object.entries(boosts).map(
+        ([field, boost]) => `${field}^${boost}`,
+      );
+      if (fields.length === 0) continue;
+      should.push({
+        multi_match: {
+          query,
+          fields,
+          type: 'best_fields',
+          fuzziness: options?.fuzziness ?? 'AUTO',
+          operator: options?.operator ?? 'or',
+        },
+      });
     }
 
-    if (fields.length === 0) {
-      fields.push('_all');
+    if (should.length === 0) {
+      return {
+        multi_match: {
+          query,
+          fields: ['_all'],
+          type: 'best_fields',
+          fuzziness: options?.fuzziness ?? 'AUTO',
+          operator: options?.operator ?? 'or',
+        },
+      };
     }
 
-    return {
-      multi_match: {
-        query,
-        fields,
-        type: 'best_fields',
-        fuzziness: options?.fuzziness ?? 'AUTO',
-        operator: options?.operator ?? 'or',
-      },
-    };
+    return { bool: { should, minimum_should_match: 1 } };
   }
 
   /**

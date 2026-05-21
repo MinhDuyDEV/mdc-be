@@ -10,7 +10,6 @@ export interface SearchResponseDto {
   data: SearchHitDto[];
   meta: {
     total: number;
-    nextCursor?: string;
     hasNextPage: boolean;
     took: number;
     engine: 'elasticsearch' | 'postgres';
