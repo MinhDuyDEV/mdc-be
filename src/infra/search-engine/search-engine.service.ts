@@ -129,6 +129,14 @@ export class SearchEngineService implements OnApplicationShutdown {
     return result.count;
   }
 
+  /**
+   * List all index names in the cluster.
+   */
+  async listIndices(): Promise<string[]> {
+    const response = await this.client.cat.indices({ format: 'json' });
+    return (response as Array<{ index: string }>).map((i) => i.index);
+  }
+
   async onApplicationShutdown(): Promise<void> {
     await this.client.close();
   }
