@@ -1,33 +1,63 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Injectable, Logger } from "@nestjs/common";
+import type { PrismaService } from "../../infra/prisma/prisma.service";
+import type { SearchIndexService } from "../../search/search-index.service";
 
 interface ProfileUpdatedPayload {
-  profileId: string;
-  userId: string;
+	profileId: string;
+	userId: string;
 }
 
 @Injectable()
 export class ProfileSearchIndexProcessor {
-  private readonly logger = new Logger(ProfileSearchIndexProcessor.name);
+	private readonly logger = new Logger(ProfileSearchIndexProcessor.name);
 
-  /**
-   * Handles ProfileUpdated events.
-   * Note: FTS triggers in Postgres handle search indexing automatically.
-   * This processor is for future Elasticsearch indexing.
-   */
-  @Cron(CronExpression.EVERY_10_SECONDS, {
-    name: 'profile-search-index-processor',
-    waitForCompletion: true,
-  })
-  handleProfileUpdated(): void {
-    this.logger.debug(
-      'Profile search index processor tick (no-op in current phase)',
-    );
-  }
+	constructor(
+		private readonly prisma: PrismaService,
+		private readonly searchIndex: SearchIndexService,
+	) {}
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  processProfileUpdated(_payload: ProfileUpdatedPayload): void {
-    // TODO: Implement in future phase when Elasticsearch is wired
-    // Search indexing is currently handled by Postgres FTS triggers
-  }
+	async processProfileUpdated(payload: ProfileUpdatedPayload): Promise<void> {
+		const profile = await this.prisma.profile.findUnique({
+			where: { id: payload.profileId },
+			include: {
+				user: {
+					select: { id: true, displayName: true },
+				},
+				skills: {
+					select: { name: true },
+				},
+			},
+		});
+
+		if (!profile) {
+			this.logger.warn(
+				`Profile ${payload.profileId} not found for indexing — skipping`,
+			);
+			return;
+		}
+
+		// Only index public profiles
+		if (profile.visibility === "PUBLIC") {
+			await this.searchIndex.indexDocument("profiles", profile.id, {
+				id: profile.id,
+				userId: profile.userId,
+				displayName: profile.user.displayName,
+				headline: profile.headline,
+				about: profile.about,
+				location: profile.location,
+				skills: profile.skills.map((s) => s.name),
+				visibility: profile.visibility,
+				createdAt: profile.createdAt.toISOString(),
+				updatedAt: profile.updatedAt.toISOString(),
+			});
+
+			this.logger.log(`Indexed profile ${profile.id} in ES`);
+		} else {
+			// Remove non-public profiles from ES
+			await this.searchIndex.deleteByQuery("profiles", {
+				term: { id: profile.id },
+			});
+			this.logger.log(`Removed non-public profile ${profile.id} from ES`);
+		}
+	}
 }
