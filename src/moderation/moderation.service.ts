@@ -8,7 +8,7 @@ import type {
   PrismaService,
   PrismaTransaction,
 } from '../infra/prisma/prisma.service';
-import type { OutboxService } from '../outbox/outbox.service';
+import { OutboxService } from '../outbox/outbox.service';
 import type {
   CreateModerationActionDto,
   CreateReportDto,

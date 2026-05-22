@@ -1,10 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
-import type { AuthService } from '../auth/auth.service';
-import type { PrismaService } from '../infra/prisma/prisma.service';
+import { AuthService } from '../auth/auth.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type {
-  AdminCompanyQueryDto,
-  AdminJobQueryDto,
   AdminUserQueryDto,
   UpdateUserStatusDto,
   VerifyCompanyDto,
@@ -61,7 +59,7 @@ export class AdminService {
     }
   }
 
-  async listCompanies(query: AdminCompanyQueryDto) {
+  async listCompanies(query: { search?: string }) {
     const companies = await this.prisma.company.findMany({
       where: query.search
         ? { name: { contains: query.search, mode: 'insensitive' } }
@@ -77,12 +75,12 @@ export class AdminService {
     dto: VerifyCompanyDto,
     adminId: string,
   ): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const verification = await tx.companyVerification.findFirst({
-        where: { companyId },
-        orderBy: { createdAt: 'desc' },
-      });
+    // Lookup existing verification record
+    const verification = await this.prisma.companyVerification.findFirst({
+      where: { companyId },
+    });
 
+    await this.prisma.$transaction(async (tx) => {
       if (verification) {
         await tx.companyVerification.update({
           where: { id: verification.id },
@@ -107,9 +105,9 @@ export class AdminService {
     });
   }
 
-  async listJobs(query: AdminJobQueryDto) {
+  async listJobs(query: { companyId?: string }) {
     const jobs = await this.prisma.job.findMany({
-      where: { companyId: query.companyId },
+      where: query.companyId ? { companyId: query.companyId } : undefined,
       take: 50,
       orderBy: { createdAt: 'desc' },
     });
