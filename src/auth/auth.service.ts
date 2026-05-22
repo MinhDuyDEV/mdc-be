@@ -4,10 +4,15 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+
 import type { PrismaService } from '../infra/prisma/prisma.service';
+
 import type { OutboxService } from '../outbox/outbox.service';
+
 import type { EmailVerificationService } from './email-verification.service';
+
 import type { PasswordService } from './password.service';
+
 import type { TokenService } from './token.service';
 
 interface RegisterDto {
