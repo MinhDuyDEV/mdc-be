@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { SearchQueryDto } from './dto/search.query.dto';
@@ -99,6 +100,7 @@ export class SearchController {
   @Post('reindex')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin')
+  @Permissions('MANAGE_JOBS')
   @HttpCode(HttpStatus.ACCEPTED)
   async reindex(
     @Query('entityType')

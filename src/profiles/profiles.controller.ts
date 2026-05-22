@@ -10,11 +10,12 @@ import {
   Post,
   Query,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
-import { SearchProfilesDto } from './dto/search-profiles.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
+import type { SearchProfilesDto } from './dto/search-profiles.dto';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
 import { ProfilesService } from './profiles.service';
 
 @Controller('profiles')
@@ -29,6 +30,7 @@ export class ProfilesController {
 
   @Patch('me')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async updateMe(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdateProfileDto,

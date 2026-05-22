@@ -4,11 +4,14 @@ import {
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
-import { JwtService } from '@nestjs/jwt';
+import type { Reflector } from '@nestjs/core';
+import type { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import { IS_PUBLIC_ROUTE } from '../common/auth/public.decorator';
+import {
+  IS_OPTIONAL_AUTH,
+  IS_PUBLIC_ROUTE,
+} from '../common/auth/public.decorator';
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -27,10 +30,18 @@ export class AuthGuard implements CanActivate {
       return true;
     }
 
+    const isOptionalAuth = this.reflector.getAllAndOverride<boolean>(
+      IS_OPTIONAL_AUTH,
+      [context.getHandler(), context.getClass()],
+    );
+
     const request = context.switchToHttp().getRequest<Request>();
     const token = this.extractToken(request);
 
     if (!token) {
+      if (isOptionalAuth) {
+        return true;
+      }
       throw new UnauthorizedException('Missing or invalid access token');
     }
 
@@ -48,6 +59,10 @@ export class AuthGuard implements CanActivate {
       request.user = user;
       return true;
     } catch {
+      // On optional-auth routes: missing token is allowed, but bad token is rejected
+      if (isOptionalAuth) {
+        throw new UnauthorizedException('Invalid or expired access token');
+      }
       throw new UnauthorizedException('Invalid or expired access token');
     }
   }

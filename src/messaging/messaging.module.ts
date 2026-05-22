@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
 import { InfraModule } from '../infra/infra.module';
 import { OutboxModule } from '../outbox/outbox.module';
@@ -8,7 +8,12 @@ import { MessagingService } from './messaging.service';
 import { MessagingPolicyService } from './messaging-policy.service';
 
 @Module({
-  imports: [InfraModule, OutboxModule, ConnectionsModule, RecruitingModule],
+  imports: [
+    InfraModule,
+    forwardRef(() => OutboxModule),
+    ConnectionsModule,
+    RecruitingModule,
+  ],
   controllers: [MessagingController],
   providers: [MessagingService, MessagingPolicyService],
   exports: [MessagingService, MessagingPolicyService],

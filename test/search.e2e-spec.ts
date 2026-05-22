@@ -80,6 +80,44 @@ describe('Search (e2e)', () => {
     }>('./../src/search');
     SearchQueryService = SQS;
 
+    const { REDIS_CLIENT } = jest.requireActual<{
+      REDIS_CLIENT: symbol;
+    }>('./../src/infra/redis/redis.constants');
+
+    const mockRedis = {
+      get: jest.fn().mockResolvedValue(null),
+      set: jest.fn().mockResolvedValue('OK'),
+      del: jest.fn().mockResolvedValue(1),
+      setex: jest.fn().mockResolvedValue('OK'),
+      keys: jest.fn().mockResolvedValue([]),
+      incr: jest.fn().mockResolvedValue(1),
+      expire: jest.fn().mockResolvedValue(1),
+      ttl: jest.fn().mockResolvedValue(-1),
+      exists: jest.fn().mockResolvedValue(0),
+      hget: jest.fn().mockResolvedValue(null),
+      hset: jest.fn().mockResolvedValue(1),
+      hdel: jest.fn().mockResolvedValue(0),
+      hgetall: jest.fn().mockResolvedValue({}),
+      hmset: jest.fn().mockResolvedValue('OK'),
+      zadd: jest.fn().mockResolvedValue(1),
+      zrange: jest.fn().mockResolvedValue([]),
+      zrem: jest.fn().mockResolvedValue(0),
+      sadd: jest.fn().mockResolvedValue(1),
+      srem: jest.fn().mockResolvedValue(0),
+      smembers: jest.fn().mockResolvedValue([]),
+      publish: jest.fn().mockResolvedValue(0),
+      subscribe: jest.fn().mockResolvedValue(undefined),
+      unsubscribe: jest.fn().mockResolvedValue(undefined),
+      on: jest.fn(),
+      once: jest.fn(),
+      removeAllListeners: jest.fn(),
+      connect: jest.fn().mockResolvedValue(undefined),
+      disconnect: jest.fn().mockResolvedValue(undefined),
+      quit: jest.fn().mockResolvedValue('OK'),
+      ping: jest.fn().mockResolvedValue('PONG'),
+      status: 'ready',
+    };
+
     const mockPrisma = {
       $connect: jest.fn(),
       $disconnect: jest.fn(),
@@ -200,6 +238,8 @@ describe('Search (e2e)', () => {
     })
       .overrideProvider(PrismaService)
       .useValue(mockPrisma)
+      .overrideProvider(REDIS_CLIENT)
+      .useValue(mockRedis)
       .overrideProvider(SearchEngineService)
       .useValue(mockSearchEngine)
       .overrideProvider(SearchIndexService)

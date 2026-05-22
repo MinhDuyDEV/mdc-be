@@ -1,77 +1,56 @@
+import { jest } from '@jest/globals';
 import { ConflictException, UnauthorizedException } from '@nestjs/common';
-import { Test, type TestingModule } from '@nestjs/testing';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { OutboxService } from '../outbox/outbox.service';
 import { AuthService } from './auth.service';
-import { EmailVerificationService } from './email-verification.service';
-import { PasswordService } from './password.service';
-import { TokenService } from './token.service';
 
 describe('AuthService', () => {
   let service: AuthService;
-  let prisma: PrismaService;
-  let passwordService: PasswordService;
-  let tokenService: TokenService;
-  let emailVerificationService: EmailVerificationService;
+  let prisma: any;
+  let passwordService: any;
+  let tokenService: any;
+  let emailVerificationService: any;
+  let outboxService: any;
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        AuthService,
-        {
-          provide: PrismaService,
-          useValue: {
-            user: {
-              findUnique: jest.fn(),
-              create: jest.fn(),
-            },
-            $transaction: jest.fn((cb: (tx: unknown) => unknown) => {
-              return cb({
-                user: {
-                  create: jest.fn(),
-                },
-                auditLog: {
-                  create: jest.fn(),
-                },
-              });
-            }),
+  beforeEach(() => {
+    prisma = {
+      user: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      refreshToken: {
+        updateMany: jest.fn(),
+      },
+      $transaction: jest.fn((cb: (tx: unknown) => unknown) => {
+        return cb({
+          user: {
+            create: jest.fn(),
           },
-        },
-        {
-          provide: PasswordService,
-          useValue: {
-            hash: jest.fn(),
-            compare: jest.fn(),
+          auditLog: {
+            create: jest.fn(),
           },
-        },
-        {
-          provide: TokenService,
-          useValue: {
-            generateAccessToken: jest.fn(),
-            generateRefreshToken: jest.fn(),
-          },
-        },
-        {
-          provide: EmailVerificationService,
-          useValue: {
-            generateToken: jest.fn(),
-          },
-        },
-        {
-          provide: OutboxService,
-          useValue: {
-            emit: jest.fn(),
-          },
-        },
-      ],
-    }).compile();
+        });
+      }),
+    };
+    passwordService = {
+      hash: jest.fn(),
+      compare: jest.fn(),
+    };
+    tokenService = {
+      generateAccessToken: jest.fn(),
+      generateRefreshToken: jest.fn(),
+    };
+    emailVerificationService = {
+      generateToken: jest.fn(),
+    };
+    outboxService = {
+      emit: jest.fn(),
+    };
 
-    service = module.get<AuthService>(AuthService);
-    prisma = module.get<PrismaService>(PrismaService);
-    passwordService = module.get<PasswordService>(PasswordService);
-    tokenService = module.get<TokenService>(TokenService);
-    emailVerificationService = module.get<EmailVerificationService>(
-      EmailVerificationService,
+    service = new AuthService(
+      prisma,
+      passwordService,
+      tokenService,
+      emailVerificationService,
+      outboxService,
     );
   });
 
@@ -94,21 +73,20 @@ describe('AuthService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
-      jest.spyOn(passwordService, 'hash').mockResolvedValue(hashedPassword);
-      jest
-        .spyOn(emailVerificationService, 'generateToken')
-        .mockResolvedValue('verification-token');
+      prisma.user.findUnique.mockResolvedValue(null);
+      passwordService.hash.mockResolvedValue(hashedPassword);
+      emailVerificationService.generateToken.mockResolvedValue(
+        'verification-token',
+      );
 
-      // $transaction mock: execute the callback with a tx that has create mocks
-      jest
-        .spyOn(prisma, '$transaction')
-        .mockImplementation(async (cb: (tx: unknown) => Promise<unknown>) => {
+      prisma.$transaction.mockImplementation(
+        async (cb: (tx: unknown) => Promise<unknown>) => {
           return cb({
-            user: { create: jest.fn().mockResolvedValue(createdUser) },
+            user: { create: (() => createdUser) as any },
             auditLog: { create: jest.fn() },
           });
-        });
+        },
+      );
 
       const result = await service.register(dto);
 
@@ -125,7 +103,7 @@ describe('AuthService', () => {
     it('should throw ConflictException for duplicate email', async () => {
       const dto = { email: 'existing@example.com', password: 'password123' };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+      prisma.user.findUnique.mockResolvedValue({
         id: 'existing-id',
         email: dto.email,
       } as any);
@@ -141,20 +119,19 @@ describe('AuthService', () => {
       const refreshToken = 'refresh-uuid';
       const familyId = 'family-uuid';
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+      prisma.user.findUnique.mockResolvedValue({
         id: 'user-123',
         email: dto.email,
         passwordHash: '$2b$12$hash',
         displayName: null,
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(passwordService, 'compare').mockResolvedValue(true);
-      jest
-        .spyOn(tokenService, 'generateAccessToken')
-        .mockResolvedValue(accessToken);
-      jest
-        .spyOn(tokenService, 'generateRefreshToken')
-        .mockResolvedValue({ token: refreshToken, familyId });
+      passwordService.compare.mockResolvedValue(true);
+      tokenService.generateAccessToken.mockResolvedValue(accessToken);
+      tokenService.generateRefreshToken.mockResolvedValue({
+        token: refreshToken,
+        familyId,
+      });
 
       const result = await service.login(dto);
 
@@ -176,20 +153,20 @@ describe('AuthService', () => {
     it('should throw UnauthorizedException for invalid password', async () => {
       const dto = { email: 'test@example.com', password: 'wrong' };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+      prisma.user.findUnique.mockResolvedValue({
         id: 'user-123',
         email: dto.email,
         passwordHash: '$2b$12$hash',
         displayName: null,
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(passwordService, 'compare').mockResolvedValue(false);
+      passwordService.compare.mockResolvedValue(false);
 
       await expect(service.login(dto)).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw UnauthorizedException for non-existent user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
+      prisma.user.findUnique.mockResolvedValue(null);
 
       await expect(
         service.login({ email: 'no@user.com', password: 'x' }),
@@ -197,7 +174,7 @@ describe('AuthService', () => {
     });
 
     it('should throw UnauthorizedException for disabled user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+      prisma.user.findUnique.mockResolvedValue({
         id: 'user-123',
         email: 'test@example.com',
         passwordHash: '$2b$12$hash',
@@ -208,6 +185,19 @@ describe('AuthService', () => {
       await expect(
         service.login({ email: 'test@example.com', password: 'x' }),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('revokeAllUserSessions', () => {
+    it('should update many refresh tokens', async () => {
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
+
+      await service.revokeAllUserSessions('user-1');
+
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
     });
   });
 });

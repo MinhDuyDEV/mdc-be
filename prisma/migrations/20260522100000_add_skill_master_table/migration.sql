@@ -13,7 +13,7 @@ CREATE UNIQUE INDEX "skills_name_key" ON "skills"("name");
 
 -- Populate skills from existing profile_skills.name values
 INSERT INTO "skills" ("name", "category")
-SELECT DISTINCT ps.name, ps.category
+SELECT DISTINCT ps.name, ps.category::text::"SkillCategory"
 FROM "profile_skills" ps
 WHERE ps.name IS NOT NULL
 ON CONFLICT ("name") DO NOTHING;
@@ -23,7 +23,7 @@ ON CONFLICT ("name") DO NOTHING;
 -- Note: Current job_skills.skill_id contains raw UUIDs, not skill taxonomy references.
 -- We insert a placeholder row for each unique skill_id that doesn't already map to a known skill name.
 INSERT INTO "skills" ("id", "name", "category")
-SELECT DISTINCT js.skill_id, 'unknown-' || js.skill_id::text, NULL
+SELECT DISTINCT js.skill_id, 'unknown-' || js.skill_id::text, NULL::"SkillCategory"
 FROM "job_skills" js
 WHERE NOT EXISTS (SELECT 1 FROM "skills" s WHERE s.id = js.skill_id);
 
@@ -38,10 +38,10 @@ WHERE ps.name = s.name;
 
 -- If any profile_skills rows still lack skill_id (e.g. null names), generate new skills and link
 INSERT INTO "skills" ("name", "category")
-SELECT DISTINCT ps.name, ps.category
+SELECT DISTINCT ps.name, ps.category::text::"SkillCategory"
 FROM "profile_skills" ps
 WHERE ps.name IS NOT NULL AND ps.skill_id IS NULL
-ON CONFLICT ("name") DO UPDATE SET "category" = EXCLUDED.category;
+ON CONFLICT ("name") DO UPDATE SET "category" = EXCLUDED.category::text::"SkillCategory";
 
 -- Retry the backfill for rows that got new skills inserted above
 UPDATE "profile_skills" ps

@@ -4,11 +4,16 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { OutboxService } from '../outbox/outbox.service';
-import { EmailVerificationService } from './email-verification.service';
-import { PasswordService } from './password.service';
-import { TokenService } from './token.service';
+
+import type { PrismaService } from '../infra/prisma/prisma.service';
+
+import type { OutboxService } from '../outbox/outbox.service';
+
+import type { EmailVerificationService } from './email-verification.service';
+
+import type { PasswordService } from './password.service';
+
+import type { TokenService } from './token.service';
 
 interface RegisterDto {
   email: string;
@@ -168,5 +173,12 @@ export class AuthService {
         emailVerifiedAt: user.emailVerifiedAt,
       },
     };
+  }
+
+  async revokeAllUserSessions(userId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { userId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
   }
 }

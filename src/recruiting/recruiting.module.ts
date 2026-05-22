@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { forwardRef, Module } from '@nestjs/common';
 import { ConnectionsModule } from '../connections/connections.module';
 import { InfraModule } from '../infra';
 import { OutboxModule } from '../outbox';
@@ -7,7 +7,7 @@ import { RecruitingService } from './recruiting.service';
 import { RecruitingPolicyService } from './recruiting-policy.service';
 
 @Module({
-  imports: [InfraModule, OutboxModule, ConnectionsModule],
+  imports: [InfraModule, forwardRef(() => OutboxModule), ConnectionsModule],
   controllers: [RecruitingController],
   providers: [RecruitingService, RecruitingPolicyService],
   exports: [RecruitingService, RecruitingPolicyService],
