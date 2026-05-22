@@ -10,7 +10,7 @@ import type {
   RecommendedJobDto,
   RecommendedPersonDto,
 } from './dto';
-import type { RecommendationsService } from './recommendations.service';
+import { RecommendationsService } from './recommendations.service';
 
 @Controller('recommendations')
 @UseGuards(AuthGuard)

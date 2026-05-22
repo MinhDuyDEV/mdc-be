@@ -836,6 +836,7 @@ model CompanyEntitlement {
   @@index([entitlementType])
   @@index([validUntil])
   @@index([grantId])
+  @@unique([companyId, entitlementType])
   @@map("company_entitlements")
 }
 

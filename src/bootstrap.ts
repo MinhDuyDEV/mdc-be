@@ -30,7 +30,14 @@ export function configureApp(app: INestApplication): void {
       hidePoweredBy: true,
     }),
   );
-  app.use(json({ limit: configService.get('bodyJsonLimit', { infer: true }) }));
+  app.use(
+    json({
+      limit: configService.get('bodyJsonLimit', { infer: true }),
+      verify: (req: Request & { rawBody?: Buffer }, _res, buf) => {
+        req.rawBody = buf;
+      },
+    }),
+  );
   app.use(
     urlencoded({
       extended: true,
