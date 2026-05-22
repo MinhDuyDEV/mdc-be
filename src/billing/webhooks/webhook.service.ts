@@ -1,13 +1,13 @@
 import * as crypto from "node:crypto";
 import { Injectable } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
-import type { AppConfig } from "../../infra/config";
-import type {
+import { ConfigService } from "@nestjs/config";
+import { AppConfig } from "../../infra/config";
+import {
 	PrismaService,
 	PrismaTransaction,
 } from "../../infra/prisma/prisma.service";
-import type { IdempotencyService } from "../../outbox/idempotency.service";
-import type { OutboxService } from "../../outbox/outbox.service";
+import { IdempotencyService } from "../../outbox/idempotency.service";
+import { OutboxService } from "../../outbox/outbox.service";
 
 @Injectable()
 export class WebhookService {
