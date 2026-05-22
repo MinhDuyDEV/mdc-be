@@ -164,6 +164,9 @@ export class OutboxProcessor {
 				await this.companySearchIndex.processCompanyCreated(
 					event.payload as { companyId: string },
 				);
+				await this.subscriptionProcessor.createFreeSubscription(
+					(event.payload as { companyId: string }).companyId,
+				);
 				return;
 			case "CompanyUpdated":
 			// The following events all affect the company search document
@@ -384,11 +387,6 @@ export class OutboxProcessor {
 			case "PaymentProviderEventReceived":
 				await this.billingProcessor.processPaymentProviderEvent(
 					(event.payload as { eventId: string }).eventId,
-				);
-				return;
-			case "CompanyCreated":
-				await this.subscriptionProcessor.createFreeSubscription(
-					(event.payload as { companyId: string }).companyId,
 				);
 				return;
 			default:
