@@ -7,6 +7,7 @@ import {
 	NotFoundException,
 } from "@nestjs/common";
 import { CompanyRole, type Prisma } from "@prisma/client";
+import type { EntitlementsService } from "../billing/entitlements/entitlements.service";
 import type { PrismaService } from "../infra/prisma/prisma.service";
 import type { IdempotencyService } from "../outbox/idempotency.service";
 import type { OutboxService } from "../outbox/outbox.service";
@@ -147,6 +148,7 @@ export class CompaniesService {
 		private readonly prisma: PrismaService,
 		private readonly outboxService: OutboxService,
 		private readonly idempotencyService: IdempotencyService,
+		private readonly entitlementsService: EntitlementsService,
 	) {}
 
 	async createCompany(userId: string, data: CreateCompanyDto) {
@@ -537,6 +539,15 @@ export class CompaniesService {
 		companyId: string,
 		targetUserId: string,
 	) {
+		// Check seat limit before transaction
+		const hasSeats = await this.entitlementsService.checkLimit(
+			companyId,
+			"recruiter_seats",
+		);
+		if (!hasSeats) {
+			throw new ForbiddenException("RECRUITER_SEAT_LIMIT_EXCEEDED");
+		}
+
 		return this.prisma.$transaction(async (tx) => {
 			const company = await tx.company.findFirst({
 				where: { id: companyId, deletedAt: null },
