@@ -211,9 +211,23 @@ export class ProfilesService {
     return this.prisma.$transaction(async (tx) => {
       await tx.profileSkill.deleteMany({ where: { profileId } });
       if (skills.length > 0) {
+        // Normalize and upsert Skill records first, then create ProfileSkill with resolved skillId
+        const normalizedNames = skills.map((s) => s.name.trim().toLowerCase());
+        const skillIdMap = await this.resolveSkillIds(
+          tx,
+          skills,
+          normalizedNames,
+        );
+
         try {
           await tx.profileSkill.createMany({
-            data: skills.map((s) => ({ profileId, ...s })),
+            data: skills.map((s, i) => ({
+              profileId,
+              skillId: skillIdMap[i],
+              name: s.name,
+              category: s.category,
+              proficiency: s.proficiency,
+            })),
           });
         } catch (error) {
           if (isPrismaUniqueViolation(error)) {
@@ -226,6 +240,49 @@ export class ProfilesService {
       }
       return tx.profileSkill.findMany({ where: { profileId } });
     });
+  }
+
+  /**
+   * Upserts Skill records for each skill name and returns skillIds in the same order.
+   * Uses normalized (trimmed + lowercased) names for lookup/creation to ensure
+   * consistent taxonomy across the platform.
+   */
+  private async resolveSkillIds(
+    tx: Prisma.TransactionClient,
+    skills: SkillDto[],
+    normalizedNames: string[],
+  ): Promise<string[]> {
+    // Batch lookup all existing skills
+    const existing = await tx.skill.findMany({
+      where: { name: { in: normalizedNames } },
+      select: { id: true, name: true },
+    });
+    const idMap = new Map<string, string>(existing.map((s) => [s.name, s.id]));
+
+    // Batch create missing skills
+    const missing = skills.filter((_, i) => !idMap.has(normalizedNames[i]));
+    if (missing.length > 0) {
+      await tx.skill.createMany({
+        data: missing.map((s) => ({
+          name: s.name.trim().toLowerCase(),
+          category: s.category ?? null,
+        })),
+        skipDuplicates: true,
+      });
+      // Re-fetch newly created IDs
+      const created = await tx.skill.findMany({
+        where: {
+          name: { in: missing.map((s) => s.name.trim().toLowerCase()) },
+        },
+        select: { id: true, name: true },
+      });
+      for (const s of created) {
+        idMap.set(s.name, s.id);
+      }
+    }
+
+    // Map in original order
+    return normalizedNames.map((n) => idMap.get(n)!);
   }
 
   async replaceExperiences(profileId: string, experiences: ExperienceDto[]) {

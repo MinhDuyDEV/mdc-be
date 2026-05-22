@@ -38,6 +38,12 @@ describe('ProfilesService', () => {
         findMany: jest.fn(),
         findUnique: jest.fn(),
       },
+      skill: {
+        findUnique: jest.fn(),
+        findMany: jest.fn(),
+        create: jest.fn(),
+        createMany: jest.fn(),
+      },
       experience: {
         deleteMany: jest.fn(),
         createMany: jest.fn(),
@@ -269,6 +275,16 @@ describe('ProfilesService', () => {
       jest
         .spyOn(prisma.profileSkill, 'findMany')
         .mockResolvedValue([{ id: 's1', name: 'TypeScript' }] as any);
+      // Mock skill resolution for replaceSkills
+      jest.spyOn(prisma.skill, 'findMany').mockResolvedValue([]);
+      jest.spyOn(prisma.skill, 'createMany').mockResolvedValue({ count: 1 });
+      // Mock second findMany (re-fetch after createMany)
+      jest
+        .spyOn(prisma.skill, 'findMany')
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: 'skill-uuid-ts', name: 'typescript' },
+        ] as any);
 
       await service.updateOwnProfile(user, {
         skills: [{ name: 'TypeScript', proficiency: 'ADVANCED' }],
@@ -282,6 +298,7 @@ describe('ProfilesService', () => {
           data: [
             {
               profileId: 'prof-1',
+              skillId: 'skill-uuid-ts',
               name: 'TypeScript',
               proficiency: 'ADVANCED',
             },
@@ -545,6 +562,18 @@ describe('ProfilesService', () => {
       jest
         .spyOn(prisma.profileSkill, 'deleteMany')
         .mockResolvedValue({ count: 1 });
+      // Mock skill lookups: resolveSkillIds normalizes names (lowercased)
+      // Batch: findMany returns one existing, then after createMany we re-fetch
+      jest
+        .spyOn(prisma.skill, 'findMany')
+        .mockResolvedValueOnce([
+          { id: 'skill-uuid-ts', name: 'typescript' },
+        ] as any)
+        .mockResolvedValueOnce([
+          { id: 'skill-uuid-js', name: 'javascript' },
+        ] as any);
+      jest.spyOn(prisma.skill, 'createMany').mockResolvedValue({ count: 1 });
+
       jest
         .spyOn(prisma.profileSkill, 'createMany')
         .mockResolvedValue({ count: 2 });
@@ -563,9 +592,15 @@ describe('ProfilesService', () => {
       });
       expect(prisma.profileSkill.createMany).toHaveBeenCalledWith({
         data: [
-          { profileId: 'prof-1', name: 'TypeScript', proficiency: 'ADVANCED' },
           {
             profileId: 'prof-1',
+            skillId: 'skill-uuid-ts',
+            name: 'TypeScript',
+            proficiency: 'ADVANCED',
+          },
+          {
+            profileId: 'prof-1',
+            skillId: 'skill-uuid-js',
             name: 'JavaScript',
             proficiency: 'INTERMEDIATE',
           },
@@ -578,6 +613,15 @@ describe('ProfilesService', () => {
       jest
         .spyOn(prisma.profileSkill, 'deleteMany')
         .mockResolvedValue({ count: 0 });
+      // Mock skill resolution before createMany fails (batched)
+      jest.spyOn(prisma.skill, 'findMany').mockResolvedValue([]);
+      jest.spyOn(prisma.skill, 'createMany').mockResolvedValue({ count: 1 });
+      jest
+        .spyOn(prisma.skill, 'findMany')
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([
+          { id: 'skill-uuid-1', name: 'typescript' },
+        ] as any);
       jest
         .spyOn(prisma.profileSkill, 'createMany')
         .mockRejectedValue(createPrismaUniqueViolationError());
