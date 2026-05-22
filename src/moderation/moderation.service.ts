@@ -207,7 +207,7 @@ export class ModerationService {
       case 'POST':
         await tx.post.update({
           where: { id: targetId },
-          data: { contentStatus: PostStatus.HIDDEN },
+          data: { contentStatus: PostStatus.REMOVED_BY_MODERATOR },
         });
         break;
       case 'COMMENT':

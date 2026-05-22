@@ -5,9 +5,10 @@ import {
   Injectable,
 } from '@nestjs/common';
 import type { Reflector } from '@nestjs/core';
-import { AdminRole } from '@prisma/client';
+import { type AdminPermissionName, AdminRole } from '@prisma/client';
 import type { PrismaService } from '../../infra/prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/current-user.interface';
+import { PERMISSIONS_METADATA_KEY } from '../decorators/permissions.decorator';
 import {
   ROLES_METADATA_KEY,
   type RoleName,
@@ -42,7 +43,14 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    if (!requiredRoles || requiredRoles.length === 0) {
+    const requiredPermissions = this.reflector.getAllAndOverride<
+      AdminPermissionName[]
+    >(PERMISSIONS_METADATA_KEY, [context.getHandler(), context.getClass()]);
+
+    if (
+      (!requiredRoles || requiredRoles.length === 0) &&
+      (!requiredPermissions || requiredPermissions.length === 0)
+    ) {
       return true;
     }
 
@@ -55,20 +63,48 @@ export class RolesGuard implements CanActivate {
 
     const adminUser = await this.prisma.adminUser.findUnique({
       where: { userId: user.id },
-      select: { role: true },
+      select: {
+        role: true,
+        permissions: { select: { permission: true } },
+      },
     });
 
     if (!adminUser) {
       throw new ForbiddenException('Admin access required');
     }
 
-    const userLevel = ROLE_HIERARCHY[adminUser.role];
-    const requiredLevel = Math.min(
-      ...requiredRoles.map((r) => ROLE_HIERARCHY[ROLE_NAME_TO_ADMIN_ROLE[r]]),
-    );
+    // Check role hierarchy first
+    if (requiredRoles && requiredRoles.length > 0) {
+      const userLevel = ROLE_HIERARCHY[adminUser.role];
+      const requiredLevel = Math.min(
+        ...requiredRoles.map((r) => ROLE_HIERARCHY[ROLE_NAME_TO_ADMIN_ROLE[r]]),
+      );
 
-    if (userLevel < requiredLevel) {
-      throw new ForbiddenException('Insufficient permissions');
+      if (userLevel < requiredLevel) {
+        throw new ForbiddenException('Insufficient permissions');
+      }
+    }
+
+    // SUPER_ADMIN bypasses permission checks
+    if (adminUser.role === AdminRole.SUPER_ADMIN) {
+      return true;
+    }
+
+    // Check specific permissions
+    if (requiredPermissions && requiredPermissions.length > 0) {
+      const userPermissions = new Set(
+        adminUser.permissions.map((p) => p.permission),
+      );
+
+      const hasPermission = requiredPermissions.some((p) =>
+        userPermissions.has(p),
+      );
+
+      if (!hasPermission) {
+        throw new ForbiddenException(
+          'You do not have the required admin permission',
+        );
+      }
     }
 
     return true;

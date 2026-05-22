@@ -248,6 +248,7 @@ enum PostStatus {
   DELETED
   FLAGGED
   HIDDEN
+  REMOVED_BY_MODERATOR
 }
 
 enum PostVisibility {

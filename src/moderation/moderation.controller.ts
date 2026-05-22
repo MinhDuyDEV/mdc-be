@@ -14,6 +14,7 @@ import type { ReportStatus } from '@prisma/client';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type {
@@ -41,6 +42,7 @@ export class ModerationController {
   @Get('reports')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin', 'moderator')
+  @Permissions('MODERATE_CONTENT')
   async listReports(
     @Query('status') status?: ReportStatus,
   ): Promise<{ data: ReportResponseDto[] }> {
@@ -51,6 +53,7 @@ export class ModerationController {
   @Patch('reports/:id/claim')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin', 'moderator')
+  @Permissions('MODERATE_CONTENT')
   async claimReport(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -62,6 +65,7 @@ export class ModerationController {
   @Post('actions')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin', 'moderator')
+  @Permissions('MODERATE_CONTENT')
   async applyAction(
     @Body() dto: CreateModerationActionDto,
     @CurrentUser() user: AuthenticatedUser,

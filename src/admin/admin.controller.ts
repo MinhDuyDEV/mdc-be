@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
+import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { AdminService } from './admin.service';
@@ -28,11 +29,13 @@ export class AdminController {
   constructor(private readonly service: AdminService) {}
 
   @Get('users')
+  @Permissions('MANAGE_USERS')
   async listUsers(@Query() query: AdminUserQueryDto) {
     return this.service.listUsers(query);
   }
 
   @Patch('users/:id/status')
+  @Permissions('MANAGE_USERS')
   async updateUserStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserStatusDto,
@@ -43,11 +46,13 @@ export class AdminController {
   }
 
   @Get('companies')
+  @Permissions('MANAGE_COMPANIES')
   async listCompanies(@Query() query: AdminCompanyQueryDto) {
     return this.service.listCompanies(query);
   }
 
   @Patch('companies/:id/verification')
+  @Permissions('MANAGE_COMPANIES')
   async verifyCompany(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VerifyCompanyDto,
@@ -58,6 +63,7 @@ export class AdminController {
   }
 
   @Get('jobs')
+  @Permissions('MANAGE_JOBS')
   async listJobs(@Query() query: AdminJobQueryDto) {
     return this.service.listJobs(query);
   }
