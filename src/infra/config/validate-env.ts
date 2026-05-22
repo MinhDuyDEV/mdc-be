@@ -253,6 +253,67 @@ export function validateEnv(env: RawEnv): AppConfig {
       'THROTTLE_REFRESH_TTL',
       60000,
     ),
+    // Content creation rate limiting
+    throttlePostCreateLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_POST_CREATE_LIMIT',
+      5,
+    ),
+    throttlePostCreateTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_POST_CREATE_TTL',
+      60000,
+    ),
+    throttleCommentCreateLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_COMMENT_CREATE_LIMIT',
+      10,
+    ),
+    throttleCommentCreateTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_COMMENT_CREATE_TTL',
+      60000,
+    ),
+    throttleReactionCreateLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REACTION_CREATE_LIMIT',
+      30,
+    ),
+    throttleReactionCreateTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REACTION_CREATE_TTL',
+      60000,
+    ),
+    throttleMessageSendLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_MESSAGE_SEND_LIMIT',
+      30,
+    ),
+    throttleMessageSendTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_MESSAGE_SEND_TTL',
+      60000,
+    ),
+    throttleReportCreateLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REPORT_CREATE_LIMIT',
+      10,
+    ),
+    throttleReportCreateTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_REPORT_CREATE_TTL',
+      60000,
+    ),
+    throttleProfileUpdateLimit: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_PROFILE_UPDATE_LIMIT',
+      10,
+    ),
+    throttleProfileUpdateTtl: parseOptionalPositiveInteger(
+      env,
+      'THROTTLE_PROFILE_UPDATE_TTL',
+      60000,
+    ),
     // Media upload
     mediaAvatarMaxSizeBytes: parseOptionalPositiveInteger(
       env,

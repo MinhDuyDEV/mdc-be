@@ -61,6 +61,19 @@ export interface AppConfig {
   throttleResendVerificationTtl: number;
   throttleRefreshLimit: number;
   throttleRefreshTtl: number;
+  // Content creation rate limiting
+  throttlePostCreateLimit: number;
+  throttlePostCreateTtl: number;
+  throttleCommentCreateLimit: number;
+  throttleCommentCreateTtl: number;
+  throttleReactionCreateLimit: number;
+  throttleReactionCreateTtl: number;
+  throttleMessageSendLimit: number;
+  throttleMessageSendTtl: number;
+  throttleReportCreateLimit: number;
+  throttleReportCreateTtl: number;
+  throttleProfileUpdateLimit: number;
+  throttleProfileUpdateTtl: number;
   // Media upload
   mediaAvatarMaxSizeBytes: number;
   mediaResumeMaxSizeBytes: number;

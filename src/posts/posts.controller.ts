@@ -12,6 +12,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
@@ -23,7 +24,7 @@ import type { CreatePostDto } from './dto/create-post.dto';
 import type { CreateReactionDto } from './dto/create-reaction.dto';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
-import { PostsService } from './posts.service';
+import type { PostsService } from './posts.service';
 
 @Controller('posts')
 export class PostsController {
@@ -33,6 +34,7 @@ export class PostsController {
   @UseGuards(EmailVerifiedGuard)
   @VerifiedEmail()
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   async createPost(
     @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CreatePostDto,
@@ -91,6 +93,7 @@ export class PostsController {
   @UseGuards(EmailVerifiedGuard)
   @VerifiedEmail()
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   async createComment(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) postId: string,
@@ -125,6 +128,7 @@ export class PostsController {
   @Post(':id/reactions')
   @UseGuards(EmailVerifiedGuard)
   @VerifiedEmail()
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
   async addReaction(
     @CurrentUser() user: AuthenticatedUser,
     @Param('id', ParseUUIDPipe) postId: string,
