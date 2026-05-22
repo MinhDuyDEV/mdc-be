@@ -11,6 +11,7 @@ enum UserStatus {
   ACTIVE
   DISABLED
   DELETED
+  SUSPENDED
 }
 
 enum OutboxEventStatus {
@@ -189,11 +190,64 @@ enum MessageType {
   SYSTEM
 }
 
+enum ReportEntityType {
+  POST
+  COMMENT
+  MESSAGE
+  PROFILE
+  COMPANY
+  JOB
+}
+
+enum ReportCategory {
+  SPAM
+  HARASSMENT
+  HATE_SPEECH
+  MISINFORMATION
+  VIOLENCE
+  IMPERSONATION
+  COPYRIGHT
+  INAPPROPRIATE
+  OTHER
+}
+
+enum ReportStatus {
+  PENDING
+  UNDER_REVIEW
+  RESOLVED_ACTIONED
+  RESOLVED_DISMISSED
+}
+
+enum ModerationActionType {
+  WARN
+  REMOVE_CONTENT
+  SUSPEND_USER
+  BAN_USER
+  DISMISS
+}
+
+enum AdminRole {
+  SUPER_ADMIN
+  ADMIN
+  MODERATOR
+}
+
+enum AdminPermissionName {
+  MANAGE_USERS
+  MANAGE_COMPANIES
+  MANAGE_JOBS
+  MODERATE_CONTENT
+  VIEW_ANALYTICS
+  MANAGE_ADMINS
+}
+
 enum PostStatus {
   DRAFT
   PUBLISHED
   ARCHIVED
   DELETED
+  FLAGGED
+  HIDDEN
 }
 
 enum PostVisibility {
@@ -268,6 +322,13 @@ model User {
   devices                  UserDevice[]
   recommendationFeedback   RecommendationFeedback[]  @relation("RecommendationFeedback")
   recommendationDismissals RecommendationDismissal[] @relation("RecommendationDismissal")
+  reportsCreated           Report[]                  @relation("ReportsCreated")
+  reportsAssigned          Report[]                  @relation("ReportsAssigned")
+  moderatorActions         ModerationAction[]        @relation("ModeratorActions")
+  adminUser                AdminUser?
+  profileViewsByUser       ProfileView[]             @relation("ProfileViewsByUser")
+  companyViewsByUser       CompanyView[]             @relation("CompanyViewsByUser")
+  postImpressionsByUser    PostImpression[]          @relation("PostImpressionsByUser")
 
   @@map("users")
 }
@@ -506,6 +567,7 @@ model Profile {
   certifications Certification[]
   languages      ProfileLanguage[]
   endorsements   Endorsement[]
+  views          ProfileView[]
 
   @@index([searchVector], type: Gin, name: "idx_profiles_search")
   @@map("profiles")
@@ -543,6 +605,7 @@ model Company {
   savedCandidates   SavedCandidate[]
   talentPools       TalentPool[]
   candidateNotes    CandidateNote[]
+  views             CompanyView[]
 
   @@index([slug])
   @@index([industry])
@@ -818,6 +881,7 @@ model Job {
   applyMode       ApplyMode                @map("apply_mode")
   applyUrl        String?                  @map("apply_url") @db.VarChar(2048)
   status          JobStatus                @default(DRAFT)
+  contentStatus   String?                  @map("content_status") @db.VarChar(50)
   employmentType  EmploymentType           @map("employment_type")
   workplaceType   WorkplaceType            @map("workplace_type")
   location        String?                  @db.VarChar(255)
@@ -1152,6 +1216,7 @@ model Post {
   content       String                     @db.Text
   visibility    PostVisibility             @default(PUBLIC)
   status        PostStatus                 @default(PUBLISHED)
+  contentStatus PostStatus?                @map("content_status")
   commentCount  Int                        @default(0) @map("comment_count")
   reactionCount Int                        @default(0) @map("reaction_count")
   searchVector  Unsupported("tsvector")?   @default(dbgenerated("''::tsvector")) @map("search_vector")
@@ -1166,7 +1231,8 @@ model Post {
   media     PostMedia[]
   savedBy   SavedPost[]
   hiddenBy  HiddenPost[]
-  mentions  Mention[]
+  mentions    Mention[]
+  impressions PostImpression[]
 
   @@index([authorId, createdAt(sort: Desc), id(sort: Desc)], name: "idx_posts_author_timeline")
   @@index([createdAt(sort: Desc), id(sort: Desc)], name: "idx_posts_feed")
@@ -1180,8 +1246,9 @@ model Comment {
   postId    String    @map("post_id") @db.Uuid
   authorId  String    @map("author_id") @db.Uuid
   parentId  String?   @map("parent_id") @db.Uuid
-  content   String    @db.Text
-  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
+  content       String    @db.Text
+  contentStatus String?   @map("content_status") @db.VarChar(50)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
@@ -1427,4 +1494,152 @@ model SearchReindexRun {
   @@index([status])
   @@index([createdAt])
   @@map("search_reindex_runs")
+}
+
+model Report {
+  id           String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reporterId   String            @map("reporter_id") @db.Uuid
+  targetEntity ReportEntityType  @map("target_entity")
+  targetId     String            @map("target_id") @db.Uuid
+  category     ReportCategory
+  description  String?           @db.Text
+  status       ReportStatus      @default(PENDING)
+  priority     Int               @default(1) @db.SmallInt
+  assignedToId String?           @map("assigned_to_id") @db.Uuid
+  resolvedAt   DateTime?         @map("resolved_at") @db.Timestamptz(3)
+  createdAt    DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  reporter   User  @relation("ReportsCreated", fields: [reporterId], references: [id], onDelete: Cascade)
+  assignedTo User? @relation("ReportsAssigned", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@unique([reporterId, targetEntity, targetId], name: "unique_active_report")
+  @@index([targetEntity, targetId, createdAt(sort: Desc)])
+  @@index([status, priority(sort: Desc), createdAt(sort: Desc)])
+  @@index([assignedToId])
+  @@map("reports")
+}
+
+model ModerationAction {
+  id               String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  reportId         String                @map("report_id") @db.Uuid
+  moderatorId      String                @map("moderator_id") @db.Uuid
+  actionType       ModerationActionType  @map("action_type")
+  targetEntity     ReportEntityType      @map("target_entity")
+  targetId         String                @map("target_id") @db.Uuid
+  reason           String                @db.Text
+  durationHours    Int?                  @map("duration_hours")
+  expiresAt        DateTime?             @map("expires_at") @db.Timestamptz(3)
+  createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  moderator User @relation("ModeratorActions", fields: [moderatorId], references: [id], onDelete: Cascade)
+
+  @@index([targetEntity, targetId])
+  @@index([moderatorId])
+  @@index([createdAt(sort: Desc)])
+  @@map("moderation_actions")
+}
+
+model AdminUser {
+  id        String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String    @unique @map("user_id") @db.Uuid
+  role      AdminRole
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permissions AdminPermission[]
+
+  @@index([role])
+  @@map("admin_users")
+}
+
+model AdminPermission {
+  id          String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  adminUserId String              @map("admin_user_id") @db.Uuid
+  permission  AdminPermissionName
+  createdAt   DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  adminUser AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Cascade)
+
+  @@unique([adminUserId, permission])
+  @@map("admin_permissions")
+}
+
+model ProfileView {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  profileId String   @map("profile_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  source    String?  @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  user    User?   @relation("ProfileViewsByUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([profileId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("profile_views")
+}
+
+model CompanyView {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId String   @map("company_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.VarChar(512)
+  source    String?  @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user    User?   @relation("CompanyViewsByUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([companyId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("company_views")
+}
+
+model PostImpression {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  postId    String   @map("post_id") @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  ipHash    String?  @map("ip_hash") @db.VarChar(64)
+  source    String?  @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  post Post  @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User? @relation("PostImpressionsByUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([postId, createdAt(sort: Desc)])
+  @@index([userId])
+  @@map("post_impressions")
+}
+
+model SlottedCounter {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  entityType String   @map("entity_type") @db.VarChar(50)
+  entityId   String   @map("entity_id") @db.Uuid
+  slot       Int      @db.SmallInt
+  count      BigInt   @default(0)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  @@unique([entityType, entityId, slot])
+  @@index([entityType, entityId])
+  @@map("slotted_counters")
+}
+
+model AnalyticsDailyAggregate {
+  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  date           DateTime @db.Date
+  metricType     String   @map("metric_type") @db.VarChar(50)
+  entityType     String?  @map("entity_type") @db.VarChar(50)
+  entityId       String?  @map("entity_id") @db.Uuid
+  count          BigInt
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([date, metricType, entityType, entityId])
+  @@index([date, metricType])
+  @@map("analytics_daily_aggregates")
 }
