@@ -91,11 +91,12 @@ export class RecommendationsService {
         headline: user.profile?.headline || null,
         location: user.profile?.location || null,
         profilePictureUrl: null,
+        mutualConnectionCount: scored.score,
         score: scored.score,
       });
     }
 
-    const hasMore = enriched.length > limit;
+    const hasMore = scoredIds.length > limit;
     const data = hasMore ? enriched.slice(0, limit) : enriched;
     const last = data.at(-1);
     const nextCursor =
@@ -202,7 +203,7 @@ export class RecommendationsService {
       });
     }
 
-    const hasMore = enriched.length > limit;
+    const hasMore = scoredIds.length > limit;
     const data = hasMore ? enriched.slice(0, limit) : enriched;
     const last = data.at(-1);
     const nextCursor =
@@ -291,7 +292,7 @@ export class RecommendationsService {
       });
     }
 
-    const hasMore = enriched.length > limit;
+    const hasMore = scoredIds.length > limit;
     const data = hasMore ? enriched.slice(0, limit) : enriched;
     const last = data.at(-1);
     const nextCursor =
