@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
-import type { PrismaService } from '../infra/prisma';
-import type { DeadLetterService } from './dead-letter.service';
+import { PrismaService } from '../infra/prisma';
+import { DeadLetterService } from './dead-letter.service';
 import type { ApplicationEmailProcessor } from './processors/application-email.processor';
+import type { BillingProcessor } from './processors/billing.processor';
 import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import type { JobSearchIndexProcessor } from './processors/job-search-index.processor';
 import type { MessagingProcessor } from './processors/messaging.processor';
@@ -14,6 +15,7 @@ import type { NotificationProcessor } from './processors/notification.processor'
 import type { PostInteractionProcessor } from './processors/post-interaction.processor';
 import type { PostSearchIndexProcessor } from './processors/post-search-index.processor';
 import type { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import type { SubscriptionProcessor } from './processors/subscription.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -42,6 +44,8 @@ export class OutboxProcessor {
     private readonly postInteraction: PostInteractionProcessor,
     private readonly postSearchIndex: PostSearchIndexProcessor,
     private readonly profileSearchIndex: ProfileSearchIndexProcessor,
+    private readonly billingProcessor: BillingProcessor,
+    private readonly subscriptionProcessor: SubscriptionProcessor,
     @InjectPinoLogger(OutboxProcessor.name)
     private readonly logger: PinoLogger,
   ) {
@@ -159,6 +163,9 @@ export class OutboxProcessor {
       case 'CompanyCreated':
         await this.companySearchIndex.processCompanyCreated(
           event.payload as { companyId: string },
+        );
+        await this.subscriptionProcessor.createFreeSubscription(
+          (event.payload as { companyId: string }).companyId,
         );
         return;
       case 'CompanyUpdated':
@@ -375,6 +382,11 @@ export class OutboxProcessor {
         // Softer side-effect — just log for now; future: realtime fan-out
         this.logger.debug(
           `ConversationCreated: conv=${(event.payload as { conversationId: string }).conversationId}`,
+        );
+        return;
+      case 'PaymentProviderEventReceived':
+        await this.billingProcessor.processPaymentProviderEvent(
+          (event.payload as { eventId: string }).eventId,
         );
         return;
       default:

@@ -1,6 +1,7 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { CompanyRole, Industry } from '@prisma/client';
+import { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -11,6 +12,7 @@ describe('CompaniesService', () => {
   let mockPrismaValue: any;
   let mockOutboxService: any;
   let mockIdempotencyService: any;
+  let mockEntitlementsService: any;
 
   beforeEach(async () => {
     mockPrismaValue = {
@@ -54,6 +56,10 @@ describe('CompaniesService', () => {
     mockIdempotencyService = {
       claim: jest.fn().mockResolvedValue({ id: 'idem-1' }),
     };
+    mockEntitlementsService = {
+      checkLimit: jest.fn().mockResolvedValue(true),
+      consumeCredit: jest.fn().mockResolvedValue(9),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -61,6 +67,7 @@ describe('CompaniesService', () => {
         { provide: PrismaService, useValue: mockPrismaValue },
         { provide: OutboxService, useValue: mockOutboxService },
         { provide: IdempotencyService, useValue: mockIdempotencyService },
+        { provide: EntitlementsService, useValue: mockEntitlementsService },
       ],
     }).compile();
 

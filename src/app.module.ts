@@ -9,6 +9,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ApplicationsModule } from './applications/applications.module';
 import { AuthModule } from './auth/auth.module';
+import { BillingModule } from './billing/billing.module';
 import { CommonModule } from './common';
 import { CompaniesModule } from './companies/companies.module';
 import { ConnectionsModule } from './connections/connections.module';
@@ -59,6 +60,7 @@ import { UsersModule } from './users/users.module';
     AnalyticsModule,
     ApplicationsModule,
     AuthModule,
+    BillingModule,
     CompaniesModule,
     EmailModule,
     JobsModule,

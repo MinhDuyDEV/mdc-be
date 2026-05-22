@@ -5,10 +5,11 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { PrismaTransaction } from '../infra/prisma';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../outbox/idempotency.service';
+import type { OutboxService } from '../outbox/outbox.service';
 import type {
   AddCandidateToPoolDto,
   SaveCandidateDto,
@@ -46,8 +47,8 @@ function decodeCursor(cursor: string): CursorPayload | null {
  *
  * All endpoints are company-scoped. The shared `assertEmployerRole` helper
  * resolves OWNER/ADMIN or active RecruiterSeat membership for the caller.
- * Methods throw `ForbiddenException('INSUFFICIENT_COMPANY_ROLE')` for
- * candidates and non-recruiters trying to access these endpoints.
+ * Billing entitlements are enforced: a recruiter seat can only be used if
+ * the company plan still has available recruiter seats.
  */
 @Injectable()
 export class RecruitingService {
@@ -55,6 +56,7 @@ export class RecruitingService {
     private readonly prisma: PrismaService,
     private readonly outboxService: OutboxService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   private async assertEmployerRole(companyId: string, userId: string) {
@@ -75,6 +77,16 @@ export class RecruitingService {
     });
     if (!seat) {
       throw new ForbiddenException('INSUFFICIENT_COMPANY_ROLE');
+    }
+
+    // Enforce billing seat limit: a recruiter seat can only be used if the
+    // company plan still has available recruiter seats.
+    const hasSeats = await this.entitlementsService.checkLimit(
+      companyId,
+      'recruiter_seats',
+    );
+    if (!hasSeats) {
+      throw new ForbiddenException('ENTITLEMENT_EXCEEDED');
     }
   }
 

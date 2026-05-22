@@ -69,6 +69,12 @@ describe('OutboxProcessor', () => {
       processProfileUpdated: jest.fn(),
     };
 
+    const mockBillingProcessor = {
+      processPaymentProviderEvent: jest.fn().mockResolvedValue(undefined),
+    };
+    const mockSubscriptionProcessor = {
+      createFreeSubscription: jest.fn().mockResolvedValue(undefined),
+    };
     const mockLogger = {
       debug: jest.fn(),
       warn: jest.fn(),
@@ -87,6 +93,8 @@ describe('OutboxProcessor', () => {
       mockPostInteraction as any,
       mockPostSearchIndex as any,
       mockProfileSearchIndex as any,
+      mockBillingProcessor as any,
+      mockSubscriptionProcessor as any,
       mockLogger as any,
     );
     return {

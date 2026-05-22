@@ -4,9 +4,9 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import type { Reflector } from '@nestjs/core';
+import { Reflector } from '@nestjs/core';
 import { type AdminPermissionName, AdminRole } from '@prisma/client';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/current-user.interface';
 import { PERMISSIONS_METADATA_KEY } from '../decorators/permissions.decorator';
 import {

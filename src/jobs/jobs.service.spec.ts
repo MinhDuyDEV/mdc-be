@@ -10,6 +10,7 @@ import {
   JobStatus,
   WorkplaceType,
 } from '@prisma/client';
+import type { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { PrismaService } from '../infra/prisma/prisma.service';
 import type { IdempotencyService } from '../outbox/idempotency.service';
 import { JobsService } from './jobs.service';
@@ -102,16 +103,19 @@ describe('JobsService', () => {
   let prisma: MockPrisma;
   let outbox: { emit: jest.Mock };
   let idempotency: { claim: jest.Mock };
+  let entitlements: { consumeCredit: jest.Mock };
   let service: JobsService;
 
   beforeEach(() => {
     prisma = buildMockPrisma();
     outbox = { emit: jest.fn().mockResolvedValue(undefined) };
     idempotency = { claim: jest.fn().mockResolvedValue({}) };
+    entitlements = { consumeCredit: jest.fn().mockResolvedValue(undefined) };
     service = new JobsService(
       prisma as unknown as PrismaService,
       outbox,
       idempotency as unknown as IdempotencyService,
+      entitlements as unknown as EntitlementsService,
     );
   });
 

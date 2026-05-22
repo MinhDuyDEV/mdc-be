@@ -5,9 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Reflector } from '@nestjs/core';
+import type { Reflector } from '@nestjs/core';
 import { CompanyRole as CompanyRoleEnum } from '@prisma/client';
-import { PrismaService } from '../../infra/prisma/prisma.service';
+import type { PrismaService } from '../../infra/prisma/prisma.service';
 import type { AuthenticatedUser } from '../auth/current-user.interface';
 import {
   COMPANY_ROLE_METADATA_KEY,
@@ -21,6 +21,7 @@ import {
 export const COMPANY_ROLE_LEVEL: Record<CompanyRoleName, number> = {
   OWNER: 3,
   ADMIN: 2,
+  BILLING_ADMIN: 2,
   MEMBER: 1,
 };
 

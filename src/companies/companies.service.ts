@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CompanyRole, type Prisma } from '@prisma/client';
+import { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -20,6 +21,7 @@ import type { UpdateMemberRoleDto } from './dto/update-member-role.dto';
 const ROLE_LEVEL: Record<CompanyRole, number> = {
   OWNER: 3,
   ADMIN: 2,
+  BILLING_ADMIN: 2,
   MEMBER: 1,
 };
 
@@ -146,6 +148,7 @@ export class CompaniesService {
     private readonly prisma: PrismaService,
     private readonly outboxService: OutboxService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   async createCompany(userId: string, data: CreateCompanyDto) {
@@ -537,6 +540,18 @@ export class CompaniesService {
     targetUserId: string,
   ) {
     return this.prisma.$transaction(async (tx) => {
+      // Check seat limit inside transaction to prevent TOCTOU race
+      const entitlement = await tx.companyEntitlement.findFirst({
+        where: {
+          companyId,
+          entitlementType: 'recruiter_seats',
+          validUntil: { gte: new Date() },
+        },
+      });
+      if (!entitlement || entitlement.creditsRemaining <= 0) {
+        throw new ForbiddenException('RECRUITER_SEAT_LIMIT_EXCEEDED');
+      }
+
       const company = await tx.company.findFirst({
         where: { id: companyId, deletedAt: null },
       });
@@ -598,6 +613,16 @@ export class CompaniesService {
       const seat = await tx.recruiterSeat.findUniqueOrThrow({
         where: { id: availableSeat.id },
       });
+
+      // Consume one recruiter seat credit atomically within the same transaction
+      await this.entitlementsService.consumeCredit(
+        companyId,
+        'recruiter_seats',
+        1,
+        'RecruiterSeat',
+        seat.id,
+        tx,
+      );
 
       await this.outboxService.emit(tx as any, {
         eventType: 'RecruiterSeatAllocated',

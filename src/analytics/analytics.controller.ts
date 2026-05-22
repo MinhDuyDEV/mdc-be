@@ -16,7 +16,7 @@ import { OptionalAuth } from '../common/auth/public.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import type { AnalyticsService } from './analytics.service';
+import { AnalyticsService } from './analytics.service';
 import type { RecordEventDto } from './dto';
 
 @Controller('analytics')

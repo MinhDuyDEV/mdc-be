@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
-import type { SearchIndexService } from '../../search/search-index.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import { SearchIndexService } from '../../search/search-index.service';
 
 interface ProfileUpdatedPayload {
   profileId: string;

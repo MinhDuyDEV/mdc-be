@@ -24,7 +24,7 @@ import type { CreatePostDto } from './dto/create-post.dto';
 import type { CreateReactionDto } from './dto/create-reaction.dto';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
-import type { PostsService } from './posts.service';
+import { PostsService } from './posts.service';
 
 @Controller('posts')
 export class PostsController {

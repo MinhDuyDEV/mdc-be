@@ -22,7 +22,7 @@ import type {
   CreateReportDto,
   ReportResponseDto,
 } from './dto';
-import type { ModerationService } from './moderation.service';
+import { ModerationService } from './moderation.service';
 
 @Controller('moderation')
 export class ModerationController {

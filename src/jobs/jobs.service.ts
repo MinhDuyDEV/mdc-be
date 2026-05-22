@@ -5,11 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ApplyMode, JobStatus, Prisma } from '@prisma/client';
+import type { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import type { PrismaTransaction } from '../infra/prisma';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../outbox/idempotency.service';
+import type { OutboxService } from '../outbox/outbox.service';
 import type { CreateJobDto } from './dto/create-job.dto';
 import { toJobResponseDto } from './dto/job.response.dto';
 import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
@@ -108,6 +109,7 @@ export class JobsService {
     private readonly prisma: PrismaService,
     private readonly outboxService: OutboxService,
     private readonly idempotencyService: IdempotencyService,
+    private readonly entitlementsService: EntitlementsService,
   ) {}
 
   /**
@@ -489,6 +491,17 @@ export class JobsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      // Consume credit inside the SAME transaction — credit decrement and
+      // status update commit together, or both roll back.
+      await this.entitlementsService.consumeCredit(
+        job.companyId,
+        'job_posts',
+        1,
+        'Job',
+        jobId,
+        tx,
+      );
+
       const updated = await tx.job.update({
         where: { id: jobId },
         data: { status: JobStatus.PUBLISHED, publishedAt: new Date() },

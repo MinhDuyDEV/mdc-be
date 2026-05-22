@@ -329,5 +329,10 @@ export function validateEnv(env: RawEnv): AppConfig {
       parseOptionalString(env, 'MEDIA_ALLOWED_CONTENT_TYPES') ||
         'image/jpeg,image/png,image/gif,image/webp,application/pdf',
     ),
+    // Billing
+    billingProvider: parseOptionalString(env, 'BILLING_PROVIDER') || 'mock',
+    billingWebhookSecret: requireString(env, 'BILLING_WEBHOOK_SECRET'),
+    billingDefaultFreePlanSlug:
+      parseOptionalString(env, 'BILLING_DEFAULT_FREE_PLAN_SLUG') || 'free',
   };
 }

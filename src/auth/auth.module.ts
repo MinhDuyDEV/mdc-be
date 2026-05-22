@@ -16,6 +16,7 @@ import { TokenService } from './token.service';
 @Module({
   imports: [
     JwtModule.registerAsync({
+      global: true,
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig, true>) => ({
@@ -38,6 +39,6 @@ import { TokenService } from './token.service';
     AuthGuard,
     { provide: APP_GUARD, useExisting: AuthGuard },
   ],
-  exports: [AuthService, TokenService, AuthGuard],
+  exports: [AuthService, TokenService, AuthGuard, JwtModule],
 })
 export class AuthModule {}

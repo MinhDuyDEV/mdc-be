@@ -14,8 +14,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { SearchQueryDto } from './dto/search.query.dto';
 import type { SearchResponseDto } from './dto/search.response.dto';
-import type { SearchIndexService } from './search-index.service';
-import type { SearchQueryService } from './search-query.service';
+import { SearchIndexService } from './search-index.service';
+import { SearchQueryService } from './search-query.service';
 
 interface AuthenticatedRequest {
   user?: { id: string };

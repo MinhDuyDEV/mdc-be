@@ -7,6 +7,7 @@ import { IdempotencyService } from './idempotency.service';
 import { OutboxProcessor } from './outbox.processor';
 import { OutboxService } from './outbox.service';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { BillingProcessor } from './processors/billing.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
 import { MessagingProcessor } from './processors/messaging.processor';
@@ -15,6 +16,7 @@ import { PostInteractionProcessor } from './processors/post-interaction.processo
 import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import { SubscriptionProcessor } from './processors/subscription.processor';
 
 @Module({
   imports: [InfraModule, forwardRef(() => RealtimeModule), SearchModule],
@@ -32,6 +34,8 @@ import { ProfileSearchIndexProcessor } from './processors/profile-search-index.p
     JobSearchIndexProcessor,
     MessagingProcessor,
     ApplicationEmailProcessor,
+    BillingProcessor,
+    SubscriptionProcessor,
   ],
   exports: [DeadLetterService, IdempotencyService, OutboxService],
 })

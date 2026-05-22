@@ -78,4 +78,8 @@ export interface AppConfig {
   mediaAvatarMaxSizeBytes: number;
   mediaResumeMaxSizeBytes: number;
   mediaAllowedContentTypes: string[];
+  // Billing
+  billingProvider: string;
+  billingWebhookSecret: string;
+  billingDefaultFreePlanSlug: string;
 }
