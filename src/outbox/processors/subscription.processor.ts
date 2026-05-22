@@ -1,13 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { ConfigService } from '@nestjs/config';
+import { ConfigService } from '@nestjs/config';
+import { FEATURE_KEY_TO_ENTITLEMENT } from '../../billing/billing.constants';
 import type { AppConfig } from '../../infra/config';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
-
-const FEATURE_KEY_TO_ENTITLEMENT: Record<string, string> = {
-  max_jobs: 'job_posts',
-  max_members: 'recruiter_seats',
-  max_recruiter_seats: 'recruiter_seats',
-};
+import { PrismaService } from '../../infra/prisma/prisma.service';
 
 @Injectable()
 export class SubscriptionProcessor {
@@ -35,17 +30,18 @@ export class SubscriptionProcessor {
     const periodEnd = new Date(now);
     periodEnd.setFullYear(periodEnd.getFullYear() + 100); // Effectively permanent
 
-    // Use upsert for idempotency under concurrent processing
-    await this.prisma.$transaction(async (tx) => {
+    // Use create with on-conflict handling for idempotency
+    // The unique constraint on companyId guards against concurrent duplicates
+    const subscription = await this.prisma.$transaction(async (tx) => {
       const existing = await tx.subscription.findUnique({
         where: { companyId },
       });
       if (existing) {
         this.logger.debug(`Company ${companyId} already has subscription`);
-        return;
+        return null;
       }
 
-      const subscription = await tx.subscription.create({
+      return tx.subscription.create({
         data: {
           companyId,
           planId: freePlan.id,
@@ -54,8 +50,14 @@ export class SubscriptionProcessor {
           currentPeriodEnd: periodEnd,
         },
       });
+    });
 
-      // Create entitlement grants and materialized view
+    // Race: concurrent processing may create a duplicate via P2002 unique constraint.
+    // Outbox retry with backoff will re-enter findUnique check and find the now-existing
+    // subscription on next attempt.
+    if (!subscription) return;
+
+    await this.prisma.$transaction(async (tx) => {
       const features = freePlan.features as Record<string, number>;
       for (const [key, value] of Object.entries(features)) {
         await tx.entitlementGrant.create({

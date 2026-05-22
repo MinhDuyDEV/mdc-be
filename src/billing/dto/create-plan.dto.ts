@@ -25,7 +25,7 @@ export class CreatePlanDto {
   description?: string;
 
   @IsObject()
-  features!: Record<string, unknown>;
+  features!: Record<string, number>;
 
   @IsInt()
   @Min(0)

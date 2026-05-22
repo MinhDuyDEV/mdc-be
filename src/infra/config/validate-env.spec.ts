@@ -36,6 +36,8 @@ const validEnv: RawEnv = {
   // JWT Authentication
   JWT_ACCESS_SECRET: 'test-access-secret-min-32-chars-long',
   JWT_REFRESH_SECRET: 'test-refresh-secret-min-32-chars-long',
+  // Billing
+  BILLING_WEBHOOK_SECRET: 'whsec_test_secret',
   // Cookie Configuration
   COOKIE_SECRET: 'test-cookie-secret-min-32-chars-long',
   COOKIE_SECURE: 'false',

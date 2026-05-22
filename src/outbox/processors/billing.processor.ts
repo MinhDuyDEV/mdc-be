@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 
 @Injectable()
 export class BillingProcessor {
@@ -36,8 +36,8 @@ export class BillingProcessor {
         handled = await this.handleSubscriptionDeleted(event.id, payload);
         break;
       default:
-        this.logger.debug(`Unhandled event type: ${event.eventType}`);
-        return; // Don't mark as processed for unknown event types
+        this.logger.warn(`Unhandled event type: ${event.eventType}`);
+        return; // Don't mark as processed for unknown event types — outbox will retry/dead-letter
     }
 
     // Only mark as processed if the handler actually processed the event
@@ -109,7 +109,7 @@ export class BillingProcessor {
 
     if (!providerSubscriptionId) return false;
 
-    await this.prisma.subscription.updateMany({
+    const result = await this.prisma.subscription.updateMany({
       where: { providerSubscriptionId },
       data: {
         status: status ?? 'active',
@@ -121,6 +121,13 @@ export class BillingProcessor {
         ),
       },
     });
+
+    if (result.count === 0) {
+      this.logger.warn(
+        `Subscription not found for provider ID: ${providerSubscriptionId}`,
+      );
+      return false;
+    }
 
     return true;
   }

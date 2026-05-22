@@ -1,6 +1,10 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import type { PrismaService } from '../../infra/prisma/prisma.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 
 /**
  * Alias for the interactive-transaction client Prisma passes to
@@ -14,11 +18,13 @@ export class EntitlementsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async checkLimit(companyId: string, featureKey: string): Promise<boolean> {
+    const now = new Date();
     const entitlement = await this.prisma.companyEntitlement.findFirst({
       where: {
         companyId,
         entitlementType: featureKey,
-        validUntil: { gte: new Date() },
+        validFrom: { lte: now },
+        validUntil: { gte: now },
       },
     });
 
@@ -41,12 +47,18 @@ export class EntitlementsService {
     referenceId?: string,
     tx?: TxClient,
   ): Promise<number> {
+    if (!Number.isInteger(amount) || amount <= 0) {
+      throw new BadRequestException('Amount must be a positive integer');
+    }
+
     const run = async (c: TxClient): Promise<number> => {
+      const now = new Date();
       const entitlement = await c.companyEntitlement.findFirst({
         where: {
           companyId,
           entitlementType,
-          validUntil: { gte: new Date() },
+          validFrom: { lte: now },
+          validUntil: { gte: now },
         },
       });
 

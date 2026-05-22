@@ -71,6 +71,7 @@ describe('EntitlementsService', () => {
         where: {
           companyId: 'company-1',
           entitlementType: 'job_posts',
+          validFrom: { lte: expect.any(Date) },
           validUntil: { gte: expect.any(Date) },
         },
       });
@@ -106,12 +107,15 @@ describe('EntitlementsService', () => {
         where: {
           companyId: 'company-1',
           entitlementType: 'job_posts',
+          validFrom: { lte: expect.any(Date) },
           validUntil: { gte: expect.any(Date) },
         },
       });
     });
   });
 
+  // -----------------------------------------------------------------------
+  // consumeCredit
   // -----------------------------------------------------------------------
   // consumeCredit
   // -----------------------------------------------------------------------

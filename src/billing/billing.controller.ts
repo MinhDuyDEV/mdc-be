@@ -14,14 +14,14 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import { Public } from '../common/auth/public.decorator';
+import { OptionalAuth, Public } from '../common/auth/public.decorator';
 import { CompanyRole } from '../common/decorators/company-role.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { CompanyRoleGuard } from '../common/guards/company-role.guard';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import type { BillingService } from './billing.service';
+import { BillingService } from './billing.service';
 import type { CreatePlanDto } from './dto/create-plan.dto';
 import type { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import type { ListInvoicesDto } from './dto/list-invoices.dto';
@@ -34,7 +34,7 @@ export class BillingController {
   // ── Plans ────────────────────────────────────────────────────────────
 
   @Get('billing/plans')
-  @Public()
+  @OptionalAuth()
   @HttpCode(HttpStatus.OK)
   async listPlans(@CurrentUser() user?: AuthenticatedUser) {
     const isAdmin = user?.roles?.includes('admin') ?? false;

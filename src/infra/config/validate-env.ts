@@ -331,8 +331,7 @@ export function validateEnv(env: RawEnv): AppConfig {
     ),
     // Billing
     billingProvider: parseOptionalString(env, 'BILLING_PROVIDER') || 'mock',
-    billingWebhookSecret:
-      parseOptionalString(env, 'BILLING_WEBHOOK_SECRET') || 'whsec_test_secret',
+    billingWebhookSecret: requireString(env, 'BILLING_WEBHOOK_SECRET'),
     billingDefaultFreePlanSlug:
       parseOptionalString(env, 'BILLING_DEFAULT_FREE_PLAN_SLUG') || 'free',
   };

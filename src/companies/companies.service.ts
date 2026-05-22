@@ -614,6 +614,16 @@ export class CompaniesService {
         where: { id: availableSeat.id },
       });
 
+      // Consume one recruiter seat credit atomically within the same transaction
+      await this.entitlementsService.consumeCredit(
+        companyId,
+        'recruiter_seats',
+        1,
+        'RecruiterSeat',
+        seat.id,
+        tx,
+      );
+
       await this.outboxService.emit(tx as any, {
         eventType: 'RecruiterSeatAllocated',
         aggregateType: 'Company',

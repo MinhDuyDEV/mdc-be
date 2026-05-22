@@ -44,16 +44,15 @@ export class WebhookService {
     eventType: string,
     payload: unknown,
   ) {
-    // Idempotency check
-    const idempotencyKey = `${provider}:${eventId}`;
-    try {
-      await this.idempotencyService.claim('WebhookEvent', idempotencyKey);
-    } catch {
-      // Already processed
-      return { processed: false, reason: 'duplicate' };
-    }
-
     return this.prisma.$transaction(async (tx) => {
+      // Idempotency check inside transaction — if claim fails, rollback
+      const idempotencyKey = `${provider}:${eventId}`;
+      try {
+        await this.idempotencyService.claim('WebhookEvent', idempotencyKey);
+      } catch {
+        // Already processed
+        return { processed: false, reason: 'duplicate' };
+      }
       const event = await tx.paymentProviderEvent.create({
         data: {
           provider,

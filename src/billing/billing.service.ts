@@ -8,19 +8,14 @@ import {
 import type { Prisma } from '@prisma/client';
 import {
   PrismaService,
-  type PrismaTransaction,
+  PrismaTransaction,
 } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { FEATURE_KEY_TO_ENTITLEMENT } from './billing.constants';
 import type { CreatePlanDto } from './dto/create-plan.dto';
 import type { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import type { UpdatePlanDto } from './dto/update-plan.dto';
-
-const FEATURE_KEY_TO_ENTITLEMENT: Record<string, string> = {
-  max_jobs: 'job_posts',
-  max_members: 'recruiter_seats',
-  max_recruiter_seats: 'recruiter_seats',
-};
 
 @Injectable()
 export class BillingService {
@@ -38,7 +33,7 @@ export class BillingService {
         name: data.name,
         slug: data.slug,
         description: data.description,
-        features: data.features as Prisma.InputJsonValue,
+        features: data.features,
         priceMonthly: data.priceMonthly,
         priceYearly: data.priceYearly,
         isPublic: data.isPublic ?? true,
@@ -67,7 +62,7 @@ export class BillingService {
       where: { id: planId },
       data: {
         ...data,
-        features: data.features as Prisma.InputJsonValue | undefined,
+        features: data.features,
       },
     });
   }
@@ -187,6 +182,12 @@ export class BillingService {
   ) {
     const features = plan.features as Record<string, number>;
     for (const [key, value] of Object.entries(features)) {
+      // Reject non-numeric feature values at runtime (DTO only validates object shape)
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw new BadRequestException(
+          `Feature '${key}' must be a non-negative number`,
+        );
+      }
       await tx.entitlementGrant.create({
         data: {
           subscriptionId,
