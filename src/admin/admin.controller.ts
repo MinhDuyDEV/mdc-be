@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Query,
   UseGuards,
@@ -33,7 +34,7 @@ export class AdminController {
 
   @Patch('users/:id/status')
   async updateUserStatus(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateUserStatusDto,
     @CurrentUser('id') adminId: string,
   ) {
@@ -48,7 +49,7 @@ export class AdminController {
 
   @Patch('companies/:id/verification')
   async verifyCompany(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: VerifyCompanyDto,
     @CurrentUser('id') adminId: string,
   ) {

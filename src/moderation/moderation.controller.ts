@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
@@ -51,7 +52,7 @@ export class ModerationController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin', 'moderator')
   async claimReport(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ): Promise<{ data: ReportResponseDto }> {
     const report = await this.service.claimReport(id, user.id);

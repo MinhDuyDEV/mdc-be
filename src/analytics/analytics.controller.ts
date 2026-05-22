@@ -7,9 +7,11 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
+import { Public } from '../common/auth/public.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import type { AnalyticsService } from './analytics.service';
@@ -20,6 +22,9 @@ export class AnalyticsController {
   constructor(private readonly service: AnalyticsService) {}
 
   @Post('events')
+  @UseGuards(AuthGuard)
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  @Public()
   recordEvent(
     @Body() dto: RecordEventDto,
     @CurrentUser('id') userId: string | null,

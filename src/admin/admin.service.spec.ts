@@ -1,24 +1,28 @@
 import { UserStatus } from '@prisma/client';
-import type { AuthService } from '../auth/auth.service';
 import { AdminService } from './admin.service';
 
 describe('AdminService', () => {
   let service: AdminService;
   let prisma: any;
-  let authService: { revokeAllUserSessions: jest.Mock };
 
   beforeEach(() => {
     prisma = {
       user: { findMany: jest.fn(), update: jest.fn() },
       company: { findMany: jest.fn(), update: jest.fn() },
-      companyVerification: { update: jest.fn() },
+      companyVerification: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
       job: { findMany: jest.fn(), update: jest.fn() },
       auditLog: { create: jest.fn() },
+      refreshToken: { updateMany: jest.fn() },
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma));
-    authService = { revokeAllUserSessions: jest.fn() };
-    service = new AdminService(prisma, authService as unknown as AuthService);
+    service = new AdminService(prisma, {
+      revokeAllUserSessions: jest.fn(),
+    } as any);
   });
 
   describe('listUsers', () => {
@@ -42,7 +46,10 @@ describe('AdminService', () => {
         { status: UserStatus.SUSPENDED, reason: 'Spam' },
         'admin-1',
       );
-      expect(authService.revokeAllUserSessions).toHaveBeenCalledWith('user-1');
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', revokedAt: null },
+        data: { revokedAt: expect.any(Date) },
+      });
     });
   });
 });

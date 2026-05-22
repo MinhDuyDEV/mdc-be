@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import * as crypto from 'crypto';
-import { PrismaService } from '../infra/prisma/prisma.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
 import {
   AnalyticsEventType,
   type DashboardMetricsDto,
@@ -96,9 +96,9 @@ export class AnalyticsService {
 
     return {
       totalViews,
-      uniqueViewers: 0,
-      last7Days: 0,
-      last30Days: 0,
+      uniqueViewers: null,
+      last7Days: null,
+      last30Days: null,
     };
   }
 

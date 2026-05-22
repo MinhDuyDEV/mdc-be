@@ -2,13 +2,14 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  NotImplementedException,
 } from '@nestjs/common';
-import { PostStatus, ReportStatus } from '@prisma/client';
+import { PostStatus, ReportStatus, UserStatus } from '@prisma/client';
 import type {
   PrismaService,
   PrismaTransaction,
 } from '../infra/prisma/prisma.service';
-import { OutboxService } from '../outbox/outbox.service';
+import type { OutboxService } from '../outbox/outbox.service';
 import type {
   CreateModerationActionDto,
   CreateReportDto,
@@ -91,21 +92,23 @@ export class ModerationService {
     reportId: string,
     moderatorId: string,
   ): Promise<ReportResponseDto> {
-    const locked = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM reports
-      WHERE id = ${reportId}::uuid
-        AND status = 'PENDING'
-      FOR UPDATE SKIP LOCKED
-      LIMIT 1
-    `;
+    return this.prisma.$transaction(async (tx) => {
+      const locked = await tx.$queryRaw<{ id: string }[]>`
+        SELECT id FROM reports
+        WHERE id = ${reportId}::uuid
+          AND status = 'PENDING'
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      `;
 
-    if (!locked || locked.length === 0) {
-      throw new ConflictException('Report already claimed or not found');
-    }
+      if (!locked || locked.length === 0) {
+        throw new ConflictException('Report already claimed or not found');
+      }
 
-    return this.prisma.report.update({
-      where: { id: reportId },
-      data: { status: ReportStatus.UNDER_REVIEW, assignedToId: moderatorId },
+      return tx.report.update({
+        where: { id: reportId },
+        data: { status: ReportStatus.UNDER_REVIEW, assignedToId: moderatorId },
+      });
     });
   }
 
@@ -122,6 +125,22 @@ export class ModerationService {
     moderatorId: string,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx: PrismaTransaction) => {
+      // Validate that the report exists and matches the target
+      const report = await tx.report.findUnique({
+        where: { id: dto.reportId },
+      });
+      if (!report) {
+        throw new NotFoundException('Report not found');
+      }
+      if (
+        report.targetEntity !== dto.targetEntity ||
+        report.targetId !== dto.targetId
+      ) {
+        throw new ConflictException(
+          'Action target does not match report target',
+        );
+      }
+
       await tx.moderationAction.create({
         data: {
           reportId: dto.reportId,
@@ -145,11 +164,23 @@ export class ModerationService {
         },
       });
 
-      if (dto.actionType === 'REMOVE_CONTENT' && dto.targetEntity === 'POST') {
-        await tx.post.update({
-          where: { id: dto.targetId },
-          data: { contentStatus: PostStatus.HIDDEN },
-        });
+      // Apply content/side-effect actions based on actionType
+      switch (dto.actionType) {
+        case 'REMOVE_CONTENT':
+          await this.applyContentRemoval(tx, dto.targetEntity, dto.targetId);
+          break;
+        case 'SUSPEND_USER':
+        case 'BAN_USER':
+          await this.applyUserSuspension(tx, dto.targetId);
+          break;
+        case 'WARN':
+        case 'DISMISS':
+          // No side effect needed — action is recorded in audit log
+          break;
+        default:
+          throw new NotImplementedException(
+            `Action type ${dto.actionType as string} is not implemented`,
+          );
       }
 
       await tx.auditLog.create({
@@ -164,6 +195,57 @@ export class ModerationService {
           },
         },
       });
+    });
+  }
+
+  private async applyContentRemoval(
+    tx: PrismaTransaction,
+    targetEntity: string,
+    targetId: string,
+  ): Promise<void> {
+    switch (targetEntity) {
+      case 'POST':
+        await tx.post.update({
+          where: { id: targetId },
+          data: { contentStatus: PostStatus.HIDDEN },
+        });
+        break;
+      case 'COMMENT':
+        await tx.comment.update({
+          where: { id: targetId },
+          data: { contentStatus: 'HIDDEN' },
+        });
+        break;
+      case 'JOB':
+        await tx.job.update({
+          where: { id: targetId },
+          data: { contentStatus: 'HIDDEN' },
+        });
+        break;
+      case 'PROFILE':
+      case 'COMPANY':
+      case 'MESSAGE':
+        // These entities don't have contentStatus — log for future implementation
+        break;
+      default:
+        throw new NotImplementedException(
+          `Content removal not supported for entity type ${targetEntity}`,
+        );
+    }
+  }
+
+  private async applyUserSuspension(
+    tx: PrismaTransaction,
+    targetUserId: string,
+  ): Promise<void> {
+    await tx.user.update({
+      where: { id: targetUserId },
+      data: { status: UserStatus.SUSPENDED },
+    });
+
+    await tx.refreshToken.updateMany({
+      where: { userId: targetUserId, revokedAt: null },
+      data: { revokedAt: new Date() },
     });
   }
 }

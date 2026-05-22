@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
-import { AuthService } from '../auth/auth.service';
-import { PrismaService } from '../infra/prisma/prisma.service';
+import type { AuthService } from '../auth/auth.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
 import type {
   AdminUserQueryDto,
   UpdateUserStatusDto,
@@ -52,11 +52,14 @@ export class AdminService {
           metadata: { newStatus: dto.status, reason: dto.reason },
         },
       });
-    });
 
-    if (dto.status === UserStatus.SUSPENDED) {
-      await this.authService.revokeAllUserSessions(userId);
-    }
+      if (dto.status === UserStatus.SUSPENDED) {
+        await tx.refreshToken.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() },
+        });
+      }
+    });
   }
 
   async listCompanies(query: { search?: string }) {
@@ -75,12 +78,12 @@ export class AdminService {
     dto: VerifyCompanyDto,
     adminId: string,
   ): Promise<void> {
-    // Lookup existing verification record
-    const verification = await this.prisma.companyVerification.findFirst({
-      where: { companyId },
-    });
-
     await this.prisma.$transaction(async (tx) => {
+      // Lookup existing verification record
+      const verification = await tx.companyVerification.findFirst({
+        where: { companyId },
+      });
+
       if (verification) {
         await tx.companyVerification.update({
           where: { id: verification.id },
@@ -89,6 +92,19 @@ export class AdminService {
             reviewedByUserId: adminId,
             reviewedAt: new Date(),
             notes: dto.notes,
+          },
+        });
+      } else {
+        // Create a new verification record if none exists
+        await tx.companyVerification.create({
+          data: {
+            companyId,
+            requestedByUserId: adminId,
+            status: 'VERIFIED',
+            reviewedByUserId: adminId,
+            reviewedAt: new Date(),
+            notes: dto.notes,
+            documentUrls: [],
           },
         });
       }
