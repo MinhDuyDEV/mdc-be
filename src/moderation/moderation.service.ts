@@ -37,18 +37,19 @@ export class ModerationService {
       throw new NotFoundException('Reported content not found');
     }
 
-    const existing = await this.prisma.report.findUnique({
+    const existing = await this.prisma.report.findFirst({
       where: {
-        unique_active_report: {
-          reporterId,
-          targetEntity: dto.targetEntity,
-          targetId: dto.targetId,
-        },
+        reporterId,
+        targetEntity: dto.targetEntity,
+        targetId: dto.targetId,
+        status: { in: [ReportStatus.PENDING, ReportStatus.UNDER_REVIEW] },
       },
     });
 
     if (existing) {
-      throw new ConflictException('You have already reported this content');
+      throw new ConflictException(
+        'You have already reported this content and it is still under review',
+      );
     }
 
     return this.prisma.$transaction(async (tx: PrismaTransaction) => {
@@ -156,32 +157,40 @@ export class ModerationService {
         },
       });
 
-      await tx.report.update({
-        where: { id: dto.reportId },
-        data: {
-          status: ReportStatus.RESOLVED_ACTIONED,
-          resolvedAt: new Date(),
-        },
-      });
-
       // Apply content/side-effect actions based on actionType
+      let reportStatus: ReportStatus;
       switch (dto.actionType) {
         case 'REMOVE_CONTENT':
           await this.applyContentRemoval(tx, dto.targetEntity, dto.targetId);
+          reportStatus = ReportStatus.RESOLVED_ACTIONED;
           break;
         case 'SUSPEND_USER':
         case 'BAN_USER':
-          await this.applyUserSuspension(tx, dto.targetId);
+          reportStatus = ReportStatus.RESOLVED_ACTIONED;
+          await this.applyUserSuspension(
+            tx,
+            await this.resolveTargetUser(tx, dto.targetEntity, dto.targetId),
+          );
           break;
         case 'WARN':
+          reportStatus = ReportStatus.RESOLVED_ACTIONED;
+          break;
         case 'DISMISS':
-          // No side effect needed — action is recorded in audit log
+          reportStatus = ReportStatus.RESOLVED_DISMISSED;
           break;
         default:
           throw new NotImplementedException(
             `Action type ${dto.actionType as string} is not implemented`,
           );
       }
+
+      await tx.report.update({
+        where: { id: dto.reportId },
+        data: {
+          status: reportStatus,
+          resolvedAt: new Date(),
+        },
+      });
 
       await tx.auditLog.create({
         data: {
@@ -230,6 +239,61 @@ export class ModerationService {
       default:
         throw new NotImplementedException(
           `Content removal not supported for entity type ${targetEntity}`,
+        );
+    }
+  }
+
+  private async resolveTargetUser(
+    tx: PrismaTransaction,
+    targetEntity: string,
+    targetId: string,
+  ): Promise<string> {
+    switch (targetEntity) {
+      case 'POST': {
+        const post = await tx.post.findUnique({
+          where: { id: targetId },
+          select: { authorId: true },
+        });
+        if (!post)
+          throw new NotFoundException('Post not found for user resolution');
+        return post.authorId;
+      }
+      case 'COMMENT': {
+        const comment = await tx.comment.findUnique({
+          where: { id: targetId },
+          select: { authorId: true },
+        });
+        if (!comment)
+          throw new NotFoundException('Comment not found for user resolution');
+        return comment.authorId;
+      }
+      case 'MESSAGE': {
+        const message = await tx.message.findUnique({
+          where: { id: targetId },
+          select: { senderId: true },
+        });
+        if (!message)
+          throw new NotFoundException('Message not found for user resolution');
+        return message.senderId;
+      }
+      case 'PROFILE': {
+        const profile = await tx.profile.findUnique({
+          where: { id: targetId },
+          select: { userId: true },
+        });
+        if (!profile)
+          throw new NotFoundException('Profile not found for user resolution');
+        return profile.userId;
+      }
+      case 'COMPANY':
+      case 'JOB':
+        throw new NotImplementedException(
+          `User suspension/ban for ${targetEntity} targets is not yet implemented. ` +
+            'Use REMOVE_CONTENT to hide the content instead.',
+        );
+      default:
+        throw new NotImplementedException(
+          `Cannot resolve user for entity type ${targetEntity}`,
         );
     }
   }

@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Param,
+  ParseUUIDPipe,
   Post,
   Req,
   UseGuards,
@@ -36,7 +37,7 @@ export class AnalyticsController {
       '',
     );
     const userAgent = req.headers['user-agent'] || '';
-    this.service.recordEvent(dto, userId, ip, userAgent);
+    void this.service.recordEvent(dto, userId, ip, userAgent);
     return { data: { success: true } };
   }
 
@@ -55,7 +56,7 @@ export class AnalyticsController {
   @Permissions('VIEW_ANALYTICS')
   async getEntityAnalytics(
     @Param('type') type: string,
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
   ) {
     const analytics = await this.service.getEntityAnalytics(type, id);
     return { data: analytics };

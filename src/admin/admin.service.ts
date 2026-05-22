@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
-import type { AuthService } from '../auth/auth.service';
 import type { PrismaService } from '../infra/prisma/prisma.service';
 import type {
   AdminUserQueryDto,
@@ -10,10 +9,7 @@ import type {
 
 @Injectable()
 export class AdminService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly authService: AuthService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async listUsers(query: AdminUserQueryDto) {
     const users = await this.prisma.user.findMany({
@@ -79,35 +75,34 @@ export class AdminService {
     adminId: string,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      // Lookup existing verification record
-      const verification = await tx.companyVerification.findFirst({
+      // Upsert verification record (one per company due to @@unique)
+      await tx.companyVerification.upsert({
         where: { companyId },
+        create: {
+          companyId,
+          requestedByUserId: adminId,
+          status: 'VERIFIED',
+          reviewedByUserId: adminId,
+          reviewedAt: new Date(),
+          notes: dto.notes,
+          documentUrls: [],
+        },
+        update: {
+          status: 'VERIFIED',
+          reviewedByUserId: adminId,
+          reviewedAt: new Date(),
+          notes: dto.notes,
+        },
       });
 
-      if (verification) {
-        await tx.companyVerification.update({
-          where: { id: verification.id },
-          data: {
-            status: 'VERIFIED',
-            reviewedByUserId: adminId,
-            reviewedAt: new Date(),
-            notes: dto.notes,
-          },
-        });
-      } else {
-        // Create a new verification record if none exists
-        await tx.companyVerification.create({
-          data: {
-            companyId,
-            requestedByUserId: adminId,
-            status: 'VERIFIED',
-            reviewedByUserId: adminId,
-            reviewedAt: new Date(),
-            notes: dto.notes,
-            documentUrls: [],
-          },
-        });
-      }
+      // Keep company.verified/verifiedAt in sync with product read paths
+      await tx.company.update({
+        where: { id: companyId },
+        data: {
+          verified: true,
+          verifiedAt: new Date(),
+        },
+      });
 
       await tx.auditLog.create({
         data: {

@@ -14,17 +14,16 @@ const SLOT_COUNT = 20;
 export class AnalyticsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  recordEvent(
+  async recordEvent(
     dto: RecordEventDto,
     userId: string | null,
     ip: string,
     userAgent: string,
-  ): void {
+  ): Promise<void> {
     const ipHash = crypto.createHash('sha256').update(ip).digest('hex');
     const slot = Math.floor(Math.random() * SLOT_COUNT);
 
-    // Fire-and-forget — do not await
-    void this.writeEventAsync(dto, userId, ipHash, userAgent, slot);
+    await this.writeEventAsync(dto, userId, ipHash, userAgent, slot);
   }
 
   private async writeEventAsync(
@@ -34,10 +33,11 @@ export class AnalyticsService {
     userAgent: string,
     slot: number,
   ): Promise<void> {
-    try {
+    // Wrap event row insert + counter upsert in a transaction to prevent drift
+    await this.prisma.$transaction(async (tx) => {
       switch (dto.eventType) {
         case AnalyticsEventType.PROFILE_VIEW:
-          await this.prisma.profileView.create({
+          await tx.profileView.create({
             data: {
               profileId: dto.targetId,
               userId,
@@ -48,7 +48,7 @@ export class AnalyticsService {
           });
           break;
         case AnalyticsEventType.COMPANY_VIEW:
-          await this.prisma.companyView.create({
+          await tx.companyView.create({
             data: {
               companyId: dto.targetId,
               userId,
@@ -59,7 +59,7 @@ export class AnalyticsService {
           });
           break;
         case AnalyticsEventType.POST_IMPRESSION:
-          await this.prisma.postImpression.create({
+          await tx.postImpression.create({
             data: {
               postId: dto.targetId,
               userId,
@@ -70,15 +70,13 @@ export class AnalyticsService {
           break;
       }
 
-      await this.prisma.$executeRaw`
+      await tx.$executeRaw`
         INSERT INTO slotted_counters (entity_type, entity_id, slot, count)
         VALUES (${dto.eventType}, ${dto.targetId}::uuid, ${slot}, 1)
         ON CONFLICT (entity_type, entity_id, slot)
         DO UPDATE SET count = slotted_counters.count + 1, updated_at = now()
       `;
-    } catch (error) {
-      console.error('Analytics write failed:', error);
-    }
+    });
   }
 
   async getEntityAnalytics(

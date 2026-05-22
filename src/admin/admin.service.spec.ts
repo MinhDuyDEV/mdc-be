@@ -20,9 +20,7 @@ describe('AdminService', () => {
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma));
-    service = new AdminService(prisma, {
-      revokeAllUserSessions: jest.fn(),
-    } as any);
+    service = new AdminService(prisma);
   });
 
   describe('listUsers', () => {

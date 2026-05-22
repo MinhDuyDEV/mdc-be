@@ -12,32 +12,35 @@ describe('AnalyticsService', () => {
       postImpression: { create: jest.fn() },
       $executeRaw: jest.fn(),
       $queryRaw: jest.fn(),
+      $transaction: jest.fn(),
       user: { count: jest.fn() },
       post: { count: jest.fn() },
       job: { count: jest.fn() },
       application: { count: jest.fn() },
       report: { count: jest.fn() },
     };
+    prisma.$transaction.mockImplementation(async (cb: any) => cb(prisma));
     service = new AnalyticsService(prisma);
   });
 
   describe('recordEvent', () => {
-    it('creates ProfileView and increments slotted counter', async () => {
+    it('creates ProfileView and increments slotted counter atomically', async () => {
       prisma.profileView.create.mockResolvedValue({ id: 'view-1' });
       prisma.$executeRaw.mockResolvedValue(1);
 
-      await (service as any).writeEventAsync(
+      await service.recordEvent(
         { eventType: AnalyticsEventType.PROFILE_VIEW, targetId: 'p1' },
         'u1',
-        'hash',
+        '127.0.0.1',
         'Mozilla/5.0',
-        5,
       );
+
+      expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.profileView.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           profileId: 'p1',
           userId: 'u1',
-          ipHash: 'hash',
+          ipHash: expect.any(String),
           userAgent: 'Mozilla/5.0',
         }),
       });
@@ -48,13 +51,14 @@ describe('AnalyticsService', () => {
       prisma.companyView.create.mockResolvedValue({ id: 'view-2' });
       prisma.$executeRaw.mockResolvedValue(1);
 
-      await (service as any).writeEventAsync(
+      await service.recordEvent(
         { eventType: AnalyticsEventType.COMPANY_VIEW, targetId: 'c1' },
         'u1',
-        'hash',
+        '127.0.0.1',
         'ua',
-        5,
       );
+
+      expect(prisma.$transaction).toHaveBeenCalled();
       expect(prisma.companyView.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           companyId: 'c1',

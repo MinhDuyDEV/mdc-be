@@ -807,7 +807,7 @@ model CompanyVerification {
   requestedBy User    @relation("VerificationRequester", fields: [requestedByUserId], references: [id], onDelete: Cascade)
   reviewedBy  User?   @relation("VerificationReviewer", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
 
-  @@index([companyId])
+  @@unique([companyId])
   @@index([status])
   @@map("company_verifications")
 }
@@ -1513,8 +1513,9 @@ model Report {
 
   reporter   User  @relation("ReportsCreated", fields: [reporterId], references: [id], onDelete: Cascade)
   assignedTo User? @relation("ReportsAssigned", fields: [assignedToId], references: [id], onDelete: SetNull)
+  actions    ModerationAction[]
 
-  @@unique([reporterId, targetEntity, targetId], name: "unique_active_report")
+  @@index([reporterId, targetEntity, targetId])
   @@index([targetEntity, targetId, createdAt(sort: Desc)])
   @@index([status, priority(sort: Desc), createdAt(sort: Desc)])
   @@index([assignedToId])
@@ -1534,7 +1535,9 @@ model ModerationAction {
   createdAt        DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
 
   moderator User @relation("ModeratorActions", fields: [moderatorId], references: [id], onDelete: Cascade)
+  report    Report @relation(fields: [reportId], references: [id], onDelete: Cascade)
 
+  @@index([reportId])
   @@index([targetEntity, targetId])
   @@index([moderatorId])
   @@index([createdAt(sort: Desc)])

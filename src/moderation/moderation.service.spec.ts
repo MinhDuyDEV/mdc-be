@@ -14,11 +14,15 @@ describe('ModerationService', () => {
       report: {
         create: jest.fn(),
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         findMany: jest.fn(),
         update: jest.fn(),
       },
       moderationAction: { create: jest.fn() },
-      post: { update: jest.fn() },
+      post: { update: jest.fn(), findUnique: jest.fn() },
+      comment: { findUnique: jest.fn() },
+      message: { findUnique: jest.fn() },
+      profile: { findUnique: jest.fn() },
       auditLog: { create: jest.fn() },
       $transaction: jest.fn(),
       $queryRaw: jest.fn(),
@@ -36,7 +40,7 @@ describe('ModerationService', () => {
   describe('createReport', () => {
     it('creates report when target exists', async () => {
       policy.validateTargetExists.mockResolvedValue(true);
-      prisma.report.findUnique.mockResolvedValue(null);
+      prisma.report.findFirst.mockResolvedValue(null);
       prisma.report.create.mockResolvedValue({
         id: 'report-1',
         status: 'PENDING',
@@ -72,9 +76,9 @@ describe('ModerationService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
-    it('throws ConflictException when duplicate report exists', async () => {
+    it('throws ConflictException when duplicate active report exists', async () => {
       policy.validateTargetExists.mockResolvedValue(true);
-      prisma.report.findUnique.mockResolvedValue({ id: 'existing' });
+      prisma.report.findFirst.mockResolvedValue({ id: 'existing' });
       await expect(
         service.createReport(
           {
