@@ -16,7 +16,7 @@ describe('RecommendationsController', () => {
   };
   const emptyResponse = {
     data: [],
-    meta: { hasMore: false, limit: 20 },
+    meta: { hasNextPage: false, limit: 20 },
   };
 
   beforeEach(() => {

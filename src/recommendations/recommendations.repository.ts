@@ -21,14 +21,14 @@ export function paginateScored<T extends { score: number; id: string }>(
   limit: number,
 ): {
   data: T[];
-  meta: { nextCursor?: string; hasMore: boolean; limit: number };
+  meta: { nextCursor?: string; hasNextPage: boolean; limit: number };
 } {
-  const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
+  const hasNextPage = rows.length > limit;
+  const items = hasNextPage ? rows.slice(0, limit) : rows;
   const last = items.at(-1);
   const nextCursor =
-    hasMore && last ? encodeScoreCursor(last.score, last.id) : undefined;
-  return { data: items, meta: { nextCursor, hasMore, limit } };
+    hasNextPage && last ? encodeScoreCursor(last.score, last.id) : undefined;
+  return { data: items, meta: { nextCursor, hasNextPage, limit } };
 }
 
 import { Injectable } from '@nestjs/common';
@@ -118,7 +118,7 @@ export class RecommendationsRepository {
     >(
       Prisma.sql`
         WITH user_skills AS (
-          SELECT ps.id::text AS skill_id
+          SELECT ps.skill_id::text AS skill_id
           FROM profile_skills ps
           JOIN profiles p ON p.id = ps.profile_id
           WHERE p.user_id = ${userId}::uuid
@@ -138,7 +138,7 @@ export class RecommendationsRepository {
           SELECT
             j.id AS job_id,
             (
-              (SELECT COUNT(*) FROM job_skills js WHERE js.job_id = j.id AND js.skill_id::text IN (SELECT skill_id FROM user_skills))
+              (SELECT COUNT(*) FROM job_skills js WHERE js.job_id = j.id AND js.skill_id IN (SELECT skill_id::uuid FROM user_skills))
               + CASE WHEN j.company_id IN (SELECT company_id FROM user_followed_companies) THEN 5 ELSE 0 END
             )::float AS score
           FROM jobs j

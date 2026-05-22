@@ -58,7 +58,7 @@ describe('RecommendationsService', () => {
             score: 5,
           },
         ],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       };
       redis.get.mockResolvedValue(JSON.stringify(cached));
 
@@ -84,7 +84,7 @@ describe('RecommendationsService', () => {
 
       expect(result).toEqual({
         data: [],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       });
     });
 
@@ -165,7 +165,7 @@ describe('RecommendationsService', () => {
       expect(result.data[0].id).toBe('user-2');
     });
 
-    it('sets hasMore=true and slices to limit when repository returns limit+1 rows', async () => {
+    it('sets hasNextPage=true and slices to limit when repository returns limit+1 rows', async () => {
       redis.get.mockResolvedValue(null);
       const limit = 2;
       repository.findPeopleRecommendations.mockResolvedValue([
@@ -200,14 +200,14 @@ describe('RecommendationsService', () => {
       expect(result.data).toHaveLength(2);
       expect(result.data[0].id).toBe('user-2');
       expect(result.data[1].id).toBe('user-3');
-      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.hasNextPage).toBe(true);
       expect(result.meta.limit).toBe(limit);
       expect(result.data).not.toContainEqual(
         expect.objectContaining({ id: 'user-4' }),
       );
     });
 
-    it('generates nextCursor when hasMore is true', async () => {
+    it('generates nextCursor when hasNextPage is true', async () => {
       redis.get.mockResolvedValue(null);
       const limit = 2;
       repository.findPeopleRecommendations.mockResolvedValue([
@@ -239,7 +239,7 @@ describe('RecommendationsService', () => {
         limit,
       );
 
-      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.hasNextPage).toBe(true);
       expect(result.meta.nextCursor).toBeDefined();
       expect(typeof result.meta.nextCursor).toBe('string');
       // nextCursor should be a base64-encoded JSON string with score and id
@@ -249,7 +249,7 @@ describe('RecommendationsService', () => {
       expect(decoded).toEqual({ score: 8, id: 'user-3' });
     });
 
-    it('does not set nextCursor when hasMore is false', async () => {
+    it('does not set nextCursor when hasNextPage is false', async () => {
       redis.get.mockResolvedValue(null);
       repository.findPeopleRecommendations.mockResolvedValue([
         { id: 'user-2', score: 5 },
@@ -268,7 +268,7 @@ describe('RecommendationsService', () => {
         20,
       );
 
-      expect(result.meta.hasMore).toBe(false);
+      expect(result.meta.hasNextPage).toBe(false);
       expect(result.meta.nextCursor).toBeUndefined();
     });
   });
@@ -283,7 +283,7 @@ describe('RecommendationsService', () => {
 
       expect(result).toEqual({
         data: [],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       });
       expect(repository.findJobRecommendations).not.toHaveBeenCalled();
     });
@@ -297,7 +297,7 @@ describe('RecommendationsService', () => {
 
       expect(result).toEqual({
         data: [],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       });
     });
 
@@ -319,7 +319,7 @@ describe('RecommendationsService', () => {
             score: 8,
           },
         ],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       };
       redis.get.mockResolvedValue(JSON.stringify(cached));
 
@@ -362,7 +362,7 @@ describe('RecommendationsService', () => {
       });
     });
 
-    it('sets hasMore=true and slices to limit when repository returns limit+1 rows', async () => {
+    it('sets hasNextPage=true and slices to limit when repository returns limit+1 rows', async () => {
       prisma.notificationPreference.findUnique.mockResolvedValue(null);
       redis.get.mockResolvedValue(null);
       const limit = 2;
@@ -417,13 +417,13 @@ describe('RecommendationsService', () => {
       );
 
       expect(result.data).toHaveLength(2);
-      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.hasNextPage).toBe(true);
       expect(result.data).not.toContainEqual(
         expect.objectContaining({ id: 'job-3' }),
       );
     });
 
-    it('generates nextCursor when hasMore is true', async () => {
+    it('generates nextCursor when hasNextPage is true', async () => {
       prisma.notificationPreference.findUnique.mockResolvedValue(null);
       redis.get.mockResolvedValue(null);
       const limit = 2;
@@ -477,7 +477,7 @@ describe('RecommendationsService', () => {
         limit,
       );
 
-      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.hasNextPage).toBe(true);
       expect(result.meta.nextCursor).toBeDefined();
       const decoded = JSON.parse(
         Buffer.from(result.meta.nextCursor!, 'base64').toString('utf8'),
@@ -500,7 +500,7 @@ describe('RecommendationsService', () => {
             score: 4,
           },
         ],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       };
       redis.get.mockResolvedValue(JSON.stringify(cached));
 
@@ -525,7 +525,7 @@ describe('RecommendationsService', () => {
 
       expect(result).toEqual({
         data: [],
-        meta: { hasMore: false, limit: 20 },
+        meta: { hasNextPage: false, limit: 20 },
       });
     });
 
@@ -560,7 +560,7 @@ describe('RecommendationsService', () => {
       });
     });
 
-    it('sets hasMore=true and slices to limit when repository returns limit+1 rows', async () => {
+    it('sets hasNextPage=true and slices to limit when repository returns limit+1 rows', async () => {
       redis.get.mockResolvedValue(null);
       const limit = 2;
       repository.findCompanyRecommendations.mockResolvedValue([
@@ -599,13 +599,13 @@ describe('RecommendationsService', () => {
       );
 
       expect(result.data).toHaveLength(2);
-      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.hasNextPage).toBe(true);
       expect(result.data).not.toContainEqual(
         expect.objectContaining({ id: 'company-3' }),
       );
     });
 
-    it('generates nextCursor when hasMore is true', async () => {
+    it('generates nextCursor when hasNextPage is true', async () => {
       redis.get.mockResolvedValue(null);
       const limit = 2;
       repository.findCompanyRecommendations.mockResolvedValue([
@@ -643,7 +643,7 @@ describe('RecommendationsService', () => {
         limit,
       );
 
-      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.hasNextPage).toBe(true);
       expect(result.meta.nextCursor).toBeDefined();
       const decoded = JSON.parse(
         Buffer.from(result.meta.nextCursor!, 'base64').toString('utf8'),

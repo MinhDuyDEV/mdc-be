@@ -211,9 +211,23 @@ export class ProfilesService {
     return this.prisma.$transaction(async (tx) => {
       await tx.profileSkill.deleteMany({ where: { profileId } });
       if (skills.length > 0) {
+        // Normalize and upsert Skill records first, then create ProfileSkill with resolved skillId
+        const normalizedNames = skills.map((s) => s.name.trim().toLowerCase());
+        const skillIdMap = await this.resolveSkillIds(
+          tx,
+          skills,
+          normalizedNames,
+        );
+
         try {
           await tx.profileSkill.createMany({
-            data: skills.map((s) => ({ profileId, ...s })),
+            data: skills.map((s, i) => ({
+              profileId,
+              skillId: skillIdMap[i],
+              name: s.name,
+              category: s.category,
+              proficiency: s.proficiency,
+            })),
           });
         } catch (error) {
           if (isPrismaUniqueViolation(error)) {
@@ -226,6 +240,42 @@ export class ProfilesService {
       }
       return tx.profileSkill.findMany({ where: { profileId } });
     });
+  }
+
+  /**
+   * Upserts Skill records for each skill name and returns skillIds in the same order.
+   * Uses normalized (trimmed + lowercased) names for lookup/creation to ensure
+   * consistent taxonomy across the platform.
+   */
+  private async resolveSkillIds(
+    tx: Prisma.TransactionClient,
+    skills: SkillDto[],
+    normalizedNames: string[],
+  ): Promise<string[]> {
+    const results: string[] = [];
+
+    for (let i = 0; i < skills.length; i++) {
+      const normalized = normalizedNames[i];
+      const category = skills[i].category ?? null;
+
+      // Try to find existing skill by normalized name
+      const existing = await tx.skill.findUnique({
+        where: { name: normalized },
+        select: { id: true },
+      });
+
+      if (existing) {
+        results.push(existing.id);
+      } else {
+        const created = await tx.skill.create({
+          data: { name: normalized, category },
+          select: { id: true },
+        });
+        results.push(created.id);
+      }
+    }
+
+    return results;
   }
 
   async replaceExperiences(profileId: string, experiences: ExperienceDto[]) {

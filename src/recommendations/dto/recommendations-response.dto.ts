@@ -36,7 +36,7 @@ export interface RecommendationsResponseDto<T> {
   data: T[];
   meta: {
     nextCursor?: string;
-    hasMore: boolean;
+    hasNextPage: boolean;
     limit: number;
   };
 }

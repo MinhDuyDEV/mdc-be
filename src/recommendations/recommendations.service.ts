@@ -9,13 +9,13 @@ import type {
   RecommendedPersonDto,
 } from './dto';
 import {
-  encodeScoreCursor,
+  paginateScored,
   type RecommendationsRepository,
 } from './recommendations.repository';
 
 @Injectable()
 export class RecommendationsService {
-  private readonly CACHE_TTL = 300; // 5 minutes
+  private readonly CACHE_TTL = 3600; // 1 hour
   private readonly CACHE_PREFIX = 'recommendations:';
 
   constructor(
@@ -51,7 +51,7 @@ export class RecommendationsService {
     if (scoredIds.length === 0) {
       const emptyResult: RecommendationsResponseDto<RecommendedPersonDto> = {
         data: [],
-        meta: { hasMore: false, limit },
+        meta: { hasNextPage: false, limit },
       };
       try {
         await this.redis.setex(
@@ -96,15 +96,11 @@ export class RecommendationsService {
       });
     }
 
-    const hasMore = scoredIds.length > limit;
-    const data = hasMore ? enriched.slice(0, limit) : enriched;
-    const last = data.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeScoreCursor(last.score, last.id) : undefined;
+    const paginated = paginateScored(enriched, limit);
 
     const result: RecommendationsResponseDto<RecommendedPersonDto> = {
-      data,
-      meta: { nextCursor, hasMore, limit },
+      data: paginated.data,
+      meta: paginated.meta,
     };
 
     try {
@@ -130,7 +126,7 @@ export class RecommendationsService {
     });
 
     if (preference && !preference.jobRecommendation) {
-      return { data: [], meta: { hasMore: false, limit } };
+      return { data: [], meta: { hasNextPage: false, limit } };
     }
 
     const cacheKey = `${this.CACHE_PREFIX}jobs:${userId}:${cursor || 'first'}:${limit}`;
@@ -155,7 +151,7 @@ export class RecommendationsService {
     if (scoredIds.length === 0) {
       const emptyResult: RecommendationsResponseDto<RecommendedJobDto> = {
         data: [],
-        meta: { hasMore: false, limit },
+        meta: { hasNextPage: false, limit },
       };
       try {
         await this.redis.setex(
@@ -206,15 +202,11 @@ export class RecommendationsService {
       });
     }
 
-    const hasMore = scoredIds.length > limit;
-    const data = hasMore ? enriched.slice(0, limit) : enriched;
-    const last = data.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeScoreCursor(last.score, last.id) : undefined;
+    const paginated = paginateScored(enriched, limit);
 
     const result: RecommendationsResponseDto<RecommendedJobDto> = {
-      data,
-      meta: { nextCursor, hasMore, limit },
+      data: paginated.data,
+      meta: paginated.meta,
     };
 
     try {
@@ -253,7 +245,7 @@ export class RecommendationsService {
     if (scoredIds.length === 0) {
       const emptyResult: RecommendationsResponseDto<RecommendedCompanyDto> = {
         data: [],
-        meta: { hasMore: false, limit },
+        meta: { hasNextPage: false, limit },
       };
       try {
         await this.redis.setex(
@@ -295,15 +287,11 @@ export class RecommendationsService {
       });
     }
 
-    const hasMore = scoredIds.length > limit;
-    const data = hasMore ? enriched.slice(0, limit) : enriched;
-    const last = data.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeScoreCursor(last.score, last.id) : undefined;
+    const paginated = paginateScored(enriched, limit);
 
     const result: RecommendationsResponseDto<RecommendedCompanyDto> = {
-      data,
-      meta: { nextCursor, hasMore, limit },
+      data: paginated.data,
+      meta: paginated.meta,
     };
 
     try {

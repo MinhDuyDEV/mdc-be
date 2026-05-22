@@ -552,18 +552,33 @@ model Company {
   @@map("companies")
 }
 
+model Skill {
+  id        String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String        @unique @db.VarChar(100)
+  category  SkillCategory?
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  profileSkills ProfileSkill[]
+  jobSkills     JobSkill[]
+
+  @@map("skills")
+}
+
 model ProfileSkill {
   id          String            @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   profileId   String            @map("profile_id") @db.Uuid
+  skillId     String            @map("skill_id") @db.Uuid
   name        String            @db.VarChar(100)
   category    SkillCategory?
   proficiency SkillProficiency?
   createdAt   DateTime          @default(now()) @map("created_at") @db.Timestamptz(3)
 
   profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  skill        Skill         @relation(fields: [skillId], references: [id])
   endorsements Endorsement[]
 
-  @@unique([profileId, name])
+  @@unique([profileId, skillId])
+  @@index([skillId])
   @@map("profile_skills")
 }
 
@@ -835,7 +850,8 @@ model JobSkill {
   jobId   String @map("job_id") @db.Uuid
   skillId String @map("skill_id") @db.Uuid
 
-  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  job   Job   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  skill Skill @relation(fields: [skillId], references: [id])
 
   @@unique([jobId, skillId])
   @@index([skillId])
