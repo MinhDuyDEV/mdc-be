@@ -1,3 +1,7 @@
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+
 export function encodeScoreCursor(score: number, id: string): string {
   return Buffer.from(JSON.stringify({ score, id })).toString('base64');
 }
@@ -31,10 +35,6 @@ export function paginateScored<T extends { score: number; id: string }>(
   return { data: items, meta: { nextCursor, hasNextPage, limit } };
 }
 
-import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-
 @Injectable()
 export class RecommendationsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -65,39 +65,35 @@ export class RecommendationsRepository {
           UNION
           SELECT blocker_id AS blocked_user_id FROM blocks WHERE blocked_id = ${userId}::uuid
         ),
-        second_degree AS (
+        second_degree_pre AS (
           SELECT
             CASE
               WHEN c2.requester_id = uc.connection_id THEN c2.addressee_id
               WHEN c2.addressee_id = uc.connection_id THEN c2.requester_id
-            END AS candidate_id,
-            COUNT(*) AS mutual_count
+            END AS candidate_id
           FROM user_connections uc
           JOIN connections c2 ON (c2.requester_id = uc.connection_id OR c2.addressee_id = uc.connection_id)
           WHERE c2.status = 'ACCEPTED'
-            AND CASE
-              WHEN c2.requester_id = uc.connection_id THEN c2.addressee_id
-              WHEN c2.addressee_id = uc.connection_id THEN c2.requester_id
-            END != ${userId}::uuid
-            AND CASE
-              WHEN c2.requester_id = uc.connection_id THEN c2.addressee_id
-              WHEN c2.addressee_id = uc.connection_id THEN c2.requester_id
-            END NOT IN (SELECT connection_id FROM user_connections)
-            AND CASE
-              WHEN c2.requester_id = uc.connection_id THEN c2.addressee_id
-              WHEN c2.addressee_id = uc.connection_id THEN c2.requester_id
-            END NOT IN (SELECT blocked_user_id FROM user_blocks)
+        ),
+        second_degree AS (
+          SELECT
+            candidate_id,
+            COUNT(*) AS mutual_count
+          FROM second_degree_pre sp
+          WHERE sp.candidate_id != ${userId}::uuid
+            AND sp.candidate_id NOT IN (SELECT connection_id FROM user_connections)
+            AND sp.candidate_id NOT IN (SELECT blocked_user_id FROM user_blocks)
           GROUP BY candidate_id
         )
         SELECT
-          sd.candidate_id::text AS id,
+          sd.candidate_id AS id,
           sd.mutual_count::float AS score
         FROM second_degree sd
         JOIN users u ON u.id = sd.candidate_id
         JOIN profiles p ON p.user_id = u.id
         WHERE u.status = 'ACTIVE'
           AND p.visibility IN ('PUBLIC', 'CONNECTIONS_ONLY')
-          ${decoded ? Prisma.sql`AND (sd.mutual_count < ${decoded.score} OR (sd.mutual_count = ${decoded.score} AND sd.candidate_id::text < ${decoded.id}))` : Prisma.empty}
+          ${decoded ? Prisma.sql`AND (sd.mutual_count < ${decoded.score} OR (sd.mutual_count = ${decoded.score} AND sd.candidate_id < ${decoded.id}::uuid))` : Prisma.empty}
         ORDER BY sd.mutual_count DESC, sd.candidate_id DESC
         LIMIT ${limit + 1}
       `,
@@ -118,7 +114,7 @@ export class RecommendationsRepository {
     >(
       Prisma.sql`
         WITH user_skills AS (
-          SELECT ps.skill_id::text AS skill_id
+          SELECT ps.skill_id
           FROM profile_skills ps
           JOIN profiles p ON p.id = ps.profile_id
           WHERE p.user_id = ${userId}::uuid
@@ -134,15 +130,22 @@ export class RecommendationsRepository {
           UNION
           SELECT blocker_id AS blocked_user_id FROM blocks WHERE blocked_id = ${userId}::uuid
         ),
+        skill_matches AS (
+          SELECT js.job_id, COUNT(*) AS match_count
+          FROM job_skills js
+          WHERE js.skill_id IN (SELECT skill_id FROM user_skills)
+          GROUP BY js.job_id
+        ),
         scored_jobs AS (
           SELECT
             j.id AS job_id,
             (
-              (SELECT COUNT(*) FROM job_skills js WHERE js.job_id = j.id AND js.skill_id IN (SELECT skill_id::uuid FROM user_skills))
+              COALESCE(sm.match_count, 0)
               + CASE WHEN j.company_id IN (SELECT company_id FROM user_followed_companies) THEN 5 ELSE 0 END
             )::float AS score
           FROM jobs j
           JOIN companies c ON c.id = j.company_id
+          LEFT JOIN skill_matches sm ON sm.job_id = j.id
           WHERE j.status = 'PUBLISHED'
             AND j.deleted_at IS NULL
             AND c.deleted_at IS NULL
@@ -152,11 +155,11 @@ export class RecommendationsRepository {
             )
         )
         SELECT
-          sj.job_id::text AS id,
+          sj.job_id AS id,
           sj.score
         FROM scored_jobs sj
         WHERE sj.score > 0
-          ${decoded ? Prisma.sql`AND (sj.score < ${decoded.score} OR (sj.score = ${decoded.score} AND sj.job_id::text < ${decoded.id}))` : Prisma.empty}
+          ${decoded ? Prisma.sql`AND (sj.score < ${decoded.score} OR (sj.score = ${decoded.score} AND sj.job_id < ${decoded.id}::uuid))` : Prisma.empty}
         ORDER BY sj.score DESC, sj.job_id DESC
         LIMIT ${limit + 1}
       `,
@@ -200,11 +203,11 @@ export class RecommendationsRepository {
             AND c.id NOT IN (SELECT company_id FROM user_followed_companies)
         )
         SELECT
-          sc.company_id::text AS id,
+          sc.company_id AS id,
           sc.score
         FROM scored_companies sc
         WHERE sc.score > 0
-          ${decoded ? Prisma.sql`AND (sc.score < ${decoded.score} OR (sc.score = ${decoded.score} AND sc.company_id::text < ${decoded.id}))` : Prisma.empty}
+          ${decoded ? Prisma.sql`AND (sc.score < ${decoded.score} OR (sc.score = ${decoded.score} AND sc.company_id < ${decoded.id}::uuid))` : Prisma.empty}
         ORDER BY sc.score DESC, sc.company_id DESC
         LIMIT ${limit + 1}
       `,

@@ -45,7 +45,7 @@ describe('RecommendationsService', () => {
   });
 
   describe('getPeopleRecommendations', () => {
-    it('returns cached result when available', async () => {
+    it('returns cached result when available (first page only)', async () => {
       const cached = {
         data: [
           {
@@ -54,8 +54,6 @@ describe('RecommendationsService', () => {
             headline: null,
             location: null,
             profilePictureUrl: null,
-            mutualConnectionCount: 5,
-            score: 5,
           },
         ],
         meta: { hasNextPage: false, limit: 20 },
@@ -70,6 +68,24 @@ describe('RecommendationsService', () => {
 
       expect(result).toEqual(cached);
       expect(repository.findPeopleRecommendations).not.toHaveBeenCalled();
+    });
+
+    it('bypasses cache when cursor is provided', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findPeopleRecommendations.mockResolvedValue([]);
+
+      const result = await service.getPeopleRecommendations(
+        'u1',
+        'some-cursor',
+        20,
+      );
+
+      expect(result).toEqual({
+        data: [],
+        meta: { hasNextPage: false, limit: 20 },
+      });
+      // Cache should NOT be written for non-first page
+      expect(redis.setex).not.toHaveBeenCalled();
     });
 
     it('returns empty when no recommendations', async () => {
@@ -101,7 +117,7 @@ describe('RecommendationsService', () => {
       expect(result.data).toEqual([]);
     });
 
-    it('enriches scored IDs with user data', async () => {
+    it('enriches scored IDs with user data and strips score', async () => {
       redis.get.mockResolvedValue(null);
       repository.findPeopleRecommendations.mockResolvedValue([
         { id: 'user-2', score: 5 },
@@ -136,9 +152,9 @@ describe('RecommendationsService', () => {
       expect(result.data[0]).toMatchObject({
         id: 'user-2',
         displayName: 'Alice',
-        score: 5,
-        mutualConnectionCount: 5,
       });
+      // score should NOT be in response
+      expect(result.data[0]).not.toHaveProperty('score');
     });
 
     it('skips scored IDs that are not found in the database', async () => {
@@ -184,12 +200,8 @@ describe('RecommendationsService', () => {
           displayName: 'Bob',
           profile: { headline: 'Designer', location: 'NYC' },
         },
-        {
-          id: 'user-4',
-          displayName: 'Charlie',
-          profile: { headline: 'PM', location: 'LA' },
-        },
       ]);
+      // user-4 should NOT be fetched (sentinel row enrichment is skipped)
 
       const result = await service.getPeopleRecommendations(
         'u1',
@@ -225,11 +237,6 @@ describe('RecommendationsService', () => {
           id: 'user-3',
           displayName: 'Bob',
           profile: { headline: 'Designer', location: 'NYC' },
-        },
-        {
-          id: 'user-4',
-          displayName: 'Charlie',
-          profile: { headline: 'PM', location: 'LA' },
         },
       ]);
 
@@ -301,7 +308,7 @@ describe('RecommendationsService', () => {
       });
     });
 
-    it('returns cached result when available', async () => {
+    it('returns cached result when available (first page only)', async () => {
       prisma.notificationPreference.findUnique.mockResolvedValue(null);
       const cached = {
         data: [
@@ -316,7 +323,6 @@ describe('RecommendationsService', () => {
             salaryMax: null,
             salaryCurrency: null,
             publishedAt: null,
-            score: 8,
           },
         ],
         meta: { hasNextPage: false, limit: 20 },
@@ -328,7 +334,21 @@ describe('RecommendationsService', () => {
       expect(result).toEqual(cached);
     });
 
-    it('enriches scored job IDs with job data', async () => {
+    it('bypasses cache when cursor is provided', async () => {
+      prisma.notificationPreference.findUnique.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
+      repository.findJobRecommendations.mockResolvedValue([]);
+
+      const result = await service.getJobRecommendations('u1', 'cursor', 20);
+
+      expect(result).toEqual({
+        data: [],
+        meta: { hasNextPage: false, limit: 20 },
+      });
+      expect(redis.setex).not.toHaveBeenCalled();
+    });
+
+    it('enriches scored job IDs with job data and strips score', async () => {
       prisma.notificationPreference.findUnique.mockResolvedValue(null);
       redis.get.mockResolvedValue(null);
       repository.findJobRecommendations.mockResolvedValue([
@@ -358,8 +378,8 @@ describe('RecommendationsService', () => {
         companyName: 'Acme Corp',
         salaryMin: 50000,
         salaryMax: 100000,
-        score: 8,
       });
+      expect(result.data[0]).not.toHaveProperty('score');
     });
 
     it('sets hasNextPage=true and slices to limit when repository returns limit+1 rows', async () => {
@@ -396,19 +416,8 @@ describe('RecommendationsService', () => {
           publishedAt: new Date('2026-02-01'),
           company: { name: 'Beta Inc' },
         },
-        {
-          id: 'job-3',
-          title: 'Intern',
-          location: 'LA',
-          employmentType: 'INTERN',
-          workplaceType: 'HYBRID',
-          salaryMin: 20000,
-          salaryMax: 30000,
-          salaryCurrency: 'USD',
-          publishedAt: new Date('2026-03-01'),
-          company: { name: 'Gamma LLC' },
-        },
       ]);
+      // job-3 should NOT be fetched (sentinel row enrichment is skipped)
 
       const result = await service.getJobRecommendations(
         'u1',
@@ -457,18 +466,6 @@ describe('RecommendationsService', () => {
           publishedAt: null,
           company: { name: 'Beta' },
         },
-        {
-          id: 'job-3',
-          title: 'Intern',
-          location: null,
-          employmentType: 'INTERN',
-          workplaceType: 'HYBRID',
-          salaryMin: null,
-          salaryMax: null,
-          salaryCurrency: null,
-          publishedAt: null,
-          company: { name: 'Gamma' },
-        },
       ]);
 
       const result = await service.getJobRecommendations(
@@ -487,7 +484,7 @@ describe('RecommendationsService', () => {
   });
 
   describe('getCompanyRecommendations', () => {
-    it('returns cached result when available', async () => {
+    it('returns cached result when available (first page only)', async () => {
       const cached = {
         data: [
           {
@@ -497,7 +494,6 @@ describe('RecommendationsService', () => {
             followerCount: 10,
             verified: false,
             logoUrl: null,
-            score: 4,
           },
         ],
         meta: { hasNextPage: false, limit: 20 },
@@ -511,6 +507,23 @@ describe('RecommendationsService', () => {
       );
 
       expect(result).toEqual(cached);
+    });
+
+    it('bypasses cache when cursor is provided', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findCompanyRecommendations.mockResolvedValue([]);
+
+      const result = await service.getCompanyRecommendations(
+        'u1',
+        'cursor',
+        20,
+      );
+
+      expect(result).toEqual({
+        data: [],
+        meta: { hasNextPage: false, limit: 20 },
+      });
+      expect(redis.setex).not.toHaveBeenCalled();
     });
 
     it('returns empty when no recommendations', async () => {
@@ -529,7 +542,7 @@ describe('RecommendationsService', () => {
       });
     });
 
-    it('enriches scored company IDs with company data', async () => {
+    it('enriches scored company IDs with company data and strips score', async () => {
       redis.get.mockResolvedValue(null);
       repository.findCompanyRecommendations.mockResolvedValue([
         { id: 'company-1', score: 4 },
@@ -556,8 +569,8 @@ describe('RecommendationsService', () => {
         name: 'Acme Corp',
         industry: 'Technology',
         verified: true,
-        score: 4,
       });
+      expect(result.data[0]).not.toHaveProperty('score');
     });
 
     it('sets hasNextPage=true and slices to limit when repository returns limit+1 rows', async () => {
@@ -583,14 +596,8 @@ describe('RecommendationsService', () => {
           followerCount: 50,
           verified: false,
         },
-        {
-          id: 'company-3',
-          name: 'Gamma LLC',
-          industry: 'Healthcare',
-          followerCount: 25,
-          verified: false,
-        },
       ]);
+      // company-3 should NOT be fetched (sentinel row enrichment is skipped)
 
       const result = await service.getCompanyRecommendations(
         'u1',
@@ -626,13 +633,6 @@ describe('RecommendationsService', () => {
           name: 'Beta Inc',
           industry: 'Finance',
           followerCount: 50,
-          verified: false,
-        },
-        {
-          id: 'company-3',
-          name: 'Gamma LLC',
-          industry: 'Healthcare',
-          followerCount: 25,
           verified: false,
         },
       ]);

@@ -9,6 +9,7 @@ import type {
   RecommendedPersonDto,
 } from './dto';
 import {
+  encodeScoreCursor,
   paginateScored,
   type RecommendationsRepository,
 } from './recommendations.repository';
@@ -29,17 +30,23 @@ export class RecommendationsService {
     cursor: string | undefined,
     limit: number,
   ): Promise<RecommendationsResponseDto<RecommendedPersonDto>> {
-    const cacheKey = `${this.CACHE_PREFIX}people:${userId}:${cursor || 'first'}:${limit}`;
+    // Cache only the first page (no cursor) — the most frequently hit.
+    // Caching per-cursor would produce near-zero cache hit rates since
+    // every paginated page has a unique cursor.
+    const shouldCache = !cursor;
+    const cacheKey = `${this.CACHE_PREFIX}people:${userId}`;
 
-    try {
-      const cached = await this.redis.get(cacheKey);
-      if (cached) {
-        return JSON.parse(
-          cached,
-        ) as RecommendationsResponseDto<RecommendedPersonDto>;
+    if (shouldCache) {
+      try {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+          return JSON.parse(
+            cached,
+          ) as RecommendationsResponseDto<RecommendedPersonDto>;
+        }
+      } catch {
+        // Redis unavailable, continue without cache
       }
-    } catch {
-      // Redis unavailable, continue without cache
     }
 
     const scoredIds = await this.repository.findPeopleRecommendations(
@@ -53,21 +60,28 @@ export class RecommendationsService {
         data: [],
         meta: { hasNextPage: false, limit },
       };
-      try {
-        await this.redis.setex(
-          cacheKey,
-          this.CACHE_TTL,
-          JSON.stringify(emptyResult),
-        );
-      } catch {
-        // Ignore cache write failure
+      if (shouldCache) {
+        try {
+          await this.redis.setex(
+            cacheKey,
+            this.CACHE_TTL,
+            JSON.stringify(emptyResult),
+          );
+        } catch {
+          // Ignore cache write failure
+        }
       }
       return emptyResult;
     }
 
-    const ids = scoredIds.map((r) => r.id);
+    // Detect hasNextPage before enrichment to avoid enriching the sentinel row
+    const hasNextPage = scoredIds.length > limit;
+    const idsToEnrich = hasNextPage
+      ? scoredIds.slice(0, limit).map((r) => r.id)
+      : scoredIds.map((r) => r.id);
+
     const users = await this.prisma.user.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: idsToEnrich } },
       select: {
         id: true,
         displayName: true,
@@ -81,8 +95,10 @@ export class RecommendationsService {
     });
 
     const userMap = new Map(users.map((u) => [u.id, u]));
-    const enriched: RecommendedPersonDto[] = [];
+    const enriched: Array<RecommendedPersonDto & { score: number }> = [];
     for (const scored of scoredIds) {
+      // Only process items within limit (skip sentinel row)
+      if (enriched.length >= limit) break;
       const user = userMap.get(scored.id);
       if (!user) continue;
       enriched.push({
@@ -91,22 +107,40 @@ export class RecommendationsService {
         headline: user.profile?.headline || null,
         location: user.profile?.location || null,
         profilePictureUrl: null, // TODO: populate when user avatar field is available
-        mutualConnectionCount: scored.score, // TODO: currently equals score (single-factor); will diverge when multi-factor scoring is introduced
         score: scored.score,
       });
     }
 
     const paginated = paginateScored(enriched, limit);
 
+    // paginateScored cannot detect hasNextPage since we pre-sliced scoredIds;
+    // use the pre-computed flag from scoredIds.length. Also compute nextCursor
+    // manually since paginateScored's internal hasNextPage is always false here.
+    const lastItem = enriched.at(-1);
+    const nextCursor =
+      hasNextPage && lastItem
+        ? encodeScoreCursor(lastItem.score, lastItem.id)
+        : undefined;
+    // Strip internal score from response data
+    const cleanData: RecommendedPersonDto[] = paginated.data.map(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ({ score, ...rest }) => rest,
+    );
     const result: RecommendationsResponseDto<RecommendedPersonDto> = {
-      data: paginated.data,
-      meta: paginated.meta,
+      data: cleanData,
+      meta: { nextCursor, hasNextPage, limit },
     };
 
-    try {
-      await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(result));
-    } catch {
-      // Ignore cache write failure
+    if (shouldCache) {
+      try {
+        await this.redis.setex(
+          cacheKey,
+          this.CACHE_TTL,
+          JSON.stringify(result),
+        );
+      } catch {
+        // Ignore cache write failure
+      }
     }
 
     // NOTE: Returns { data, meta } directly — the global ApiResponseInterceptor
@@ -120,6 +154,10 @@ export class RecommendationsService {
     cursor: string | undefined,
     limit: number,
   ): Promise<RecommendationsResponseDto<RecommendedJobDto>> {
+    // Only job recommendations respect the notification preference
+    // because jobs have clear opt-out semantics (users may not want job alerts).
+    // People and company recommendations are always on — they're core to the
+    // networking experience and don't have an equivalent preference field.
     const preference = await this.prisma.notificationPreference.findUnique({
       where: { userId },
       select: { jobRecommendation: true },
@@ -129,17 +167,20 @@ export class RecommendationsService {
       return { data: [], meta: { hasNextPage: false, limit } };
     }
 
-    const cacheKey = `${this.CACHE_PREFIX}jobs:${userId}:${cursor || 'first'}:${limit}`;
+    const shouldCache = !cursor;
+    const cacheKey = `${this.CACHE_PREFIX}jobs:${userId}`;
 
-    try {
-      const cached = await this.redis.get(cacheKey);
-      if (cached) {
-        return JSON.parse(
-          cached,
-        ) as RecommendationsResponseDto<RecommendedJobDto>;
+    if (shouldCache) {
+      try {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+          return JSON.parse(
+            cached,
+          ) as RecommendationsResponseDto<RecommendedJobDto>;
+        }
+      } catch {
+        // Continue without cache
       }
-    } catch {
-      // Continue without cache
     }
 
     const scoredIds = await this.repository.findJobRecommendations(
@@ -153,21 +194,27 @@ export class RecommendationsService {
         data: [],
         meta: { hasNextPage: false, limit },
       };
-      try {
-        await this.redis.setex(
-          cacheKey,
-          this.CACHE_TTL,
-          JSON.stringify(emptyResult),
-        );
-      } catch {
-        // Ignore
+      if (shouldCache) {
+        try {
+          await this.redis.setex(
+            cacheKey,
+            this.CACHE_TTL,
+            JSON.stringify(emptyResult),
+          );
+        } catch {
+          // Ignore
+        }
       }
       return emptyResult;
     }
 
-    const ids = scoredIds.map((r) => r.id);
+    const hasNextPage = scoredIds.length > limit;
+    const idsToEnrich = hasNextPage
+      ? scoredIds.slice(0, limit).map((r) => r.id)
+      : scoredIds.map((r) => r.id);
+
     const jobs = await this.prisma.job.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: idsToEnrich } },
       select: {
         id: true,
         title: true,
@@ -183,8 +230,9 @@ export class RecommendationsService {
     });
 
     const jobMap = new Map(jobs.map((j) => [j.id, j]));
-    const enriched: RecommendedJobDto[] = [];
+    const enriched: Array<RecommendedJobDto & { score: number }> = [];
     for (const scored of scoredIds) {
+      if (enriched.length >= limit) break;
       const job = jobMap.get(scored.id);
       if (!job) continue;
       enriched.push({
@@ -204,15 +252,30 @@ export class RecommendationsService {
 
     const paginated = paginateScored(enriched, limit);
 
+    const lastItem = enriched.at(-1);
+    const nextCursor =
+      hasNextPage && lastItem
+        ? encodeScoreCursor(lastItem.score, lastItem.id)
+        : undefined;
+    const cleanData: RecommendedJobDto[] = paginated.data.map(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ({ score, ...rest }) => rest,
+    );
     const result: RecommendationsResponseDto<RecommendedJobDto> = {
-      data: paginated.data,
-      meta: paginated.meta,
+      data: cleanData,
+      meta: { nextCursor, hasNextPage, limit },
     };
 
-    try {
-      await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(result));
-    } catch {
-      // Ignore
+    if (shouldCache) {
+      try {
+        await this.redis.setex(
+          cacheKey,
+          this.CACHE_TTL,
+          JSON.stringify(result),
+        );
+      } catch {
+        // Ignore
+      }
     }
 
     return result;
@@ -223,17 +286,20 @@ export class RecommendationsService {
     cursor: string | undefined,
     limit: number,
   ): Promise<RecommendationsResponseDto<RecommendedCompanyDto>> {
-    const cacheKey = `${this.CACHE_PREFIX}companies:${userId}:${cursor || 'first'}:${limit}`;
+    const shouldCache = !cursor;
+    const cacheKey = `${this.CACHE_PREFIX}companies:${userId}`;
 
-    try {
-      const cached = await this.redis.get(cacheKey);
-      if (cached) {
-        return JSON.parse(
-          cached,
-        ) as RecommendationsResponseDto<RecommendedCompanyDto>;
+    if (shouldCache) {
+      try {
+        const cached = await this.redis.get(cacheKey);
+        if (cached) {
+          return JSON.parse(
+            cached,
+          ) as RecommendationsResponseDto<RecommendedCompanyDto>;
+        }
+      } catch {
+        // Continue without cache
       }
-    } catch {
-      // Continue without cache
     }
 
     const scoredIds = await this.repository.findCompanyRecommendations(
@@ -247,21 +313,27 @@ export class RecommendationsService {
         data: [],
         meta: { hasNextPage: false, limit },
       };
-      try {
-        await this.redis.setex(
-          cacheKey,
-          this.CACHE_TTL,
-          JSON.stringify(emptyResult),
-        );
-      } catch {
-        // Ignore
+      if (shouldCache) {
+        try {
+          await this.redis.setex(
+            cacheKey,
+            this.CACHE_TTL,
+            JSON.stringify(emptyResult),
+          );
+        } catch {
+          // Ignore
+        }
       }
       return emptyResult;
     }
 
-    const ids = scoredIds.map((r) => r.id);
+    const hasNextPage = scoredIds.length > limit;
+    const idsToEnrich = hasNextPage
+      ? scoredIds.slice(0, limit).map((r) => r.id)
+      : scoredIds.map((r) => r.id);
+
     const companies = await this.prisma.company.findMany({
-      where: { id: { in: ids } },
+      where: { id: { in: idsToEnrich } },
       select: {
         id: true,
         name: true,
@@ -272,8 +344,9 @@ export class RecommendationsService {
     });
 
     const companyMap = new Map(companies.map((c) => [c.id, c]));
-    const enriched: RecommendedCompanyDto[] = [];
+    const enriched: Array<RecommendedCompanyDto & { score: number }> = [];
     for (const scored of scoredIds) {
+      if (enriched.length >= limit) break;
       const company = companyMap.get(scored.id);
       if (!company) continue;
       enriched.push({
@@ -289,15 +362,30 @@ export class RecommendationsService {
 
     const paginated = paginateScored(enriched, limit);
 
+    const lastItem = enriched.at(-1);
+    const nextCursor =
+      hasNextPage && lastItem
+        ? encodeScoreCursor(lastItem.score, lastItem.id)
+        : undefined;
+    const cleanData: RecommendedCompanyDto[] = paginated.data.map(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ({ score, ...rest }) => rest,
+    );
     const result: RecommendationsResponseDto<RecommendedCompanyDto> = {
-      data: paginated.data,
-      meta: paginated.meta,
+      data: cleanData,
+      meta: { nextCursor, hasNextPage, limit },
     };
 
-    try {
-      await this.redis.setex(cacheKey, this.CACHE_TTL, JSON.stringify(result));
-    } catch {
-      // Ignore
+    if (shouldCache) {
+      try {
+        await this.redis.setex(
+          cacheKey,
+          this.CACHE_TTL,
+          JSON.stringify(result),
+        );
+      } catch {
+        // Ignore
+      }
     }
 
     return result;

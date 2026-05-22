@@ -1,11 +1,11 @@
+import type { CursorPaginationMeta } from '../../common/pagination/cursor-pagination.dto';
+
 export interface RecommendedPersonDto {
   id: string;
   displayName: string | null;
   headline: string | null;
   location: string | null;
   profilePictureUrl: string | null;
-  mutualConnectionCount?: number;
-  score: number;
 }
 
 export interface RecommendedJobDto {
@@ -19,7 +19,6 @@ export interface RecommendedJobDto {
   salaryMax: number | null;
   salaryCurrency: string | null;
   publishedAt: Date | null;
-  score: number;
 }
 
 export interface RecommendedCompanyDto {
@@ -29,14 +28,9 @@ export interface RecommendedCompanyDto {
   followerCount: number;
   verified: boolean;
   logoUrl: string | null;
-  score: number;
 }
 
 export interface RecommendationsResponseDto<T> {
   data: T[];
-  meta: {
-    nextCursor?: string;
-    hasNextPage: boolean;
-    limit: number;
-  };
+  meta: CursorPaginationMeta;
 }

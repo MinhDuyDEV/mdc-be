@@ -252,30 +252,37 @@ export class ProfilesService {
     skills: SkillDto[],
     normalizedNames: string[],
   ): Promise<string[]> {
-    const results: string[] = [];
+    // Batch lookup all existing skills
+    const existing = await tx.skill.findMany({
+      where: { name: { in: normalizedNames } },
+      select: { id: true, name: true },
+    });
+    const idMap = new Map<string, string>(existing.map((s) => [s.name, s.id]));
 
-    for (let i = 0; i < skills.length; i++) {
-      const normalized = normalizedNames[i];
-      const category = skills[i].category ?? null;
-
-      // Try to find existing skill by normalized name
-      const existing = await tx.skill.findUnique({
-        where: { name: normalized },
-        select: { id: true },
+    // Batch create missing skills
+    const missing = skills.filter((_, i) => !idMap.has(normalizedNames[i]));
+    if (missing.length > 0) {
+      await tx.skill.createMany({
+        data: missing.map((s) => ({
+          name: s.name.trim().toLowerCase(),
+          category: s.category ?? null,
+        })),
+        skipDuplicates: true,
       });
-
-      if (existing) {
-        results.push(existing.id);
-      } else {
-        const created = await tx.skill.create({
-          data: { name: normalized, category },
-          select: { id: true },
-        });
-        results.push(created.id);
+      // Re-fetch newly created IDs
+      const created = await tx.skill.findMany({
+        where: {
+          name: { in: missing.map((s) => s.name.trim().toLowerCase()) },
+        },
+        select: { id: true, name: true },
+      });
+      for (const s of created) {
+        idMap.set(s.name, s.id);
       }
     }
 
-    return results;
+    // Map in original order
+    return normalizedNames.map((n) => idMap.get(n)!);
   }
 
   async replaceExperiences(profileId: string, experiences: ExperienceDto[]) {
