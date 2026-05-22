@@ -3,6 +3,8 @@ import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin';
+import { AnalyticsModule } from './analytics';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ApplicationsModule } from './applications/applications.module';
@@ -18,6 +20,7 @@ import { REDIS_CLIENT } from './infra/redis/redis.constants';
 import { JobsModule } from './jobs/jobs.module';
 import { MediaModule } from './media/media.module';
 import { MessagingModule } from './messaging/messaging.module';
+import { ModerationModule } from './moderation';
 import { NotificationsModule } from './notifications/notifications.module';
 import { OutboxModule } from './outbox';
 import { PostsModule } from './posts/posts.module';
@@ -50,8 +53,10 @@ import { UsersModule } from './users/users.module';
         };
       },
     }),
+    AdminModule,
     CommonModule,
     InfraModule,
+    AnalyticsModule,
     ApplicationsModule,
     AuthModule,
     CompaniesModule,
@@ -66,6 +71,7 @@ import { UsersModule } from './users/users.module';
     FeedModule,
     ConnectionsModule,
     MessagingModule,
+    ModerationModule,
     RecruitingModule,
     RealtimeModule,
     SearchModule,
