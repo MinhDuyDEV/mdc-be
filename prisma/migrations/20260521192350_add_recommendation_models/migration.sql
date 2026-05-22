@@ -1,3 +1,10 @@
+-- NOTE: This migration consolidates multiple phase schema additions
+-- (messaging, recommendations, search) because earlier migrations were empty.
+-- In production, each logical group would be a separate migration.
+-- Phase 7: messaging (ConversationType, ParticipantRole, MessageType enums + tables)
+-- Phase 10: recommendations (recommendation_feedback, recommendation_dismissals)
+-- Search: search_query_logs, search_reindex_runs
+
 -- CreateEnum
 CREATE TYPE "ConversationType" AS ENUM ('DIRECT', 'GROUP');
 

@@ -164,6 +164,113 @@ describe('RecommendationsService', () => {
       expect(result.data).toHaveLength(1);
       expect(result.data[0].id).toBe('user-2');
     });
+
+    it('sets hasMore=true and slices to limit when repository returns limit+1 rows', async () => {
+      redis.get.mockResolvedValue(null);
+      const limit = 2;
+      repository.findPeopleRecommendations.mockResolvedValue([
+        { id: 'user-2', score: 10 },
+        { id: 'user-3', score: 8 },
+        { id: 'user-4', score: 5 }, // limit+1 row, should NOT appear in data
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-2',
+          displayName: 'Alice',
+          profile: { headline: 'Engineer', location: 'SF' },
+        },
+        {
+          id: 'user-3',
+          displayName: 'Bob',
+          profile: { headline: 'Designer', location: 'NYC' },
+        },
+        {
+          id: 'user-4',
+          displayName: 'Charlie',
+          profile: { headline: 'PM', location: 'LA' },
+        },
+      ]);
+
+      const result = await service.getPeopleRecommendations(
+        'u1',
+        undefined,
+        limit,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].id).toBe('user-2');
+      expect(result.data[1].id).toBe('user-3');
+      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.limit).toBe(limit);
+      expect(result.data).not.toContainEqual(
+        expect.objectContaining({ id: 'user-4' }),
+      );
+    });
+
+    it('generates nextCursor when hasMore is true', async () => {
+      redis.get.mockResolvedValue(null);
+      const limit = 2;
+      repository.findPeopleRecommendations.mockResolvedValue([
+        { id: 'user-2', score: 10 },
+        { id: 'user-3', score: 8 },
+        { id: 'user-4', score: 5 },
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-2',
+          displayName: 'Alice',
+          profile: { headline: 'Engineer', location: 'SF' },
+        },
+        {
+          id: 'user-3',
+          displayName: 'Bob',
+          profile: { headline: 'Designer', location: 'NYC' },
+        },
+        {
+          id: 'user-4',
+          displayName: 'Charlie',
+          profile: { headline: 'PM', location: 'LA' },
+        },
+      ]);
+
+      const result = await service.getPeopleRecommendations(
+        'u1',
+        undefined,
+        limit,
+      );
+
+      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.nextCursor).toBeDefined();
+      expect(typeof result.meta.nextCursor).toBe('string');
+      // nextCursor should be a base64-encoded JSON string with score and id
+      const decoded = JSON.parse(
+        Buffer.from(result.meta.nextCursor!, 'base64').toString('utf8'),
+      );
+      expect(decoded).toEqual({ score: 8, id: 'user-3' });
+    });
+
+    it('does not set nextCursor when hasMore is false', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findPeopleRecommendations.mockResolvedValue([
+        { id: 'user-2', score: 5 },
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-2',
+          displayName: 'Alice',
+          profile: { headline: null, location: null },
+        },
+      ]);
+
+      const result = await service.getPeopleRecommendations(
+        'u1',
+        undefined,
+        20,
+      );
+
+      expect(result.meta.hasMore).toBe(false);
+      expect(result.meta.nextCursor).toBeUndefined();
+    });
   });
 
   describe('getJobRecommendations', () => {
@@ -254,6 +361,129 @@ describe('RecommendationsService', () => {
         score: 8,
       });
     });
+
+    it('sets hasMore=true and slices to limit when repository returns limit+1 rows', async () => {
+      prisma.notificationPreference.findUnique.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
+      const limit = 2;
+      repository.findJobRecommendations.mockResolvedValue([
+        { id: 'job-1', score: 10 },
+        { id: 'job-2', score: 8 },
+        { id: 'job-3', score: 5 }, // limit+1, should not appear
+      ]);
+      prisma.job.findMany.mockResolvedValue([
+        {
+          id: 'job-1',
+          title: 'Senior Engineer',
+          location: 'Remote',
+          employmentType: 'FULL_TIME',
+          workplaceType: 'REMOTE',
+          salaryMin: 80000,
+          salaryMax: 120000,
+          salaryCurrency: 'USD',
+          publishedAt: new Date('2026-01-01'),
+          company: { name: 'Acme Corp' },
+        },
+        {
+          id: 'job-2',
+          title: 'Junior Engineer',
+          location: 'NYC',
+          employmentType: 'FULL_TIME',
+          workplaceType: 'ONSITE',
+          salaryMin: 50000,
+          salaryMax: 70000,
+          salaryCurrency: 'USD',
+          publishedAt: new Date('2026-02-01'),
+          company: { name: 'Beta Inc' },
+        },
+        {
+          id: 'job-3',
+          title: 'Intern',
+          location: 'LA',
+          employmentType: 'INTERN',
+          workplaceType: 'HYBRID',
+          salaryMin: 20000,
+          salaryMax: 30000,
+          salaryCurrency: 'USD',
+          publishedAt: new Date('2026-03-01'),
+          company: { name: 'Gamma LLC' },
+        },
+      ]);
+
+      const result = await service.getJobRecommendations(
+        'u1',
+        undefined,
+        limit,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.meta.hasMore).toBe(true);
+      expect(result.data).not.toContainEqual(
+        expect.objectContaining({ id: 'job-3' }),
+      );
+    });
+
+    it('generates nextCursor when hasMore is true', async () => {
+      prisma.notificationPreference.findUnique.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
+      const limit = 2;
+      repository.findJobRecommendations.mockResolvedValue([
+        { id: 'job-1', score: 10 },
+        { id: 'job-2', score: 8 },
+        { id: 'job-3', score: 5 },
+      ]);
+      prisma.job.findMany.mockResolvedValue([
+        {
+          id: 'job-1',
+          title: 'Senior',
+          location: null,
+          employmentType: 'FULL_TIME',
+          workplaceType: 'REMOTE',
+          salaryMin: null,
+          salaryMax: null,
+          salaryCurrency: null,
+          publishedAt: null,
+          company: { name: 'Acme' },
+        },
+        {
+          id: 'job-2',
+          title: 'Junior',
+          location: null,
+          employmentType: 'FULL_TIME',
+          workplaceType: 'ONSITE',
+          salaryMin: null,
+          salaryMax: null,
+          salaryCurrency: null,
+          publishedAt: null,
+          company: { name: 'Beta' },
+        },
+        {
+          id: 'job-3',
+          title: 'Intern',
+          location: null,
+          employmentType: 'INTERN',
+          workplaceType: 'HYBRID',
+          salaryMin: null,
+          salaryMax: null,
+          salaryCurrency: null,
+          publishedAt: null,
+          company: { name: 'Gamma' },
+        },
+      ]);
+
+      const result = await service.getJobRecommendations(
+        'u1',
+        undefined,
+        limit,
+      );
+
+      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.nextCursor).toBeDefined();
+      const decoded = JSON.parse(
+        Buffer.from(result.meta.nextCursor!, 'base64').toString('utf8'),
+      );
+      expect(decoded).toEqual({ score: 8, id: 'job-2' });
+    });
   });
 
   describe('getCompanyRecommendations', () => {
@@ -328,6 +558,97 @@ describe('RecommendationsService', () => {
         verified: true,
         score: 4,
       });
+    });
+
+    it('sets hasMore=true and slices to limit when repository returns limit+1 rows', async () => {
+      redis.get.mockResolvedValue(null);
+      const limit = 2;
+      repository.findCompanyRecommendations.mockResolvedValue([
+        { id: 'company-1', score: 8 },
+        { id: 'company-2', score: 5 },
+        { id: 'company-3', score: 3 }, // limit+1
+      ]);
+      prisma.company.findMany.mockResolvedValue([
+        {
+          id: 'company-1',
+          name: 'Acme Corp',
+          industry: 'Technology',
+          followerCount: 100,
+          verified: true,
+        },
+        {
+          id: 'company-2',
+          name: 'Beta Inc',
+          industry: 'Finance',
+          followerCount: 50,
+          verified: false,
+        },
+        {
+          id: 'company-3',
+          name: 'Gamma LLC',
+          industry: 'Healthcare',
+          followerCount: 25,
+          verified: false,
+        },
+      ]);
+
+      const result = await service.getCompanyRecommendations(
+        'u1',
+        undefined,
+        limit,
+      );
+
+      expect(result.data).toHaveLength(2);
+      expect(result.meta.hasMore).toBe(true);
+      expect(result.data).not.toContainEqual(
+        expect.objectContaining({ id: 'company-3' }),
+      );
+    });
+
+    it('generates nextCursor when hasMore is true', async () => {
+      redis.get.mockResolvedValue(null);
+      const limit = 2;
+      repository.findCompanyRecommendations.mockResolvedValue([
+        { id: 'company-1', score: 8 },
+        { id: 'company-2', score: 5 },
+        { id: 'company-3', score: 3 },
+      ]);
+      prisma.company.findMany.mockResolvedValue([
+        {
+          id: 'company-1',
+          name: 'Acme Corp',
+          industry: 'Technology',
+          followerCount: 100,
+          verified: true,
+        },
+        {
+          id: 'company-2',
+          name: 'Beta Inc',
+          industry: 'Finance',
+          followerCount: 50,
+          verified: false,
+        },
+        {
+          id: 'company-3',
+          name: 'Gamma LLC',
+          industry: 'Healthcare',
+          followerCount: 25,
+          verified: false,
+        },
+      ]);
+
+      const result = await service.getCompanyRecommendations(
+        'u1',
+        undefined,
+        limit,
+      );
+
+      expect(result.meta.hasMore).toBe(true);
+      expect(result.meta.nextCursor).toBeDefined();
+      const decoded = JSON.parse(
+        Buffer.from(result.meta.nextCursor!, 'base64').toString('utf8'),
+      );
+      expect(decoded).toEqual({ score: 5, id: 'company-2' });
     });
   });
 });

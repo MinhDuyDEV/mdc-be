@@ -90,8 +90,8 @@ export class RecommendationsService {
         displayName: user.displayName,
         headline: user.profile?.headline || null,
         location: user.profile?.location || null,
-        profilePictureUrl: null,
-        mutualConnectionCount: scored.score,
+        profilePictureUrl: null, // TODO: populate when user avatar field is available
+        mutualConnectionCount: scored.score, // TODO: currently equals score (single-factor); will diverge when multi-factor scoring is introduced
         score: scored.score,
       });
     }
@@ -113,6 +113,9 @@ export class RecommendationsService {
       // Ignore cache write failure
     }
 
+    // NOTE: Returns { data, meta } directly — the global ApiResponseInterceptor
+    // recognizes this shape via isApiSuccessResponse() and passes it through without
+    // double-wrapping. This is consistent with the interceptor's bypass logic.
     return result;
   }
 
@@ -287,7 +290,7 @@ export class RecommendationsService {
         industry: company.industry,
         followerCount: company.followerCount,
         verified: company.verified,
-        logoUrl: null,
+        logoUrl: null, // TODO: populate when company logo field is available
         score: scored.score,
       });
     }
