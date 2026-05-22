@@ -9,13 +9,13 @@ import type {
   PrismaService,
   PrismaTransaction,
 } from '../infra/prisma/prisma.service';
-import type { OutboxService } from '../outbox/outbox.service';
+import { OutboxService } from '../outbox/outbox.service';
 import type {
   CreateModerationActionDto,
   CreateReportDto,
   ReportResponseDto,
 } from './dto';
-import type { ModerationPolicyService } from './moderation-policy.service';
+import { ModerationPolicyService } from './moderation-policy.service';
 
 @Injectable()
 export class ModerationService {

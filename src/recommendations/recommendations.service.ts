@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Redis } from 'ioredis';
-import type { PrismaService } from '../infra/prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { REDIS_CLIENT } from '../infra/redis/redis.constants';
 import type {
   RecommendationsResponseDto,

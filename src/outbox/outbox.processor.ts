@@ -1,11 +1,11 @@
 import { Injectable } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
+import { ConfigService } from "@nestjs/config";
 import { Cron, CronExpression } from "@nestjs/schedule";
 import { randomUUID } from "crypto";
 import { InjectPinoLogger, type PinoLogger } from "nestjs-pino";
 import type { AppConfig } from "../infra/config";
-import type { PrismaService } from "../infra/prisma";
-import type { DeadLetterService } from "./dead-letter.service";
+import { PrismaService } from "../infra/prisma";
+import { DeadLetterService } from "./dead-letter.service";
 import type { ApplicationEmailProcessor } from "./processors/application-email.processor";
 import type { BillingProcessor } from "./processors/billing.processor";
 import type { CompanySearchIndexProcessor } from "./processors/company-search-index.processor";

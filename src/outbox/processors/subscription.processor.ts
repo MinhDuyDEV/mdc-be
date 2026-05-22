@@ -1,7 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
-import type { ConfigService } from "@nestjs/config";
+import { ConfigService } from "@nestjs/config";
 import type { AppConfig } from "../../infra/config";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
+import { PrismaService } from "../../infra/prisma/prisma.service";
 
 @Injectable()
 export class SubscriptionProcessor {

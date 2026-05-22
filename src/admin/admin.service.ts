@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
-import type { PrismaService } from '../infra/prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import type {
   AdminUserQueryDto,
   UpdateUserStatusDto,

@@ -9,7 +9,7 @@ import {
 	UseGuards,
 } from "@nestjs/common";
 import { Public } from "../../common/auth/public.decorator";
-import type { WebhookService } from "./webhook.service";
+import { WebhookService } from "./webhook.service";
 import { WebhookSignatureGuard } from "./webhook-signature.guard";
 
 @Controller("billing/webhooks")

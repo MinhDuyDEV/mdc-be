@@ -5,9 +5,9 @@ import {
 	Injectable,
 	NotFoundException,
 } from "@nestjs/common";
-import type { Reflector } from "@nestjs/core";
+import { Reflector } from "@nestjs/core";
 import { CompanyRole as CompanyRoleEnum } from "@prisma/client";
-import type { PrismaService } from "../../infra/prisma/prisma.service";
+import { PrismaService } from "../../infra/prisma/prisma.service";
 import type { AuthenticatedUser } from "../auth/current-user.interface";
 import {
 	COMPANY_ROLE_METADATA_KEY,

@@ -4,15 +4,15 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-import type { SearchEngineService } from '../infra/search-engine/search-engine.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { SearchEngineService } from '../infra/search-engine/search-engine.service';
 import type { SearchQueryDto } from './dto/search.query.dto';
 import type {
   SearchHitDto,
   SearchResponseDto,
 } from './dto/search.response.dto';
-import type { SearchService } from './search.service';
-import type { SearchFallbackService } from './search-fallback.service';
+import { SearchService } from './search.service';
+import { SearchFallbackService } from './search-fallback.service';
 
 type EsSearchHit = estypes.SearchHit<Record<string, unknown>>;
 type EsSearchResponse = estypes.SearchResponse<Record<string, unknown>>;

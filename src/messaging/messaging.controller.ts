@@ -20,7 +20,7 @@ import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagin
 import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
 import type { SendMessageDto } from './dto/send-message.dto';
-import type { MessagingService } from './messaging.service';
+import { MessagingService } from './messaging.service';
 
 @Controller('conversations')
 export class MessagingController {

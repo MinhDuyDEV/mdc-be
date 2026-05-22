@@ -4,9 +4,9 @@ import {
 	ForbiddenException,
 	Injectable,
 } from "@nestjs/common";
-import type { Reflector } from "@nestjs/core";
+import { Reflector } from "@nestjs/core";
 import type { AuthenticatedUser } from "../../common/auth/current-user.interface";
-import type { EntitlementsService } from "./entitlements.service";
+import { EntitlementsService } from "./entitlements.service";
 import { ENTITLEMENT_METADATA_KEY } from "./require-entitlement.decorator";
 
 interface RequestWithUser {

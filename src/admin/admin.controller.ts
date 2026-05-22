@@ -13,7 +13,7 @@ import { CurrentUser } from '../common/auth/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import type { AdminService } from './admin.service';
+import { AdminService } from './admin.service';
 import type {
   AdminCompanyQueryDto,
   AdminJobQueryDto,

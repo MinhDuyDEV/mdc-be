@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
-import type { PrismaService } from '../infra/prisma/prisma.service';
-import type { SearchEngineService } from '../infra/search-engine';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { SearchEngineService } from '../infra/search-engine';
 
 /**
  * Elasticsearch indexing facade consumed by outbox processors

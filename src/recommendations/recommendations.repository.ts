@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { PrismaService } from '../infra/prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 export function encodeScoreCursor(score: number, id: string): string {
   return Buffer.from(JSON.stringify({ score, id })).toString('base64');

@@ -7,10 +7,10 @@ import {
 	NotFoundException,
 } from "@nestjs/common";
 import { CompanyRole, type Prisma } from "@prisma/client";
-import type { EntitlementsService } from "../billing/entitlements/entitlements.service";
-import type { PrismaService } from "../infra/prisma/prisma.service";
-import type { IdempotencyService } from "../outbox/idempotency.service";
-import type { OutboxService } from "../outbox/outbox.service";
+import { EntitlementsService } from "../billing/entitlements/entitlements.service";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { IdempotencyService } from "../outbox/idempotency.service";
+import { OutboxService } from "../outbox/outbox.service";
 import type { AddMemberDto } from "./dto/add-member.dto";
 import type { CreateCompanyDto } from "./dto/create-company.dto";
 import type { InviteMemberDto } from "./dto/invite-member.dto";

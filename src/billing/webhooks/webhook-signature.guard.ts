@@ -5,7 +5,7 @@ import {
 	Injectable,
 	UnauthorizedException,
 } from "@nestjs/common";
-import type { WebhookService } from "./webhook.service";
+import { WebhookService } from "./webhook.service";
 
 @Injectable()
 export class WebhookSignatureGuard implements CanActivate {
