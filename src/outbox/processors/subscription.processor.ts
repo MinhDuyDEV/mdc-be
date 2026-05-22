@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
-import type { Prisma } from '@prisma/client';
 import type { AppConfig } from '../../infra/config';
 import type { PrismaService } from '../../infra/prisma/prisma.service';
 

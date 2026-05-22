@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import type { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { PrismaService } from '../infra/prisma/prisma.service';
 import type { IdempotencyService } from '../outbox/idempotency.service';
 import { RecruitingService } from './recruiting.service';
@@ -70,16 +71,22 @@ describe('RecruitingService', () => {
   let prisma: MockPrisma;
   let outbox: { emit: jest.Mock };
   let idempotency: { claim: jest.Mock };
+  let entitlements: { checkLimit: jest.Mock; consumeCredit: jest.Mock };
   let service: RecruitingService;
 
   beforeEach(() => {
     prisma = buildMockPrisma();
     outbox = { emit: jest.fn().mockResolvedValue(undefined) };
     idempotency = { claim: jest.fn().mockResolvedValue({}) };
+    entitlements = {
+      checkLimit: jest.fn().mockResolvedValue(true),
+      consumeCredit: jest.fn(),
+    };
     service = new RecruitingService(
       prisma as unknown as PrismaService,
       outbox,
       idempotency as unknown as IdempotencyService,
+      entitlements as unknown as EntitlementsService,
     );
   });
 

@@ -491,13 +491,15 @@ export class JobsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      // Consume credit atomically inside the transaction
+      // Consume credit inside the SAME transaction — credit decrement and
+      // status update commit together, or both roll back.
       await this.entitlementsService.consumeCredit(
         job.companyId,
         'job_posts',
         1,
         'Job',
         jobId,
+        tx,
       );
 
       const updated = await tx.job.update({

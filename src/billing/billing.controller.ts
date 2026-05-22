@@ -21,19 +21,19 @@ import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { CompanyRoleGuard } from '../common/guards/company-role.guard';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
-import { BillingService } from './billing.service';
+import type { BillingService } from './billing.service';
 import type { CreatePlanDto } from './dto/create-plan.dto';
 import type { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import type { ListInvoicesDto } from './dto/list-invoices.dto';
 import type { UpdatePlanDto } from './dto/update-plan.dto';
 
-@Controller('billing')
+@Controller()
 export class BillingController {
   constructor(private readonly billingService: BillingService) {}
 
   // ── Plans ────────────────────────────────────────────────────────────
 
-  @Get('plans')
+  @Get('billing/plans')
   @Public()
   @HttpCode(HttpStatus.OK)
   async listPlans(@CurrentUser() user?: AuthenticatedUser) {
@@ -41,14 +41,14 @@ export class BillingController {
     return this.billingService.listPlans(isAdmin);
   }
 
-  @Get('plans/:planId')
+  @Get('billing/plans/:planId')
   @Public()
   @HttpCode(HttpStatus.OK)
   async getPlan(@Param('planId', ParseUUIDPipe) planId: string) {
     return this.billingService.getPlan(planId);
   }
 
-  @Post('admin/plans')
+  @Post('admin/billing/plans')
   @UseGuards(RolesGuard)
   @Roles('admin')
   @HttpCode(HttpStatus.CREATED)
@@ -56,7 +56,7 @@ export class BillingController {
     return this.billingService.createPlan(dto);
   }
 
-  @Patch('admin/plans/:planId')
+  @Patch('admin/billing/plans/:planId')
   @UseGuards(RolesGuard)
   @Roles('admin')
   @HttpCode(HttpStatus.OK)
