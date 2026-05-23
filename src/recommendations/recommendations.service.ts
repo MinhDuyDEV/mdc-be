@@ -11,7 +11,7 @@ import type {
 import {
   encodeScoreCursor,
   paginateScored,
-  type RecommendationsRepository,
+  RecommendationsRepository,
 } from './recommendations.repository';
 
 @Injectable()
@@ -20,7 +20,8 @@ export class RecommendationsService {
   private readonly CACHE_PREFIX = 'recommendations:';
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(RecommendationsRepository)
     private readonly repository: RecommendationsRepository,
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}

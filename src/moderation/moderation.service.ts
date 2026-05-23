@@ -1,13 +1,14 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
   NotImplementedException,
 } from '@nestjs/common';
 import { PostStatus, ReportStatus, UserStatus } from '@prisma/client';
-import type {
+import {
   PrismaService,
-  PrismaTransaction,
+  type PrismaTransaction,
 } from '../infra/prisma/prisma.service';
 import { OutboxService } from '../outbox/outbox.service';
 import type {
@@ -20,8 +21,9 @@ import { ModerationPolicyService } from './moderation-policy.service';
 @Injectable()
 export class ModerationService {
   constructor(
-    private readonly prisma: PrismaService,
-    private readonly outbox: OutboxService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(OutboxService) private readonly outbox: OutboxService,
+    @Inject(ModerationPolicyService)
     private readonly policy: ModerationPolicyService,
   ) {}
 

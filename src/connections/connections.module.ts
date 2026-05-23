@@ -1,6 +1,6 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { InfraModule } from '../infra';
-import { OutboxModule } from '../outbox';
+import { OutboxCoreModule } from '../outbox';
 import {
   ConnectionsController,
   ConnectionsUsersController,
@@ -9,7 +9,7 @@ import { ConnectionsService } from './connections.service';
 import { ConnectionsPolicyService } from './connections-policy.service';
 
 @Module({
-  imports: [InfraModule, forwardRef(() => OutboxModule)],
+  imports: [InfraModule, OutboxCoreModule],
   controllers: [ConnectionsController, ConnectionsUsersController],
   providers: [ConnectionsService, ConnectionsPolicyService],
   exports: [ConnectionsService, ConnectionsPolicyService],

@@ -23,7 +23,7 @@ import { MediaModule } from './media/media.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ModerationModule } from './moderation';
 import { NotificationsModule } from './notifications/notifications.module';
-import { OutboxModule } from './outbox';
+import { OutboxProcessorModule } from './outbox';
 import { PostsModule } from './posts/posts.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { RealtimeModule } from './realtime/realtime.module';
@@ -66,7 +66,7 @@ import { UsersModule } from './users/users.module';
     JobsModule,
     MediaModule,
     NotificationsModule,
-    OutboxModule,
+    OutboxProcessorModule,
     PostsModule,
     ProfilesModule,
     RecommendationsModule,

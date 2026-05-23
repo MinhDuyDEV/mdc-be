@@ -1,9 +1,9 @@
 import type { estypes } from '@elastic/elasticsearch';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { createHash } from 'crypto';
-import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
+import { PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { SearchEngineService } from '../infra/search-engine/search-engine.service';
 import type { SearchQueryDto } from './dto/search.query.dto';
@@ -27,13 +27,16 @@ const ENTITY_TYPE_MAP: Record<string, SearchHitDto['type']> = {
 @Injectable()
 export class SearchQueryService {
   constructor(
+    @Inject(SearchEngineService)
     private readonly searchEngine: SearchEngineService,
-    private readonly searchService: SearchService,
+    @Inject(SearchService) private readonly searchService: SearchService,
+    @Inject(SearchFallbackService)
     private readonly fallback: SearchFallbackService,
-    private readonly prisma: PrismaService,
-    @InjectPinoLogger(SearchQueryService.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PinoLogger) private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(SearchQueryService.name);
+  }
 
   /**
    * Unified search across entity types.

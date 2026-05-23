@@ -1,21 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
-import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
+import { PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma';
 import { DeadLetterService } from './dead-letter.service';
-import type { ApplicationEmailProcessor } from './processors/application-email.processor';
-import type { BillingProcessor } from './processors/billing.processor';
-import type { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
-import type { JobSearchIndexProcessor } from './processors/job-search-index.processor';
-import type { MessagingProcessor } from './processors/messaging.processor';
-import type { NotificationProcessor } from './processors/notification.processor';
-import type { PostInteractionProcessor } from './processors/post-interaction.processor';
-import type { PostSearchIndexProcessor } from './processors/post-search-index.processor';
-import type { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
-import type { SubscriptionProcessor } from './processors/subscription.processor';
+import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { BillingProcessor } from './processors/billing.processor';
+import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import { MessagingProcessor } from './processors/messaging.processor';
+import { NotificationProcessor } from './processors/notification.processor';
+import { PostInteractionProcessor } from './processors/post-interaction.processor';
+import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
+import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import { SubscriptionProcessor } from './processors/subscription.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -33,22 +33,33 @@ export class OutboxProcessor {
   private readonly leaseTimeoutMs: number;
 
   constructor(
-    private readonly prisma: PrismaService,
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(ConfigService)
     private readonly config: ConfigService<AppConfig, true>,
-    private readonly deadLetter: DeadLetterService,
+    @Inject(DeadLetterService) private readonly deadLetter: DeadLetterService,
+    @Inject(CompanySearchIndexProcessor)
     private readonly companySearchIndex: CompanySearchIndexProcessor,
+    @Inject(JobSearchIndexProcessor)
     private readonly jobSearchIndex: JobSearchIndexProcessor,
+    @Inject(ApplicationEmailProcessor)
     private readonly applicationEmail: ApplicationEmailProcessor,
+    @Inject(NotificationProcessor)
     private readonly notification: NotificationProcessor,
+    @Inject(MessagingProcessor)
     private readonly messagingProcessor: MessagingProcessor,
+    @Inject(PostInteractionProcessor)
     private readonly postInteraction: PostInteractionProcessor,
+    @Inject(PostSearchIndexProcessor)
     private readonly postSearchIndex: PostSearchIndexProcessor,
+    @Inject(ProfileSearchIndexProcessor)
     private readonly profileSearchIndex: ProfileSearchIndexProcessor,
+    @Inject(BillingProcessor)
     private readonly billingProcessor: BillingProcessor,
+    @Inject(SubscriptionProcessor)
     private readonly subscriptionProcessor: SubscriptionProcessor,
-    @InjectPinoLogger(OutboxProcessor.name)
-    private readonly logger: PinoLogger,
+    @Inject(PinoLogger) private readonly logger: PinoLogger,
   ) {
+    this.logger.setContext(OutboxProcessor.name);
     this.batchSize = this.config.get('outboxBatchSize', { infer: true });
     this.maxRetries = this.config.get('outboxMaxRetries', { infer: true });
     this.baseBackoffMs = this.config.get('outboxBaseBackoffMs', {

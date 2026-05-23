@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
+import { PinoLogger } from 'nestjs-pino';
 import { SearchEngineService } from '../infra/search-engine/search-engine.service';
 
 type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
@@ -14,10 +14,12 @@ export class SearchFallbackService {
   private readonly cooldownMs = 30_000; // 30 seconds
 
   constructor(
+    @Inject(SearchEngineService)
     private readonly searchEngine: SearchEngineService,
-    @InjectPinoLogger(SearchFallbackService.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @Inject(PinoLogger) private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(SearchFallbackService.name);
+  }
 
   /**
    * Check if circuit is open (ES unavailable, use fallback)

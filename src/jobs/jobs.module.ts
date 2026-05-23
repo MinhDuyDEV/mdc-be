@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { BillingModule } from '../billing/billing.module';
 import { InfraModule } from '../infra';
-import { OutboxModule } from '../outbox';
+import { OutboxCoreModule } from '../outbox';
 import { JobsController } from './jobs.controller';
 import { JobsService } from './jobs.service';
 
 @Module({
-  imports: [BillingModule, InfraModule, OutboxModule],
+  imports: [BillingModule, InfraModule, OutboxCoreModule],
   controllers: [JobsController],
   providers: [JobsService],
   exports: [JobsService],

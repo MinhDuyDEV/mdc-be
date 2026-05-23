@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { InjectPinoLogger, type PinoLogger } from 'nestjs-pino';
+import { Inject, Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { SearchEngineService } from '../infra/search-engine';
 
@@ -11,11 +11,13 @@ import { SearchEngineService } from '../infra/search-engine';
 @Injectable()
 export class SearchIndexService {
   constructor(
+    @Inject(SearchEngineService)
     private readonly searchEngine: SearchEngineService,
-    private readonly prisma: PrismaService,
-    @InjectPinoLogger(SearchIndexService.name)
-    private readonly logger: PinoLogger,
-  ) {}
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(PinoLogger) private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(SearchIndexService.name);
+  }
 
   /**
    * Index a document in Elasticsearch.

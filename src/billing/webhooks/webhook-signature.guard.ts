@@ -2,10 +2,11 @@ import {
   BadRequestException,
   type CanActivate,
   type ExecutionContext,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import type { WebhookService } from './webhook.service';
+import { WebhookService } from './webhook.service';
 
 interface WebhookRequest {
   headers: Record<string, string | undefined>;
@@ -15,7 +16,9 @@ interface WebhookRequest {
 
 @Injectable()
 export class WebhookSignatureGuard implements CanActivate {
-  constructor(private readonly webhookService: WebhookService) {}
+  constructor(
+    @Inject(WebhookService) private readonly webhookService: WebhookService,
+  ) {}
 
   canActivate(context: ExecutionContext): boolean {
     const request = context.switchToHttp().getRequest<WebhookRequest>();

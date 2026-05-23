@@ -1,5 +1,5 @@
 import { Test, type TestingModule } from '@nestjs/testing';
-import { getLoggerToken } from 'nestjs-pino';
+import { PinoLogger } from 'nestjs-pino';
 import { SearchEngineService } from '../infra/search-engine/search-engine.service';
 import { SearchFallbackService } from './search-fallback.service';
 
@@ -19,7 +19,7 @@ describe('SearchFallbackService', () => {
         SearchFallbackService,
         { provide: SearchEngineService, useValue: mockSearchEngine },
         {
-          provide: getLoggerToken(SearchFallbackService.name),
+          provide: PinoLogger,
           useValue: {
             setContext: jest.fn(),
             info: jest.fn(),

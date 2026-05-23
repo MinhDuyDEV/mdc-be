@@ -4,7 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import type { AppConfig } from '../infra/config/app-config';
 import { InfraModule } from '../infra/infra.module';
-import { OutboxModule } from '../outbox/outbox.module';
+import { OutboxCoreModule } from '../outbox/outbox-core.module';
 import { AuthController } from './auth.controller';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from './auth.service';
@@ -27,7 +27,7 @@ import { TokenService } from './token.service';
       }),
     }),
     InfraModule,
-    OutboxModule,
+    OutboxCoreModule,
   ],
   controllers: [AuthController],
   providers: [

@@ -1,42 +1,12 @@
-import { forwardRef, Module } from '@nestjs/common';
-import { InfraModule } from '../infra';
-import { RealtimeModule } from '../realtime/realtime.module';
-import { SearchModule } from '../search';
-import { DeadLetterService } from './dead-letter.service';
-import { IdempotencyService } from './idempotency.service';
-import { OutboxProcessor } from './outbox.processor';
-import { OutboxService } from './outbox.service';
-import { ApplicationEmailProcessor } from './processors/application-email.processor';
-import { BillingProcessor } from './processors/billing.processor';
-import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
-import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
-import { MessagingProcessor } from './processors/messaging.processor';
-import { NotificationProcessor } from './processors/notification.processor';
-import { PostInteractionProcessor } from './processors/post-interaction.processor';
-import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
-import { ProfileCreationProcessor } from './processors/profile-creation.processor';
-import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
-import { SubscriptionProcessor } from './processors/subscription.processor';
+import { Module } from '@nestjs/common';
+import { OutboxCoreModule } from './outbox-core.module';
 
+/**
+ * Backward-compatible alias for modules that need transactional outbox services.
+ * New code should import OutboxCoreModule directly.
+ */
 @Module({
-  imports: [InfraModule, forwardRef(() => RealtimeModule), SearchModule],
-  providers: [
-    DeadLetterService,
-    IdempotencyService,
-    NotificationProcessor,
-    PostInteractionProcessor,
-    PostSearchIndexProcessor,
-    OutboxProcessor,
-    OutboxService,
-    ProfileCreationProcessor,
-    ProfileSearchIndexProcessor,
-    CompanySearchIndexProcessor,
-    JobSearchIndexProcessor,
-    MessagingProcessor,
-    ApplicationEmailProcessor,
-    BillingProcessor,
-    SubscriptionProcessor,
-  ],
-  exports: [DeadLetterService, IdempotencyService, OutboxService],
+  imports: [OutboxCoreModule],
+  exports: [OutboxCoreModule],
 })
 export class OutboxModule {}
