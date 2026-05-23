@@ -1,120 +1,151 @@
-# mdc-be — Project Knowledge Base
+<!-- Generated: 2026-05-23T00:00:00.000Z | Updated: 2026-05-23T00:00:00.000Z -->
 
-**Updated:** 2026-05-19 | **Branch:** main
+# mdc-be
 
-NestJS 11 backend for a LinkedIn-like job social network. Modular monolith with explicit domain boundaries (auth, users, profiles, companies, media, search, email, outbox).
+## Purpose
 
-## STACK
+A NestJS 11 backend for a professional networking and job platform (LinkedIn-like). This modular monolith provides authentication, user profiles, company pages, job postings, applications, recruiting tools, social features (posts, comments, reactions, connections), messaging, notifications, real-time updates, search, analytics, billing, and moderation. Built for horizontal scalability with explicit domain boundaries, transactional outbox pattern, and support for runtime role separation (API/worker/realtime).
 
-- **NestJS** 11.0.1 + **TypeScript** 5.7.3 (ESNext, decorators), **Node** ≥20.19.0
-- **Prisma** 6.19.3 + **Postgres** 16 (durable source of truth)
-- **Redis** 7 via **ioredis** 5.10 (cache, rate limits, presence)
-- **S3** via `@aws-sdk/client-s3` (MinIO dev / AWS prod) — `STORAGE_CLIENT` token
-- **Elasticsearch** 8.17 — `SEARCH_ENGINE_CLIENT` token
-- **Email** via Nodemailer 8 — `MAILER_TRANSPORTER` token
-- **Logging** nestjs-pino 4.6, **OTel** auto-instrumentations + OTLP HTTP exporters
-- **Validation** class-validator + class-transformer (whitelist + transform pipe)
-- **Tests** Jest 30 (unit colocated `*.spec.ts`, e2e in `test/`)
+## Key Files
 
-## STRUCTURE
+| File | Description |
+|------|-------------|
+| `package.json` | Project metadata, dependencies (NestJS 11, Prisma 6, Redis, S3, Elasticsearch), and npm scripts for build/test/dev |
+| `tsconfig.json` | TypeScript configuration with strict mode, decorators, ES2023 target, and nodenext module resolution |
+| `tsconfig.build.json` | Build-specific TypeScript config extending base tsconfig |
+| `nest-cli.json` | NestJS CLI configuration with source root and compiler options |
+| `.env.example` | Environment variable template for database, Redis, S3/MinIO, Elasticsearch, SMTP, JWT, rate limits, and billing |
+| `Dockerfile` | Multi-stage production container image with builder and runtime stages |
+| `docker-compose.yml` | Local development stack: Postgres 16, Redis 7, MinIO (S3), Elasticsearch 8.17 |
+| `eslint.config.mjs` | ESLint 9 flat config with TypeScript, Prettier integration |
+| `.prettierrc` | Code formatting rules |
+| `.gitignore` | Git exclusions for node_modules, dist, .env, coverage, logs |
+| `.dockerignore` | Docker build exclusions |
+| `PLAN_FULL.md` | Complete feature plan with must-haves, artifacts, key links, and architecture decisions |
+| `README.md` | Standard NestJS starter README with setup and deployment instructions |
 
-```
-src/
-├── main.ts              # bootstrap, global pipes, /api/v1 prefix
-├── app.module.ts        # root module
-├── infra/               # config, prisma, redis, s3, search, mailer, health, otel
-├── common/              # guards, decorators, filters, pagination, error contracts
-├── outbox/              # transactional events: lease, retry, dead-letter, idempotency
-├── auth/ users/ profiles/ companies/ media/ search/ email/   # domain modules
-└── types/
-prisma/schema.prisma     # data model + migrations
-test/                    # *.e2e-spec.ts (jest-e2e.json)
-```
+## Subdirectories
 
-## COMMANDS (validated)
+| Directory | Purpose |
+|-----------|---------|
+| `src/` | Application source code with domain modules, infrastructure, and common utilities (see `src/AGENTS.md`) |
+| `prisma/` | Database schema, migrations, and Prisma client configuration (see `prisma/AGENTS.md`) |
+| `test/` | End-to-end test suite with Jest configuration and test helpers (see `test/AGENTS.md`) |
+| `docs/` | Architecture documentation, decision records, and deployment guides |
+| `.github/` | CI/CD workflows for testing, security scanning, and deployment |
+| `.claude/` | Claude Code project configuration and instructions |
+| `.omc/` | Oh-my-claudecode state, plans, and session artifacts |
+| `.beads/` | Beads issue tracking database (git-tracked) |
+| `dist/` | Compiled JavaScript output (generated, not tracked) |
+| `node_modules/` | NPM dependencies (generated, not tracked) |
 
-```bash
-npm run build              # nest build → dist/
-npm run start:dev          # nest --watch (with OTel + ts-node)
-npm run typecheck          # tsc --noEmit
-npm run lint               # eslint --fix  (auto-fix; do NOT use as CI gate)
-npm run format             # prettier --write
-npm test                   # jest unit
-npm run test:e2e           # test/jest-e2e.json
-npm run prisma:validate    # validate schema
-npm run prisma:generate    # regen client
-npm run prisma:migrate     # dev migrate
-```
+## For AI Agents
 
-## CONVENTIONS
+### Working In This Directory
 
-- API prefix `/api/v1`. Success: `{ data, meta? }`. Error: `{ error: { code, message, details?, requestId? } }`.
-- Custom DI tokens for infra clients: `REDIS_CLIENT`, `STORAGE_CLIENT`, `SEARCH_ENGINE_CLIENT`, `MAILER_TRANSPORTER`.
-- `APP_PROCESS_ROLE=api|worker|realtime|all` controls runtime role behavior.
-- Cross-domain side effects flow through the **outbox** (`SELECT … FOR UPDATE SKIP LOCKED`, leasing with `OUTBOX_LEASE_TIMEOUT_MS`, exponential backoff capped at `OUTBOX_MAX_BACKOFF_MS`, dead-letter + idempotency).
-- TS flags: `strict`, `strictNullChecks: true`, `noImplicitAny: true`, `strictBindCallApply: true`, `module: nodenext`.
-- Tests: colocated `*.spec.ts`; e2e under `test/` using supertest.
+- Run `npm run typecheck` and `npm run lint` before claiming completion
+- Use `npm run prisma:validate` after any schema changes
+- Test changes with `npm test` (unit) and `npm run test:e2e` (integration)
+- Follow the transactional outbox pattern for cross-domain side effects
+- Never commit `.env` files or secrets
+- Use `bd` commands for issue tracking (see Beads Workflow section below)
 
-## CODE NAVIGATION
-
-**ALWAYS use `srcwalk` first.** It is the primary code navigator (tree-sitter based). Fall back to `grep`/`find`/`fd` ONLY when srcwalk fails or cannot answer the question.
-
-Run `srcwalk guide` to see the full routing policy.
-
-### Core commands
+### Testing Requirements
 
 ```bash
-srcwalk map --scope <dir>              # repo structure + dependency groups
-srcwalk find <symbol|text> --scope <dir>  # definitions + usages
-srcwalk find '*Pattern*' --scope <dir> --filter kind:fn  # symbol globs
-srcwalk files '<glob>' --scope <dir>   # file discovery by name/glob
-srcwalk callers <symbol> --scope <dir> # who calls it
-srcwalk callees <symbol> --scope <dir> # what it calls
-srcwalk deps <file>                    # imports + dependents
-srcwalk flow <symbol> --scope <dir>    # bidirectional slice
-srcwalk impact <symbol> --scope <dir>  # blast-radius before change
-srcwalk <path>[:line]                  # smart token-aware read
+# Type checking
+npm run typecheck
+
+# Linting (auto-fixes issues)
+npm run lint
+
+# Unit tests
+npm test
+
+# E2E tests (requires docker-compose services)
+npm run test:e2e
+
+# Test coverage
+npm run test:cov
+
+# Prisma schema validation
+npm run prisma:validate
 ```
 
-### Fallback rules
+### Common Patterns
 
-- **shell `find`/`fd`**: ONLY for filesystem metadata (permissions, mtimes, empty dirs, symlinks, binary assets, generated outputs). Never for code discovery.
-- **raw `grep`**: ONLY for last-mile text confirmation after `srcwalk find` has narrowed scope.
-- **shell `tree`/`ls`**: NEVER for orientation — use `srcwalk map` instead.
+- **API responses**: Success `{ data, meta? }`, Error `{ error: { code, message, details?, requestId? } }`
+- **DI tokens**: `REDIS_CLIENT`, `STORAGE_CLIENT`, `SEARCH_ENGINE_CLIENT`, `MAILER_TRANSPORTER`
+- **Runtime roles**: `APP_PROCESS_ROLE=api|worker|realtime|all` controls which features run
+- **Outbox pattern**: Domain events flow through `src/outbox/` with leasing, retry, and idempotency
+- **Module structure**: Each domain has `*.module.ts`, `*.controller.ts`, `*.service.ts`, `*.dto.ts`, `*.entity.ts`
+- **Validation**: Use `class-validator` decorators with `ValidationPipe` (whitelist + transform)
+- **Guards**: `@UseGuards(AuthGuard)` for authentication, custom guards for authorization
+- **OpenTelemetry**: Instrumentation loaded via `--require ./src/instrumentation.ts` before app bootstrap
 
-## BOUNDARIES
+## Dependencies
 
-**Always**
+### External
 
-- Run `npm run lint` (auto-fix) and `npm run typecheck` before claiming done.
-- Run `npx prisma validate` after editing `prisma/schema.prisma`.
-- Use the outbox for cross-domain side effects; never fan out inline.
+**Core Framework**
+- `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express` ^11.0.1 — NestJS framework
+- `@nestjs/config` ^4.0.4 — Configuration management
+- `@nestjs/jwt` ^11.0.2 — JWT authentication
+- `@nestjs/passport` ^11.0.5 — Passport integration
+- `@nestjs/schedule` ^6.1.3 — Cron jobs and intervals
+- `@nestjs/throttler` ^6.5.0 — Rate limiting
+- `@nestjs/websockets`, `@nestjs/platform-socket.io` ^11.1.22 — WebSocket support
 
-**Ask first**
+**Database & Storage**
+- `@prisma/client` ^6.19.3 — Prisma ORM client
+- `@prisma/instrumentation` ^6.19.3 — Prisma OpenTelemetry
+- `ioredis` ^5.10.1 — Redis client
+- `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` ^3.1048.0 — S3 storage
+- `@elastic/elasticsearch` ~8.17 — Elasticsearch client
 
-- Adding a new dependency to `package.json`.
-- Schema changes (`prisma/schema.prisma`, Zod schemas, config shape).
-- New `prisma migrate` runs that alter prod-bound tables.
-- Modifying `.opencode/` structure or this file.
+**Real-time & Messaging**
+- `socket.io` ^4.8.3 — WebSocket server
+- `@socket.io/redis-adapter` ^8.3.0 — Redis-backed Socket.IO adapter
+- `@nest-lab/throttler-storage-redis` ^1.2.0 — Redis throttler storage
 
-**Never**
+**Authentication & Security**
+- `passport` ^0.7.0, `passport-jwt` ^4.0.1 — JWT strategy
+- `bcryptjs` ^3.0.3 — Password hashing
+- `helmet` ^8.1.0 — Security headers
+- `cookie-parser` ^1.4.7 — Cookie parsing
 
-- Edit `dist/` (rebuilt on `npm run build`).
-- Commit `.env` or secrets.
-- Force-push `main`. Bypass git hooks.
-- Log secrets, tokens, resumes, full message bodies, or private raw bodies.
+**Validation & Transformation**
+- `class-validator` ^0.15.1 — DTO validation
+- `class-transformer` ^0.5.1 — Object transformation
+- `zod` ^4.4.3 — Schema validation
 
-## GOTCHAS
+**Email & Templates**
+- `nodemailer` ^8.0.7 — Email delivery
+- `handlebars` ^4.7.9 — Email templates
 
-- `bodyParser: false` in `NestFactory.create()` — custom body parsers wired in `bootstrap.ts`. Don't re-enable globally.
-- `@nestjs/schedule` is **^6** (not 4) — peer-dep conflict with NestJS 11 if downgraded.
-- `@nestjs/config` uses hand-written `validateEnv()`; Zod 4.x is installed but not yet wired for env validation.
-- OTel setup is `--require ./src/instrumentation.ts` for dev / `./dist/instrumentation.js` for prod — must load before Nest.
-- `main.ts` bootstrap promise is intentionally not awaited (`@typescript-eslint/no-floating-promises` will warn).
-- Module resolution is `nodenext` — relative ESM imports may need `.js` extensions.
-- `npm run lint` mutates files (`--fix`); CI should use a non-fix command instead.
+**Observability**
+- `nestjs-pino` ^4.6.1, `pino` ^10.3.1, `pino-http` ^11.0.0 — Structured logging
+- `@opentelemetry/api` ^1.9.1 — OpenTelemetry API
+- `@opentelemetry/sdk-node` ^0.218.0 — OpenTelemetry SDK
+- `@opentelemetry/auto-instrumentations-node` ^0.76.0 — Auto-instrumentation
+- `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http` ^0.218.0 — OTLP exporters
 
-<!-- bv-agent-instructions-v1 -->
+**Utilities**
+- `rxjs` ^7.8.1 — Reactive extensions
+- `reflect-metadata` ^0.2.2 — Metadata reflection
+
+**Development**
+- `@nestjs/cli` ^11.0.0 — NestJS CLI
+- `@nestjs/testing` ^11.0.1 — Testing utilities
+- `jest` ^30.0.0, `ts-jest` ^29.2.5 — Test framework
+- `supertest` ^7.0.0 — HTTP testing
+- `testcontainers`, `@testcontainers/postgresql` ^12.0.0 — Integration test containers
+- `prisma` ^6.19.3 — Prisma CLI
+- `typescript` ^5.7.3, `typescript-eslint` ^8.20.0 — TypeScript tooling
+- `eslint` ^9.18.0, `prettier` ^3.4.2 — Code quality
+- `ts-node` ^10.9.2, `ts-loader` ^9.5.2 — TypeScript execution
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
 
 ---
 
@@ -174,5 +205,3 @@ git push                # Push to remote
 - Create new issues with `bd create` when you discover tasks
 - Use descriptive titles and set appropriate priority/type
 - Always `bd sync` before ending session
-
-<!-- end-bv-agent-instructions -->
