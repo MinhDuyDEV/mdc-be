@@ -8,7 +8,7 @@ Captured before Phase 1 implementation begins. Future phases compare against the
 - **Unit tests:** 739 passing in current `npm test` run.
 - **ESLint warnings:** 157 under `--max-warnings 999`.
 - **Production `tx as any` casts:** 18 sites in `AUDIT_REPORT.md` / `OPTIMIZATION_PLAN.md` source metrics.
-- **TypeScript strict mode:** OFF in `AUDIT_REPORT.md` / `OPTIMIZATION_PLAN.md`; only selected strict flags are enabled.
+- **TypeScript strict mode:** Not fully enabled. `strictNullChecks`, `noImplicitAny`, and `strictBindCallApply` are enabled; full `strict` mode remains Phase 1 work.
 - **Docker image size:** 265,109,284 bytes for local `mdc-be-baseline:latest` build.
 
 ## Verification Commands Run
@@ -18,168 +18,12 @@ Captured before Phase 1 implementation begins. Future phases compare against the
 Command: `npx eslint "{src,apps,libs,test}/**/*.ts" --max-warnings 999`
 
 ```text
-/Users/minhduydev/workspace/mdc/mdc-be/src/admin/admin.service.spec.ts
-  23:32  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaService`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/analytics/analytics.service.spec.ts
-  23:36  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaService`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.controller.spec.ts
-  84:61  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; emailVerifiedAt: Date | null; status: UserStatus; createdAt: Date; } | Promise<{ id: string; email: string; emailVerifiedAt: Date | null; status: UserStatus; createdAt: Date; }>`  @typescript-eslint/no-unsafe-argument
-  86:53  warning  Unsafe argument of type `any` assigned to a parameter of type `Request<ParamsDictionary, any, any, ParsedQs, Record<string, any>>`                                                                                                                                              @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.guard.spec.ts
-   37:46  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-   57:38  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-   74:46  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-   93:38  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-  115:46  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-  141:46  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-  171:38  warning  Unsafe argument of type `any` assigned to a parameter of type `ExecutionContext`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.service.spec.ts
-  49:7  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaService`             @typescript-eslint/no-unsafe-argument
-  50:7  warning  Unsafe argument of type `any` assigned to a parameter of type `PasswordService`           @typescript-eslint/no-unsafe-argument
-  51:7  warning  Unsafe argument of type `any` assigned to a parameter of type `TokenService`              @typescript-eslint/no-unsafe-argument
-  52:7  warning  Unsafe argument of type `any` assigned to a parameter of type `EmailVerificationService`  @typescript-eslint/no-unsafe-argument
-  53:7  warning  Unsafe argument of type `any` assigned to a parameter of type `OutboxService`             @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.service.ts
-   76:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  153:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/email-verification.service.spec.ts
-   78:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; userId: string; tokenHash: string; expiresAt: Date; type: TokenType; usedAt: Date | null; } | Prisma__VerificationTokenClient<{ id: string; createdAt: Date; ... 4 more ...; usedAt: Date | null; }, never, DefaultArgs, PrismaClientOptions>`  @typescript-eslint/no-unsafe-argument
-  108:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; userId: string; tokenHash: string; expiresAt: Date; type: TokenType; usedAt: Date | null; } | Prisma__VerificationTokenClient<{ id: string; createdAt: Date; ... 4 more ...; usedAt: Date | null; }, never, DefaultArgs, PrismaClientOptions>`  @typescript-eslint/no-unsafe-argument
-  109:59  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...>`                                                                         @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/password-reset.service.spec.ts
-   97:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                                                  @typescript-eslint/no-unsafe-argument
-  104:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; userId: string; tokenHash: string; expiresAt: Date; type: TokenType; usedAt: Date | null; } | Prisma__VerificationTokenClient<{ id: string; createdAt: Date; ... 4 more ...; usedAt: Date | null; }, never, DefaultArgs, PrismaClientOptions>`  @typescript-eslint/no-unsafe-argument
-  176:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; userId: string; tokenHash: string; expiresAt: Date; type: TokenType; usedAt: Date | null; } | Prisma__VerificationTokenClient<{ id: string; createdAt: Date; ... 4 more ...; usedAt: Date | null; }, never, DefaultArgs, PrismaClientOptions>`  @typescript-eslint/no-unsafe-argument
-  177:59  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...>`                                                                         @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/companies/companies.controller.spec.ts
-   26:42  warning  Unsafe argument of type `any` assigned to a parameter of type `CompaniesService`  @typescript-eslint/no-unsafe-argument
-   37:57  warning  Unsafe argument of type `any` assigned to a parameter of type `CreateCompanyDto`  @typescript-eslint/no-unsafe-argument
-   44:36  warning  Unsafe argument of type `any` assigned to a parameter of type `ListCompaniesDto`  @typescript-eslint/no-unsafe-argument
-   61:48  warning  Unsafe argument of type `any` assigned to a parameter of type `UpdateCompanyDto`  @typescript-eslint/no-unsafe-argument
-   87:46  warning  Unsafe argument of type `any` assigned to a parameter of type `ListCompaniesDto`  @typescript-eslint/no-unsafe-argument
-  112:47  warning  Unsafe argument of type `any` assigned to a parameter of type `InviteMemberDto`   @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/companies/companies.service.ts
-  209:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  268:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  306:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  344:41  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaService`      @typescript-eslint/no-unsafe-argument
-  375:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  430:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  521:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  627:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  684:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  810:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  928:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-  998:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/email/email.processor.spec.ts
-  58:68  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; status: EmailStatus; createdAt: Date; updatedAt: Date; errorMessage: string | null; subject: string; to: string; template: string; context: JsonValue; sentAt: Date | null; failedAt: Date | null; } | Prisma__EmailDeliveryClient<...>`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/email/email.service.spec.ts
-  46:68  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; status: EmailStatus; createdAt: Date; updatedAt: Date; errorMessage: string | null; subject: string; to: string; template: string; context: JsonValue; sentAt: Date | null; failedAt: Date | null; } | Prisma__EmailDeliveryClient<...>`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/feed/feed.service.spec.ts
-  24:31  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaService`             @typescript-eslint/no-unsafe-argument
-  24:39  warning  Unsafe argument of type `any` assigned to a parameter of type `ConnectionsPolicyService`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/logger/logger.module.spec.ts
-  18:18  warning  Unsafe argument of type `any` assigned to a parameter of type `string`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/media/media.controller.spec.ts
-  65:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; status: MediaStatus; createdAt: Date; updatedAt: Date; s3Bucket: string; s3Key: string; ownerId: string; purpose: string; filename: string; contentType: string; sizeBytes: number | null; etag: string | null; } | Promise<...>`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/media/media.service.spec.ts
-... output intentionally truncated in this snapshot; rerun the command above for the full current listing. Summary line below is the durable baseline value.
-  226:66  warning  Unsafe argument of type `any` assigned to a parameter of type `CreateReactionDto`   @typescript-eslint/no-unsafe-argument
-  246:66  warning  Unsafe argument of type `any` assigned to a parameter of type `CreateReactionDto`   @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/profiles/profiles.controller.spec.ts
-  39:28  warning  Unsafe argument of type `any` assigned to a parameter of type `({ endorsements: { id: string; createdAt: Date; profileId: string; profileSkillId: string; endorserId: string; }[]; skills: { id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; }[]; experiences: { ...; }[]; educations: ...`  @typescript-eslint/no-unsafe-argument
-  53:28  warning  Unsafe argument of type `any` assigned to a parameter of type `({ endorsements: { id: string; createdAt: Date; profileId: string; profileSkillId: string; endorserId: string; }[]; skills: { id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; }[]; experiences: { ...; }[]; educations: ...`  @typescript-eslint/no-unsafe-argument
-  65:28  warning  Unsafe argument of type `any` assigned to a parameter of type `({ endorsements: { id: string; createdAt: Date; profileId: string; profileSkillId: string; endorserId: string; }[]; skills: { id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; }[]; experiences: { ...; }[]; educations: ...`  @typescript-eslint/no-unsafe-argument
-  77:28  warning  Unsafe argument of type `any` assigned to a parameter of type `({ endorsements: { id: string; createdAt: Date; profileId: string; profileSkillId: string; endorserId: string; }[]; skills: { id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; }[]; experiences: { ...; }[]; educations: ...`  @typescript-eslint/no-unsafe-argument
-  92:30  warning  Unsafe argument of type `any` assigned to a parameter of type `{ data: { id: string; userId: string; headline: string | null; about: string | null; location: string | null; website: string | null; openToWork: boolean; recruitingEligible: boolean; visibility: string; createdAt: Date; updatedAt: Date; rank: number; }[]; meta: { ...; }; } | Promise<...>`                                 @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/profiles/profiles.service.spec.ts
-  277:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; }[] | PrismaPromise<...>`                                                                        @typescript-eslint/no-unsafe-argument
-  285:32  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[] | PrismaPromise<{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[]>`                                                                     @typescript-eslint/no-unsafe-argument
-  336:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; company: string; description: string | null; title: string; location: string | null; profileId: string; companyUrl: string | null; startDate: Date; endDate: Date | null; isCurrent: boolean; }[] | PrismaPromise<...>`  @typescript-eslint/no-unsafe-argument
-  390:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  431:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  475:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  514:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  526:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  537:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  548:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`                                           @typescript-eslint/no-unsafe-argument
-  569:32  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[] | PrismaPromise<{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[]>`                                                                     @typescript-eslint/no-unsafe-argument
-  572:32  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[] | PrismaPromise<{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[]>`                                                                     @typescript-eslint/no-unsafe-argument
-  580:69  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; }[] | PrismaPromise<...>`                                                                        @typescript-eslint/no-unsafe-argument
-  622:32  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[] | PrismaPromise<{ id: string; createdAt: Date; name: string; category: SkillCategory | null; }[]>`                                                                     @typescript-eslint/no-unsafe-argument
-  662:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; company: string; description: string | null; title: string; location: string | null; profileId: string; companyUrl: string | null; startDate: Date; endDate: Date | null; isCurrent: boolean; }[] | PrismaPromise<...>`  @typescript-eslint/no-unsafe-argument
-  727:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; profileId: string; startDate: Date; endDate: Date | null; school: string; degree: string; fieldOfStudy: string | null; grade: string | null; activities: string | null; }[] | PrismaPromise<...>`                        @typescript-eslint/no-unsafe-argument
-  782:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; profileId: string; issuingOrganization: string; issueDate: Date; expirationDate: Date | null; credentialId: string | null; credentialUrl: string | null; }[] | PrismaPromise<...>`                         @typescript-eslint/no-unsafe-argument
-  906:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; } | Prisma__ProfileSkillClient<...> | null`                                                      @typescript-eslint/no-unsafe-argument
-  944:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; } | Prisma__ProfileSkillClient<...> | null`                                                      @typescript-eslint/no-unsafe-argument
-  961:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; createdAt: Date; name: string; profileId: string; category: SkillCategory | null; skillId: string; proficiency: SkillProficiency | null; } | Prisma__ProfileSkillClient<...> | null`                                                      @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/profiles/profiles.service.ts
-  99:37  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaTransaction`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/realtime/chat.gateway.ts
-  109:5  warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/realtime/realtime.gateway.ts
-  75:5  warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search-index.service.spec.ts
-  40:38  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchEngineService`  @typescript-eslint/no-unsafe-argument
-  40:56  warning  Unsafe argument of type `any` assigned to a parameter of type `PrismaService`        @typescript-eslint/no-unsafe-argument
-  40:68  warning  Unsafe argument of type `any` assigned to a parameter of type `PinoLogger`           @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search-query.service.spec.ts
-  52:7  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchEngineService`    @typescript-eslint/no-unsafe-argument
-  53:7  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchService`          @typescript-eslint/no-unsafe-argument
-  54:7  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchFallbackService`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search.controller.spec.ts
-  25:39  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryService`  @typescript-eslint/no-unsafe-argument
-  25:56  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchIndexService`  @typescript-eslint/no-unsafe-argument
-  32:29  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryDto`      @typescript-eslint/no-unsafe-argument
-  40:29  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryDto`      @typescript-eslint/no-unsafe-argument
-  48:33  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryDto`      @typescript-eslint/no-unsafe-argument
-  59:34  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryDto`      @typescript-eslint/no-unsafe-argument
-  70:38  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryDto`      @typescript-eslint/no-unsafe-argument
-  81:34  warning  Unsafe argument of type `any` assigned to a parameter of type `SearchQueryDto`      @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/users/users.controller.spec.ts
-  38:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; } | Promise<{ id: string; email: string; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; }>`  @typescript-eslint/no-unsafe-argument
-  49:70  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; } | Promise<{ id: string; email: string; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; }>`  @typescript-eslint/no-unsafe-argument
-  58:70  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; displayName: string | null; createdAt: Date; } | Promise<{ id: string; displayName: string | null; createdAt: Date; }>`                                                                                                                                    @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/src/users/users.service.spec.ts
-   46:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`  @typescript-eslint/no-unsafe-argument
-   73:59  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...>`         @typescript-eslint/no-unsafe-argument
-   93:28  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`  @typescript-eslint/no-unsafe-argument
-  104:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`  @typescript-eslint/no-unsafe-argument
-  117:63  warning  Unsafe argument of type `any` assigned to a parameter of type `{ id: string; email: string; passwordHash: string | null; emailVerifiedAt: Date | null; displayName: string | null; status: UserStatus; createdAt: Date; updatedAt: Date; } | Prisma__UserClient<...> | null`  @typescript-eslint/no-unsafe-argument
-
-/Users/minhduydev/workspace/mdc/mdc-be/test/realtime.e2e-spec.ts
-  114:7   warning  Promises must be awaited, end with a call to .catch, end with a call to .then with a rejection handler or be explicitly marked as ignored with the `void` operator  @typescript-eslint/no-floating-promises
-  215:55  warning  Unsafe argument of type `any` assigned to a parameter of type `string | undefined`                                                                                  @typescript-eslint/no-unsafe-argument
-
 ✖ 157 problems (0 errors, 157 warnings)
 
 ESLINT_EXIT=0
 ```
+
+Summary: ESLint exited 0 with 157 warnings. The authoritative baseline is the warning count above, not a machine-specific full listing. Rerun the command to inspect current warning locations. The long warning list is intentionally omitted to avoid stale partial output and absolute local filesystem paths.
 
 ### Test Count
 
@@ -189,81 +33,81 @@ Command: `npm test -- --listTests`
 > mdc-be@0.0.1 test
 > jest --listTests
 
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/password.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/common/common.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/outbox.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/companies/companies.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/billing/billing.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/processors/messaging.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/jobs/jobs.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/health/health.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/profiles/profiles.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/companies/companies.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/processors/profile-search-index.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search-index.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/media/media.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/recommendations/recommendations.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/recruiting/recruiting.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/connections/connections.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/posts/posts.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/processors/job-search-index.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/analytics/analytics.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/processors/post-search-index.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/billing/webhooks/webhook.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/email/email.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/password-reset.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/applications/applications.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/moderation/moderation.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/applications/applications.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/processors/notification.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/profiles/profiles.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/messaging/messaging.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/token.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/billing/entitlements/entitlements.guard.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/media/media.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/prisma/prisma.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/connections/connections.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/email-verification.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/posts/posts.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/common/guards/roles.guard.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/messaging/messaging.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/email/email.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.guard.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/storage/storage.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/users/users.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search-fallback.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/auth/auth.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search-query.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/common/guards/email-verified.guard.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/users/users.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/recruiting/recruiting.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/outbox.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/jobs/jobs.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/idempotency.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/admin/admin.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/billing/entitlements/entitlements.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/notifications/notifications.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/config/validate-env.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/app.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/logger/logger.module.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/recommendations/recommendations.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/feed/feed.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/mailer/mailer.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/dead-letter.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/posts/posts-policy.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/messaging/messaging-policy.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/feed/feed.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/search/search.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/recruiting/recruiting-policy.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/notifications/notifications.controller.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/connections/connections-policy.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/recommendations/recommendations.repository.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/outbox/processors/application-email.processor.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/infra/search-engine/search-engine.service.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/applications/application-status.machine.spec.ts
-/Users/minhduydev/workspace/mdc/mdc-be/src/posts/mention-hashtag.util.spec.ts
+src/auth/password.service.spec.ts
+src/common/common.spec.ts
+src/outbox/outbox.processor.spec.ts
+src/search/search.controller.spec.ts
+src/companies/companies.service.spec.ts
+src/billing/billing.service.spec.ts
+src/outbox/processors/messaging.processor.spec.ts
+src/jobs/jobs.service.spec.ts
+src/infra/health/health.service.spec.ts
+src/profiles/profiles.service.spec.ts
+src/companies/companies.controller.spec.ts
+src/outbox/processors/profile-search-index.processor.spec.ts
+src/search/search-index.service.spec.ts
+src/media/media.service.spec.ts
+src/recommendations/recommendations.controller.spec.ts
+src/recruiting/recruiting.service.spec.ts
+src/connections/connections.controller.spec.ts
+src/posts/posts.service.spec.ts
+src/outbox/processors/job-search-index.processor.spec.ts
+src/analytics/analytics.service.spec.ts
+src/auth/auth.controller.spec.ts
+src/outbox/processors/post-search-index.processor.spec.ts
+src/billing/webhooks/webhook.service.spec.ts
+src/email/email.service.spec.ts
+src/auth/password-reset.service.spec.ts
+src/applications/applications.service.spec.ts
+src/moderation/moderation.service.spec.ts
+src/applications/applications.controller.spec.ts
+src/outbox/processors/notification.processor.spec.ts
+src/profiles/profiles.controller.spec.ts
+src/messaging/messaging.service.spec.ts
+src/auth/token.service.spec.ts
+src/billing/entitlements/entitlements.guard.spec.ts
+src/media/media.controller.spec.ts
+src/infra/prisma/prisma.service.spec.ts
+src/connections/connections.service.spec.ts
+src/auth/email-verification.service.spec.ts
+src/posts/posts.controller.spec.ts
+src/common/guards/roles.guard.spec.ts
+src/messaging/messaging.controller.spec.ts
+src/email/email.processor.spec.ts
+src/auth/auth.guard.spec.ts
+src/infra/storage/storage.service.spec.ts
+src/users/users.service.spec.ts
+src/search/search-fallback.service.spec.ts
+src/auth/auth.service.spec.ts
+src/search/search-query.service.spec.ts
+src/common/guards/email-verified.guard.spec.ts
+src/users/users.controller.spec.ts
+src/recruiting/recruiting.controller.spec.ts
+src/outbox/outbox.service.spec.ts
+src/jobs/jobs.controller.spec.ts
+src/outbox/idempotency.service.spec.ts
+src/admin/admin.service.spec.ts
+src/billing/entitlements/entitlements.service.spec.ts
+src/notifications/notifications.service.spec.ts
+src/infra/config/validate-env.spec.ts
+src/app.controller.spec.ts
+src/infra/logger/logger.module.spec.ts
+src/recommendations/recommendations.service.spec.ts
+src/feed/feed.service.spec.ts
+src/infra/mailer/mailer.service.spec.ts
+src/outbox/dead-letter.service.spec.ts
+src/posts/posts-policy.service.spec.ts
+src/messaging/messaging-policy.service.spec.ts
+src/feed/feed.controller.spec.ts
+src/search/search.service.spec.ts
+src/recruiting/recruiting-policy.service.spec.ts
+src/notifications/notifications.controller.spec.ts
+src/connections/connections-policy.service.spec.ts
+src/recommendations/recommendations.repository.spec.ts
+src/outbox/processors/application-email.processor.spec.ts
+src/infra/search-engine/search-engine.service.spec.ts
+src/applications/application-status.machine.spec.ts
+src/posts/mention-hashtag.util.spec.ts
 TEST_LIST_EXIT=0
 SPEC_PATH_COUNT=75
 ```
@@ -439,22 +283,17 @@ Command: `docker build -t mdc-be-baseline . && docker image inspect mdc-be-basel
 #16 exporting to image
 #16 exporting layers
 #16 exporting layers 12.2s done
-#16 exporting manifest sha256:afb8eef517b94f754e264535ff0b2c24449095bcc1c0b16d1be8b288a08bc211
-#16 exporting manifest sha256:afb8eef517b94f754e264535ff0b2c24449095bcc1c0b16d1be8b288a08bc211 done
-#16 exporting config sha256:368df7d58c436ad8f7edfd0d07cf756864ba366d04b1053daf41053f8475e3fc done
-#16 exporting attestation manifest sha256:6613b09309358a73609a6c4d637abb27002916dfc2d92cced1f1fd46d713c4b9 done
-#16 exporting manifest list sha256:b06f6bb4c4aa4595e2cc3a9668a7c065a8bb674d477cb5b171b766c7da178c2a done
+#16 exporting image layers and metadata done
 #16 naming to docker.io/library/mdc-be-baseline:latest done
 #16 unpacking to docker.io/library/mdc-be-baseline:latest
 #16 unpacking to docker.io/library/mdc-be-baseline:latest 3.3s done
 #16 DONE 15.6s
 
-View build details: docker-desktop://dashboard/build/desktop-linux/desktop-linux/wfk82kegr42445nsbb6ayljvq
 DOCKER_BUILD_EXIT=0
 IMAGE_SIZE_BYTES=265109284
 ```
 
-Summary: Docker build exit 0; image size 265,109,284 bytes.
+Summary: Docker build exit 0; image size 265,109,284 bytes. Build-specific Docker Desktop URLs and image digests are omitted because the durable baseline metric is `IMAGE_SIZE_BYTES`. Runtime install reported 1 moderate npm audit vulnerability; run `npm audit` for current advisory details.
 
 ## Branch Protection Requirements
 
