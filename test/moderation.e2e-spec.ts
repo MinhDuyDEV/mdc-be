@@ -3,6 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import {
+  createAdminPermissions,
+  createOutboxEventMock,
+  createRedisMock,
+} from './helpers/e2e-mocks';
 
 jest.setTimeout(30_000);
 
@@ -14,6 +19,13 @@ describe('Moderation (e2e)', () => {
   const adminUserId = 'aaaa0000-0000-4000-8000-000000000001';
   const moderatorUserId = 'aaaa0000-0000-4000-8000-000000000002';
   const regularUserId = 'bbbb0000-0000-4000-8000-000000000003';
+  const reportId = 'cccc0000-0000-4000-8000-000000000004';
+  const postId = 'dddd0000-0000-4000-8000-000000000005';
+  const commentId = 'eeee0000-0000-4000-8000-000000000006';
+  const messageId = 'ffff0000-0000-4000-8000-000000000007';
+  const profileId = '11110000-0000-4000-8000-000000000008';
+  const companyId = '22220000-0000-4000-8000-000000000009';
+  const jobId = '33330000-0000-4000-8000-000000000010';
 
   beforeEach(async () => {
     originalEnv = { ...process.env };
@@ -46,7 +58,6 @@ describe('Moderation (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
     process.env.APP_PROCESS_ROLE = 'all';
@@ -64,7 +75,7 @@ describe('Moderation (e2e)', () => {
     const mockPrisma = {
       $connect: jest.fn(),
       $disconnect: jest.fn(),
-      $queryRaw: jest.fn().mockResolvedValue([{ id: 'report-1' }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: reportId }]),
       $executeRaw: jest.fn().mockResolvedValue(0),
       $transaction: jest
         .fn()
@@ -97,10 +108,16 @@ describe('Moderation (e2e)', () => {
           .mockImplementation((args: { where: { userId: string } }) => {
             const userId = args?.where?.userId;
             if (userId === adminUserId) {
-              return Promise.resolve({ role: 'SUPER_ADMIN' });
+              return Promise.resolve({
+                role: 'SUPER_ADMIN',
+                permissions: [],
+              });
             }
             if (userId === moderatorUserId) {
-              return Promise.resolve({ role: 'MODERATOR' });
+              return Promise.resolve({
+                role: 'MODERATOR',
+                permissions: createAdminPermissions('MODERATE_CONTENT'),
+              });
             }
             return Promise.resolve(null);
           }),
@@ -108,10 +125,10 @@ describe('Moderation (e2e)', () => {
       adminPermission: { findMany: jest.fn().mockResolvedValue([]) },
       report: {
         create: jest.fn().mockResolvedValue({
-          id: 'report-1',
+          id: reportId,
           reporterId: regularUserId,
           targetEntity: 'POST',
-          targetId: 'post-1',
+          targetId: postId,
           category: 'SPAM',
           description: 'Test report',
           status: 'PENDING',
@@ -121,7 +138,21 @@ describe('Moderation (e2e)', () => {
           createdAt: new Date(),
           updatedAt: new Date(),
         }),
-        findUnique: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn().mockResolvedValue({
+          id: reportId,
+          reporterId: regularUserId,
+          targetEntity: 'POST',
+          targetId: postId,
+          category: 'SPAM',
+          description: 'Test report',
+          status: 'UNDER_REVIEW',
+          priority: 2,
+          assignedToId: moderatorUserId,
+          resolvedAt: null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }),
+        findFirst: jest.fn().mockResolvedValue(null),
         findMany: jest.fn().mockResolvedValue([]),
         update: jest.fn().mockResolvedValue({}),
         count: jest.fn().mockResolvedValue(0),
@@ -130,36 +161,36 @@ describe('Moderation (e2e)', () => {
       post: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'post-1', content: 'test' }),
+          .mockResolvedValue({ id: postId, content: 'test' }),
         update: jest.fn().mockResolvedValue({}),
       },
       comment: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'comment-1', content: 'test' }),
+          .mockResolvedValue({ id: commentId, content: 'test' }),
       },
       message: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'msg-1', content: 'test' }),
+          .mockResolvedValue({ id: messageId, content: 'test' }),
       },
       profile: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'profile-1', headline: 'test' }),
+          .mockResolvedValue({ id: profileId, headline: 'test' }),
       },
       company: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'company-1', name: 'Test Corp' }),
+          .mockResolvedValue({ id: companyId, name: 'Test Corp' }),
       },
       job: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'job-1', title: 'Test Job' }),
+          .mockResolvedValue({ id: jobId, title: 'Test Job' }),
       },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
-      outboxEvent: { create: jest.fn() },
+      outboxEvent: createOutboxEventMock(),
       idempotencyKey: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -178,14 +209,7 @@ describe('Moderation (e2e)', () => {
       REDIS_CLIENT: symbol;
     }>('./../src/infra/redis/redis.constants');
 
-    const mockRedis = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue('OK'),
-      del: jest.fn().mockResolvedValue(1),
-      setex: jest.fn().mockResolvedValue('OK'),
-      keys: jest.fn().mockResolvedValue([]),
-      incr: jest.fn().mockResolvedValue(1),
-    };
+    const mockRedis = createRedisMock();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -229,7 +253,7 @@ describe('Moderation (e2e)', () => {
         .set('Authorization', `Bearer ${t}`)
         .send({
           targetEntity: 'POST',
-          targetId: 'post-1',
+          targetId: postId,
           category: 'SPAM',
           description: 'This is spam',
         })
@@ -243,7 +267,7 @@ describe('Moderation (e2e)', () => {
     it('should return 401 for anonymous users', async () => {
       await request(app!.getHttpServer())
         .post('/api/v1/moderation/reports')
-        .send({ targetEntity: 'POST', targetId: 'post-1', category: 'SPAM' })
+        .send({ targetEntity: 'POST', targetId: postId, category: 'SPAM' })
         .expect(401);
     });
 
@@ -252,7 +276,7 @@ describe('Moderation (e2e)', () => {
       await request(app!.getHttpServer())
         .post('/api/v1/moderation/reports')
         .set('Authorization', `Bearer ${t}`)
-        .send({ targetEntity: 'POST', targetId: 'post-1', category: 'INVALID' })
+        .send({ targetEntity: 'POST', targetId: postId, category: 'INVALID' })
         .expect(400);
     });
 
@@ -322,7 +346,7 @@ describe('Moderation (e2e)', () => {
     it('should return 403 for regular users', async () => {
       const t = token(regularUserId);
       await request(app!.getHttpServer())
-        .patch('/api/v1/moderation/reports/report-1/claim')
+        .patch(`/api/v1/moderation/reports/${reportId}/claim`)
         .set('Authorization', `Bearer ${t}`)
         .expect(403);
     });
@@ -330,7 +354,7 @@ describe('Moderation (e2e)', () => {
     it('should return 200 for moderator claiming a report', async () => {
       const t = token(moderatorUserId);
       const res = await request(app!.getHttpServer())
-        .patch('/api/v1/moderation/reports/report-1/claim')
+        .patch(`/api/v1/moderation/reports/${reportId}/claim`)
         .set('Authorization', `Bearer ${t}`)
         .expect(200);
 
@@ -347,10 +371,10 @@ describe('Moderation (e2e)', () => {
         .post('/api/v1/moderation/actions')
         .set('Authorization', `Bearer ${t}`)
         .send({
-          reportId: 'report-1',
+          reportId,
           actionType: 'WARN',
           targetEntity: 'POST',
-          targetId: 'post-1',
+          targetId: postId,
           reason: 'Test action',
         })
         .expect(403);
@@ -362,10 +386,10 @@ describe('Moderation (e2e)', () => {
         .post('/api/v1/moderation/actions')
         .set('Authorization', `Bearer ${t}`)
         .send({
-          reportId: 'report-1',
+          reportId,
           actionType: 'WARN',
           targetEntity: 'POST',
-          targetId: 'post-1',
+          targetId: postId,
           reason: 'Test warning',
         })
         .expect(200);

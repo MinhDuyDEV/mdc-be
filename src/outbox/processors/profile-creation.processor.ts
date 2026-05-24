@@ -32,9 +32,9 @@ export class ProfileCreationProcessor {
   /**
    * Called by the main outbox processor when a UserRegistered event is encountered.
    */
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   processUserRegistered(_payload: UserRegisteredPayload): void {
-    // TODO: Implement in future phase
+    void _payload;
+    // TODO(mdc-be-dwe): Implement in future phase
     // 1. Check if profile already exists for userId
     // 2. If not, create profile shell via prisma.profile.create()
   }

@@ -1,8 +1,11 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import { EmailStatus } from '@prisma/client';
+import {
+  MAILER_TRANSPORTER,
+  type MailerTransporter,
+} from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { EmailService } from './email.service';
-import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
 
 export interface EmailSendEvent {
   id?: string;
@@ -19,9 +22,7 @@ export class EmailProcessor {
   constructor(
     private readonly prisma: PrismaService,
     @Inject(MAILER_TRANSPORTER)
-    private readonly mailerService: {
-      sendMail: (options: any) => Promise<any>;
-    },
+    private readonly mailerService: MailerTransporter,
     private readonly emailService: EmailService,
   ) {}
 

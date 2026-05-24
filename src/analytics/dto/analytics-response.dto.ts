@@ -8,9 +8,9 @@ export interface DashboardMetricsDto {
 
 export interface EntityAnalyticsDto {
   totalViews: number;
-  // TODO: Implement unique viewer counting (DISTINCT userId)
+  // TODO(mdc-be-x3g): Implement unique viewer counting (DISTINCT userId)
   uniqueViewers: number | null;
-  // TODO: Implement date-range filtered views
+  // TODO(mdc-be-n0v): Implement date-range filtered views
   last7Days: number | null;
   last30Days: number | null;
 }

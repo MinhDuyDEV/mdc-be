@@ -1,11 +1,14 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import type { Prisma } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import { PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma';
 import { DeadLetterService } from './dead-letter.service';
+import { validateOutboxPayload } from './events';
+import { OutboxMetrics } from './outbox.metrics';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
 import { BillingProcessor } from './processors/billing.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
@@ -20,17 +23,22 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
 export interface ClaimedEvent {
   id: string;
   eventType: string;
-  payload: unknown;
+  aggregateType?: string | null;
+  aggregateId?: string | null;
+  payload: Prisma.JsonValue;
   attempts: number;
 }
 
+const OUTBOX_DISPATCH_CONCURRENCY = 4;
+
 @Injectable()
-export class OutboxProcessor {
+export class OutboxProcessor implements OnApplicationShutdown {
   private readonly batchSize: number;
   private readonly maxRetries: number;
   private readonly baseBackoffMs: number;
   private readonly maxBackoffMs: number;
   private readonly leaseTimeoutMs: number;
+  private readonly processorId = randomUUID();
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -57,6 +65,7 @@ export class OutboxProcessor {
     private readonly billingProcessor: BillingProcessor,
     @Inject(SubscriptionProcessor)
     private readonly subscriptionProcessor: SubscriptionProcessor,
+    @Inject(OutboxMetrics) private readonly metrics: OutboxMetrics,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(OutboxProcessor.name);
@@ -69,6 +78,13 @@ export class OutboxProcessor {
     this.leaseTimeoutMs = this.config.get('outboxLeaseTimeoutMs', {
       infer: true,
     });
+    this.metrics.registerPendingGauge(
+      () =>
+        this.prisma.outboxEvent.count({
+          where: { status: 'PENDING' },
+        }),
+      (err) => this.logger.error('Outbox pending metric failed: %s', err),
+    );
   }
 
   @Cron(CronExpression.EVERY_5_SECONDS, {
@@ -83,52 +99,43 @@ export class OutboxProcessor {
 
       this.logger.debug('Processing %d outbox events', events.length);
 
-      for (const event of events) {
-        try {
-          await this.dispatch(event);
-          await this.markProcessed(event.id);
-          this.logger.debug(
-            'Event %s (%s) marked as processed',
-            event.id,
-            event.eventType,
-          );
-        } catch (err) {
-          const error = err instanceof Error ? err : new Error(String(err));
-          const attempts = await this.getAttempts(event.id);
-
-          if (attempts >= this.maxRetries) {
-            await this.deadLetter.moveToDeadLetter(
-              {
-                id: event.id,
-                eventType: event.eventType,
-                payload: event.payload,
-              },
-              error,
-            );
-            this.logger.warn(
-              'Event %s moved to dead letter after %d attempts',
-              event.id,
-              attempts,
-            );
-          } else {
-            await this.requeueWithBackoff(event.id, attempts);
-            this.logger.debug(
-              'Event %s requeued with backoff (attempt %d/%d)',
-              event.id,
-              attempts,
-              this.maxRetries,
-            );
-          }
-        }
-      }
+      await this.processEventGroups(this.groupEventsByAggregate(events));
     } catch (err) {
       // Log but don't rethrow — that would kill the cron job
       this.logger.error('Outbox processing failed: %s', err);
     }
   }
 
+  async onApplicationShutdown(): Promise<void> {
+    this.metrics.unregisterPendingGauge();
+    try {
+      const result = await this.prisma.outboxEvent.updateMany({
+        where: {
+          status: 'PROCESSING',
+          lockedBy: this.processorId,
+        },
+        data: {
+          status: 'PENDING',
+          lockedAt: null,
+          lockedBy: null,
+        },
+      });
+      if (result.count > 0) {
+        this.logger.warn(
+          'Released %d outbox locks during shutdown',
+          result.count,
+        );
+      }
+    } catch (err) {
+      this.logger.error(
+        'Failed to release outbox locks during shutdown: %s',
+        err,
+      );
+    }
+  }
+
   async claimEvents(): Promise<ClaimedEvent[]> {
-    const lockId = randomUUID();
+    const lockId = this.processorId;
 
     return this.prisma.$transaction(async (tx) => {
       // 1. Atomically lock pending rows with SKIP LOCKED
@@ -147,13 +154,12 @@ export class OutboxProcessor {
 
       // 2. Mark as PROCESSING
       await tx.$executeRaw`
-        UPDATE outbox_events
-        SET status = 'PROCESSING'::"OutboxEventStatus",
-            locked_at = NOW(),
-            locked_by = ${lockId},
-            attempts = attempts + 1
-        WHERE id = ANY(${ids}::uuid[])
-      `;
+          UPDATE outbox_events
+          SET status = 'PROCESSING'::"OutboxEventStatus",
+              locked_at = NOW(),
+              locked_by = ${lockId}
+          WHERE id = ANY(${ids}::uuid[])
+        `;
 
       // 3. Fetch full rows for the handler
       const events = (await tx.outboxEvent.findMany({
@@ -164,27 +170,116 @@ export class OutboxProcessor {
     });
   }
 
+  private groupEventsByAggregate(events: ClaimedEvent[]): ClaimedEvent[][] {
+    const groups = new Map<string, ClaimedEvent[]>();
+    for (const event of events) {
+      const key = event.aggregateId
+        ? `${event.aggregateType ?? 'unknown'}:${event.aggregateId}`
+        : event.id;
+      const group = groups.get(key);
+      if (group) {
+        group.push(event);
+      } else {
+        groups.set(key, [event]);
+      }
+    }
+    return [...groups.values()];
+  }
+
+  private async processEventGroups(groups: ClaimedEvent[][]): Promise<void> {
+    let nextGroupIndex = 0;
+    const workerCount = Math.min(OUTBOX_DISPATCH_CONCURRENCY, groups.length);
+    await Promise.all(
+      Array.from({ length: workerCount }, async () => {
+        while (nextGroupIndex < groups.length) {
+          const group = groups[nextGroupIndex];
+          nextGroupIndex++;
+          for (const event of group) {
+            await this.processClaimedEvent(event);
+          }
+        }
+      }),
+    );
+  }
+
+  private async processClaimedEvent(event: ClaimedEvent): Promise<void> {
+    const dispatchStartedAt = Date.now();
+    let dispatchRecorded = false;
+    try {
+      await this.dispatch(event);
+      this.metrics.recordDispatchDuration(
+        event.eventType,
+        'success',
+        Date.now() - dispatchStartedAt,
+      );
+      dispatchRecorded = true;
+      await this.markProcessed(event.id);
+      this.metrics.recordProcessed(event.eventType);
+      this.logger.debug(
+        'Event %s (%s) marked as processed',
+        event.id,
+        event.eventType,
+      );
+    } catch (err) {
+      const error = err instanceof Error ? err : new Error(String(err));
+      const attempts = await this.recordFailure(event.id);
+      if (!dispatchRecorded) {
+        this.metrics.recordDispatchDuration(
+          event.eventType,
+          'failure',
+          Date.now() - dispatchStartedAt,
+        );
+      }
+      this.metrics.recordFailed(event.eventType, attempts);
+
+      if (attempts >= this.maxRetries) {
+        await this.deadLetter.moveToDeadLetter(
+          {
+            id: event.id,
+            eventType: event.eventType,
+            payload: event.payload,
+          },
+          error,
+        );
+        this.metrics.recordDeadLettered(event.eventType);
+        this.logger.warn(
+          'Event %s moved to dead letter after %d attempts',
+          event.id,
+          attempts,
+        );
+      } else {
+        await this.requeueWithBackoff(event.id, attempts);
+        this.logger.debug(
+          'Event %s requeued with backoff (attempt %d/%d)',
+          event.id,
+          attempts,
+          this.maxRetries,
+        );
+      }
+    }
+  }
+
   private async dispatch(event: ClaimedEvent): Promise<void> {
+    const payload = validateOutboxPayload(event.eventType, event.payload);
     switch (event.eventType) {
       case 'ProfileUpdated':
         await this.profileSearchIndex.processProfileUpdated(
-          event.payload as { profileId: string; userId: string },
+          payload as { profileId: string; userId: string },
         );
         return;
       case 'CompanyCreated':
         await this.companySearchIndex.processCompanyCreated(
-          event.payload as { companyId: string },
+          payload as { companyId: string },
         );
         await this.subscriptionProcessor.createFreeSubscription(
-          (event.payload as { companyId: string }).companyId,
+          (payload as { companyId: string }).companyId,
         );
         return;
-      case 'CompanyUpdated':
       // The following events all affect the company search document
       // (member counts, member names, follower counts, recruiter seats),
       // so route them through the same reindex path. If a dedicated handler
       // is needed later, split out below.
-      // eslint-disable-next-line no-fallthrough
+      case 'CompanyUpdated':
       case 'CompanyFollowed':
       case 'CompanyUnfollowed':
       case 'CompanyMemberAdded':
@@ -193,24 +288,24 @@ export class OutboxProcessor {
       case 'MemberInvited':
       case 'MemberJoined':
       case 'RecruiterSeatDeallocated': {
-        const payload = event.payload as { companyId?: string };
-        if (!payload?.companyId) {
+        const companyPayload = payload as { companyId?: string };
+        if (!companyPayload?.companyId) {
           this.logger.warn(
             `${event.eventType} event ${event.id} missing companyId — skipping`,
           );
           return;
         }
         await this.companySearchIndex.processCompanyUpdated({
-          companyId: payload.companyId,
+          companyId: companyPayload.companyId,
         });
         return;
       }
       case 'RecruiterSeatAllocated': {
-        const payload = event.payload as {
+        const seatPayload = payload as {
           companyId?: string;
           recruiterUserId?: string;
         };
-        if (!payload?.companyId) {
+        if (!seatPayload?.companyId) {
           this.logger.warn(
             `RecruiterSeatAllocated event ${event.id} missing companyId — skipping`,
           );
@@ -218,44 +313,44 @@ export class OutboxProcessor {
         }
         // Keep existing search-index side-effect.
         await this.companySearchIndex.processCompanyUpdated({
-          companyId: payload.companyId,
+          companyId: seatPayload.companyId,
         });
-        if (payload.recruiterUserId) {
+        if (seatPayload.recruiterUserId) {
           await this.notification.processRecruiterSeatAllocated({
-            companyId: payload.companyId,
-            recruiterUserId: payload.recruiterUserId,
+            companyId: seatPayload.companyId,
+            recruiterUserId: seatPayload.recruiterUserId,
           });
         }
         return;
       }
       case 'JobCreated':
         await this.jobSearchIndex.processJobCreated(
-          event.payload as { jobId: string },
+          payload as { jobId: string },
         );
         return;
       case 'JobUpdated':
         await this.jobSearchIndex.processJobUpdated(
-          event.payload as { jobId: string },
+          payload as { jobId: string },
         );
         return;
       case 'JobPublished':
         await this.jobSearchIndex.processJobPublished(
-          event.payload as { jobId: string },
+          payload as { jobId: string },
         );
         return;
       case 'JobClosed':
         await this.jobSearchIndex.processJobClosed(
-          event.payload as { jobId: string },
+          payload as { jobId: string },
         );
         return;
       case 'JobDeleted':
         await this.jobSearchIndex.processJobDeleted(
-          event.payload as { jobId: string },
+          payload as { jobId: string },
         );
         return;
       case 'ApplicationSubmitted':
         await this.notification.processApplicationSubmitted(
-          event.payload as {
+          payload as {
             applicationId: string;
             jobId: string;
             companyId: string;
@@ -265,14 +360,14 @@ export class OutboxProcessor {
         return;
       case 'ApplicationStatusChanged':
         await this.applicationEmail.processApplicationStatusChanged(
-          event.payload as {
+          payload as {
             applicationId: string;
             toStatus: string;
             fromStatus?: string;
           },
         );
         await this.notification.processApplicationStatusChanged(
-          event.payload as {
+          payload as {
             applicationId: string;
             fromStatus?: string;
             toStatus: string;
@@ -285,7 +380,7 @@ export class OutboxProcessor {
         return;
       case 'ApplicationNoteAdded':
         await this.notification.processApplicationNoteAdded(
-          event.payload as {
+          payload as {
             applicationId: string;
             noteId: string;
             authorUserId: string;
@@ -295,7 +390,7 @@ export class OutboxProcessor {
         return;
       case 'ConnectionRequested':
         await this.notification.processConnectionRequested(
-          event.payload as {
+          payload as {
             connectionId: string;
             requesterUserId: string;
             targetUserId: string;
@@ -304,7 +399,7 @@ export class OutboxProcessor {
         return;
       case 'ConnectionAccepted':
         await this.notification.processConnectionAccepted(
-          event.payload as {
+          payload as {
             connectionId: string;
             requesterUserId: string;
             targetUserId: string;
@@ -313,7 +408,7 @@ export class OutboxProcessor {
         return;
       case 'UserBlocked':
         await this.notification.processUserBlocked(
-          event.payload as {
+          payload as {
             blockerUserId: string;
             blockedUserId: string;
           },
@@ -330,29 +425,29 @@ export class OutboxProcessor {
       // Posts domain — Phase 6
       case 'PostCreated':
         await this.postInteraction.processPostCreated(
-          event.payload as {
+          payload as {
             postId: string;
             authorId: string;
             visibility: string;
           },
         );
         await this.postSearchIndex.processPostCreated(
-          event.payload as { postId: string },
+          payload as { postId: string },
         );
         return;
       case 'PostUpdated':
         await this.postSearchIndex.processPostUpdated(
-          event.payload as { postId: string },
+          payload as { postId: string },
         );
         return;
       case 'PostDeleted':
         await this.postSearchIndex.processPostDeleted(
-          event.payload as { postId: string },
+          payload as { postId: string },
         );
         return;
       case 'CommentAdded':
         await this.postInteraction.processCommentAdded(
-          event.payload as {
+          payload as {
             commentId: string;
             postId: string;
             authorId: string;
@@ -361,7 +456,7 @@ export class OutboxProcessor {
         return;
       case 'ReactionAdded':
         await this.postInteraction.processReactionAdded(
-          event.payload as {
+          payload as {
             reactionId: string;
             postId: string;
             authorId: string;
@@ -371,7 +466,7 @@ export class OutboxProcessor {
         return;
       case 'MentionCreated':
         await this.postInteraction.processMentionCreated(
-          event.payload as {
+          payload as {
             postId: string;
             mentionedUserId: string;
             mentionerUserId: string;
@@ -381,7 +476,7 @@ export class OutboxProcessor {
       // Messaging domain — Phase 7
       case 'MessageSent':
         await this.messagingProcessor.processMessageSent(
-          event.payload as {
+          payload as {
             messageId: string;
             conversationId: string;
             senderId: string;
@@ -392,12 +487,12 @@ export class OutboxProcessor {
       case 'ConversationCreated':
         // Softer side-effect — just log for now; future: realtime fan-out
         this.logger.debug(
-          `ConversationCreated: conv=${(event.payload as { conversationId: string }).conversationId}`,
+          `ConversationCreated: conv=${(payload as { conversationId: string }).conversationId}`,
         );
         return;
       case 'PaymentProviderEventReceived':
         await this.billingProcessor.processPaymentProviderEvent(
-          (event.payload as { eventId: string }).eventId,
+          (payload as { eventId: string }).eventId,
         );
         return;
       default:
@@ -452,12 +547,13 @@ export class OutboxProcessor {
     });
   }
 
-  private async getAttempts(eventId: string): Promise<number> {
-    const event = await this.prisma.outboxEvent.findUnique({
+  private async recordFailure(eventId: string): Promise<number> {
+    const event = await this.prisma.outboxEvent.update({
       where: { id: eventId },
+      data: { attempts: { increment: 1 } },
       select: { attempts: true },
     });
-    return event?.attempts ?? 0;
+    return event.attempts;
   }
 
   private calculateBackoff(attempt: number): number {

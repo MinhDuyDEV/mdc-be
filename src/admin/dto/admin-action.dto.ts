@@ -3,11 +3,11 @@ import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateUserStatusDto {
   @IsEnum(UserStatus)
-  status: UserStatus;
+  status!: UserStatus;
 
   @IsString()
   @MaxLength(500)
-  reason: string;
+  reason!: string;
 }
 
 export class VerifyCompanyDto {

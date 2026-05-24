@@ -9,13 +9,13 @@ import {
 
 export class CreateReportDto {
   @IsEnum(ReportEntityType)
-  targetEntity: ReportEntityType;
+  targetEntity!: ReportEntityType;
 
   @IsUUID()
-  targetId: string;
+  targetId!: string;
 
   @IsEnum(ReportCategory)
-  category: ReportCategory;
+  category!: ReportCategory;
 
   @IsOptional()
   @IsString()

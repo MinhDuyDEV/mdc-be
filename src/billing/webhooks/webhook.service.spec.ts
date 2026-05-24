@@ -113,6 +113,7 @@ describe('WebhookService', () => {
 
       expect(result).toEqual({ processed: true, eventId: 'ppe-1' });
       expect(mockIdempotencyService.claim).toHaveBeenCalledWith(
+        mockPrisma,
         'WebhookEvent',
         'stripe:evt_123',
       );

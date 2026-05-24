@@ -26,6 +26,16 @@ export const REDACTION_PATHS: string[] = [
   'req.body.resume',
   'req.body.resumeBytes',
   'req.body.message',
+  // Depth-2 request-body objects, e.g. application payload wrappers.
+  'req.body.*.coverLetter',
+  'req.body.*.screeningAnswers[*].answer',
+  'req.body.*.candidateNote',
+  'req.body.*.applicationNote',
+  'req.body.*.note',
+  'req.body.*.notes',
+  'req.body.*.resume',
+  'req.body.*.resumeBytes',
+  'req.body.*.message',
   // Wildcard patterns for one-level-deep nested objects
   '*.coverLetter',
   '*.screeningAnswers',
@@ -33,11 +43,22 @@ export const REDACTION_PATHS: string[] = [
   '*.applicationNote',
 ];
 
+export function resolveRequestId(
+  header: string | string[] | undefined,
+): string {
+  const requestId = Array.isArray(header) ? header[0] : header;
+  return requestId ?? randomUUID();
+}
+
 @Module({
   imports: [
     PinoLoggerModule.forRoot({
       pinoHttp: {
-        genReqId: () => randomUUID(),
+        genReqId: (req: IncomingMessage, res: ServerResponse) => {
+          const requestId = resolveRequestId(req.headers['x-request-id']);
+          res.setHeader('x-request-id', requestId);
+          return requestId;
+        },
         customProps: () => ({
           context: 'HTTP',
         }),

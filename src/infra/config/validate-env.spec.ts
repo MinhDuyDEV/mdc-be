@@ -35,7 +35,6 @@ const validEnv: RawEnv = {
   OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
   // JWT Authentication
   JWT_ACCESS_SECRET: 'test-access-secret-min-32-chars-long',
-  JWT_REFRESH_SECRET: 'test-refresh-secret-min-32-chars-long',
   // Billing
   BILLING_WEBHOOK_SECRET: 'whsec_test_secret',
   // Cookie Configuration
@@ -52,6 +51,8 @@ describe('validateEnv', () => {
       bodyJsonLimit: '1mb',
       bodyUrlencodedLimit: '1mb',
       databaseUrl: validEnv.DATABASE_URL,
+      prismaTransactionMaxWaitMs: 5000,
+      prismaTransactionTimeoutMs: 15000,
       redisUrl: validEnv.REDIS_URL,
       healthDatabaseTimeoutMs: 1000,
       healthRedisTimeoutMs: 1000,
@@ -82,7 +83,6 @@ describe('validateEnv', () => {
       outboxHealthLagThreshold: 100,
       jwtAccessSecret: 'test-access-secret-min-32-chars-long',
       jwtAccessExpiresIn: '15m',
-      jwtRefreshSecret: 'test-refresh-secret-min-32-chars-long',
       jwtRefreshExpiresIn: '7d',
       cookieSecret: 'test-cookie-secret-min-32-chars-long',
       cookieSecure: false,
@@ -172,6 +172,33 @@ describe('validateEnv', () => {
     expect(result.smtpHost).toBe('');
     expect(result.smtpUser).toBe('');
     expect(result.smtpPass).toBe('');
+  });
+
+  describe('Prisma config', () => {
+    it('should parse transaction timeout defaults', () => {
+      const config = validateEnv({
+        ...validEnv,
+        PRISMA_TRANSACTION_MAX_WAIT_MS: '7000',
+        PRISMA_TRANSACTION_TIMEOUT_MS: '20000',
+      });
+      expect(config.prismaTransactionMaxWaitMs).toBe(7000);
+      expect(config.prismaTransactionTimeoutMs).toBe(20000);
+    });
+
+    it('should reject invalid transaction timeout values', () => {
+      expect(() =>
+        validateEnv({
+          ...validEnv,
+          PRISMA_TRANSACTION_MAX_WAIT_MS: '0',
+        }),
+      ).toThrow('PRISMA_TRANSACTION_MAX_WAIT_MS');
+      expect(() =>
+        validateEnv({
+          ...validEnv,
+          PRISMA_TRANSACTION_TIMEOUT_MS: 'slow',
+        }),
+      ).toThrow('PRISMA_TRANSACTION_TIMEOUT_MS');
+    });
   });
 
   describe('APP_PROCESS_ROLE', () => {

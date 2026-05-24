@@ -32,6 +32,12 @@ export class CompanySearchIndexProcessor {
             },
           },
         },
+        _count: {
+          select: {
+            followers: true,
+            members: true,
+          },
+        },
       },
     });
 
@@ -46,8 +52,8 @@ export class CompanySearchIndexProcessor {
       industry: company.industry,
       description: company.description,
       verified: company.verified,
-      followerCount: company.followerCount,
-      memberCount: company.members.length,
+      followerCount: company._count.followers,
+      memberCount: company._count.members,
       memberNames: company.members.map((m) => m.user.displayName),
     });
 

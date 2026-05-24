@@ -43,7 +43,6 @@ describe('Connections (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
 

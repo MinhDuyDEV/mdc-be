@@ -13,7 +13,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import type {
   AddCandidateToPoolDto,
   SaveCandidateDto,

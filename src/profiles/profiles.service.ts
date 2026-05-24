@@ -96,7 +96,7 @@ export class ProfilesService {
         await this.replaceLanguages(profile.id, languages);
 
       // Emit ProfileUpdated event
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'ProfileUpdated',
         aggregateType: 'Profile',
         aggregateId: profile.id,

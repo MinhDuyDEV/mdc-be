@@ -3,6 +3,10 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import {
+  createAdminPermissions,
+  createOutboxEventMock,
+} from './helpers/e2e-mocks';
 
 describe('Search (e2e)', () => {
   let app: INestApplication<App> | undefined;
@@ -48,7 +52,6 @@ describe('Search (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
     process.env.APP_PROCESS_ROLE = 'all';
@@ -142,12 +145,25 @@ describe('Search (e2e)', () => {
             });
           }),
       },
+      adminUser: {
+        findUnique: jest
+          .fn()
+          .mockImplementation((args: { where: { userId: string } }) => {
+            if (args?.where?.userId === userId) {
+              return Promise.resolve({
+                role: 'ADMIN',
+                permissions: createAdminPermissions('MANAGE_JOBS'),
+              });
+            }
+            return Promise.resolve(null);
+          }),
+      },
       searchQueryLog: { create: jest.fn().mockResolvedValue({}) },
       searchReindexRun: {
         create: jest.fn().mockResolvedValue({}),
         update: jest.fn().mockResolvedValue({}),
       },
-      outboxEvent: { create: jest.fn() },
+      outboxEvent: createOutboxEventMock(),
       idempotencyKey: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),

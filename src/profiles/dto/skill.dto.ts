@@ -4,7 +4,7 @@ import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 export class SkillDto {
   @IsString()
   @MaxLength(100)
-  name: string;
+  name!: string;
 
   @IsOptional()
   @IsEnum(SkillCategory)

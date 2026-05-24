@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
+import { ConnectionStatus, MediaVisibility } from '@prisma/client';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { StorageService } from '../infra/storage/storage.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -43,6 +44,9 @@ describe('MediaService', () => {
           provide: PrismaService,
           useValue: {
             mediaAsset: mediaAssetMock,
+            connection: {
+              findFirst: jest.fn(),
+            },
             $transaction: jest.fn((fn: any) =>
               fn({ mediaAsset: mediaAssetMock }),
             ),
@@ -92,6 +96,7 @@ describe('MediaService', () => {
         contentType: dto.contentType,
         sizeBytes: dto.sizeBytes,
         status: 'PENDING',
+        visibility: MediaVisibility.PRIVATE,
       };
 
       jest
@@ -288,6 +293,7 @@ describe('MediaService', () => {
         filename: 'profile.jpg',
         contentType: 'image/jpeg',
         status: 'READY',
+        visibility: MediaVisibility.PRIVATE,
         s3Bucket: 'test-bucket',
         s3Key: 'avatar/test-key-profile.jpg',
       };
@@ -315,6 +321,83 @@ describe('MediaService', () => {
         expiresIn: 300,
         filename: asset.filename,
         contentType: asset.contentType,
+      });
+    });
+
+    it('should return public asset for anonymous users', async () => {
+      const mediaId = 'media-123';
+      const asset = {
+        id: mediaId,
+        ownerId: 'owner-123',
+        filename: 'public.jpg',
+        contentType: 'image/jpeg',
+        status: 'READY',
+        visibility: MediaVisibility.PUBLIC,
+        s3Bucket: 'test-bucket',
+        s3Key: 'avatar/public.jpg',
+      };
+
+      jest
+        .spyOn(prisma.mediaAsset, 'findUnique')
+        .mockResolvedValue(asset as any);
+      jest
+        .spyOn(storage, 'generatePresignedDownloadUrl')
+        .mockResolvedValue('https://download-url');
+
+      const result = await service.getDownloadUrl(undefined, mediaId);
+
+      expect(result.downloadUrl).toBe('https://download-url');
+    });
+
+    it('should hide private assets from anonymous users', async () => {
+      jest.spyOn(prisma.mediaAsset, 'findUnique').mockResolvedValue({
+        id: 'media-123',
+        ownerId: 'owner-123',
+        status: 'READY',
+        visibility: MediaVisibility.PRIVATE,
+      } as any);
+
+      await expect(
+        service.getDownloadUrl(undefined, 'media-123'),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should allow connections-only assets for accepted connections', async () => {
+      const asset = {
+        id: 'media-123',
+        ownerId: 'owner-123',
+        filename: 'connected.jpg',
+        contentType: 'image/jpeg',
+        status: 'READY',
+        visibility: MediaVisibility.CONNECTIONS_ONLY,
+        s3Bucket: 'test-bucket',
+        s3Key: 'avatar/connected.jpg',
+      };
+
+      jest
+        .spyOn(prisma.mediaAsset, 'findUnique')
+        .mockResolvedValue(asset as any);
+      jest.spyOn(prisma.connection, 'findFirst').mockResolvedValue({
+        id: 'connection-1',
+      } as any);
+      jest
+        .spyOn(storage, 'generatePresignedDownloadUrl')
+        .mockResolvedValue('https://download-url');
+
+      await expect(
+        service.getDownloadUrl({ id: 'viewer-123' } as any, 'media-123'),
+      ).resolves.toEqual(
+        expect.objectContaining({ downloadUrl: 'https://download-url' }),
+      );
+      expect(prisma.connection.findFirst).toHaveBeenCalledWith({
+        where: {
+          status: ConnectionStatus.ACCEPTED,
+          OR: [
+            { requesterId: 'viewer-123', addresseeId: 'owner-123' },
+            { requesterId: 'owner-123', addresseeId: 'viewer-123' },
+          ],
+        },
+        select: { id: true },
       });
     });
 

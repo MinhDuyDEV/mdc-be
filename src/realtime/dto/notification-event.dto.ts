@@ -1,8 +1,8 @@
 export class NotificationEventDto {
-  id: string;
-  type: string;
-  title: string;
-  body: string;
+  id!: string;
+  type!: string;
+  title!: string;
+  body!: string;
   actionUrl?: string;
-  createdAt: Date;
+  createdAt!: Date;
 }

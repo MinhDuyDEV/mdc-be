@@ -11,7 +11,7 @@ import {
 export class CreatePostDto {
   @IsString()
   @IsNotEmpty()
-  content: string;
+  content!: string;
 
   @IsEnum(PostVisibility)
   @IsOptional()

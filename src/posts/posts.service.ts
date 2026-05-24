@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PostStatus, PostVisibility } from '@prisma/client';
-import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -118,7 +117,7 @@ export class PostsService {
               mentionerUserId: userId,
             },
           });
-          await this.outboxService.emit(tx as PrismaTransaction, {
+          await this.outboxService.emit(tx, {
             eventType: 'MentionCreated',
             aggregateType: 'Mention',
             aggregateId: post.id,
@@ -131,7 +130,7 @@ export class PostsService {
         }
       }
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'PostCreated',
         aggregateType: 'Post',
         aggregateId: post.id,
@@ -233,7 +232,7 @@ export class PostsService {
                 mentionerUserId: userId,
               },
             });
-            await this.outboxService.emit(tx as PrismaTransaction, {
+            await this.outboxService.emit(tx, {
               eventType: 'MentionCreated',
               aggregateType: 'Mention',
               aggregateId: postId,
@@ -247,7 +246,7 @@ export class PostsService {
         }
       }
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'PostUpdated',
         aggregateType: 'Post',
         aggregateId: postId,
@@ -278,7 +277,7 @@ export class PostsService {
         data: { deletedAt: new Date() },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'PostDeleted',
         aggregateType: 'Post',
         aggregateId: postId,
@@ -378,7 +377,7 @@ export class PostsService {
         data: { commentCount: { increment: 1 } },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'CommentAdded',
         aggregateType: 'Comment',
         aggregateId: comment.id,
@@ -467,7 +466,7 @@ export class PostsService {
           where: { id: postId },
           data: { reactionCount: { decrement: 1 } },
         });
-        await this.outboxService.emit(tx as PrismaTransaction, {
+        await this.outboxService.emit(tx, {
           eventType: 'ReactionRemoved',
           aggregateType: 'Reaction',
           aggregateId: existing.id,
@@ -490,7 +489,7 @@ export class PostsService {
           where: { id: otherReaction.id },
           data: { type: dto.type },
         });
-        await this.outboxService.emit(tx as PrismaTransaction, {
+        await this.outboxService.emit(tx, {
           eventType: 'ReactionAdded',
           aggregateType: 'Reaction',
           aggregateId: updated.id,
@@ -513,7 +512,7 @@ export class PostsService {
         data: { reactionCount: { increment: 1 } },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ReactionAdded',
         aggregateType: 'Reaction',
         aggregateId: reaction.id,
@@ -549,7 +548,7 @@ export class PostsService {
         where: { id: reaction.postId },
         data: { reactionCount: { decrement: 1 } },
       });
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ReactionRemoved',
         aggregateType: 'Reaction',
         aggregateId: reactionId,

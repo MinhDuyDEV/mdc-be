@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { DeadLetterService } from '../outbox';
 import type {
+  AdminDeadLetterQueryDto,
   AdminUserQueryDto,
   UpdateUserStatusDto,
   VerifyCompanyDto,
@@ -9,7 +11,10 @@ import type {
 
 @Injectable()
 export class AdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly deadLetter: DeadLetterService,
+  ) {}
 
   async listUsers(query: AdminUserQueryDto) {
     const users = await this.prisma.user.findMany({
@@ -123,5 +128,42 @@ export class AdminService {
       orderBy: { createdAt: 'desc' },
     });
     return { data: jobs, meta: { hasNextPage: jobs.length === 50 } };
+  }
+
+  async listDeadLetters(query: AdminDeadLetterQueryDto) {
+    const rows = await this.prisma.outboxDeadLetter.findMany({
+      where: query.eventType ? { eventType: query.eventType } : undefined,
+      take: 51,
+      ...(query.cursor
+        ? {
+            cursor: { id: query.cursor },
+            skip: 1,
+          }
+        : {}),
+      orderBy: { failedAt: 'desc' },
+    });
+    const data = rows.slice(0, 50);
+    return {
+      data,
+      meta: {
+        hasNextPage: rows.length > 50,
+        endCursor: data.at(-1)?.id ?? null,
+      },
+    };
+  }
+
+  async replayDeadLetter(deadLetterId: string, adminId: string): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      await this.deadLetter.replay(tx, deadLetterId);
+      await tx.auditLog.create({
+        data: {
+          actorUserId: adminId,
+          action: 'admin.outbox.dead_letter.replay',
+          entityType: 'OutboxDeadLetter',
+          entityId: deadLetterId,
+          metadata: {},
+        },
+      });
+    });
   }
 }

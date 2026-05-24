@@ -41,7 +41,6 @@ describe('Companies (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
 
@@ -192,6 +191,63 @@ describe('Companies (e2e)', () => {
       updatedAt: new Date(),
     };
 
+    let httpIdempotencyRecord:
+      | {
+          id: string;
+          key: string;
+          requestHash: string;
+          responseBody: unknown;
+          responseStatus: number | null;
+          scope: string;
+        }
+      | undefined;
+    const prismaError = (code: string): Error & { code: string } =>
+      Object.assign(new Error(code), { code });
+    const idempotencyKeyMock = {
+      create: jest.fn().mockImplementation(({ data }: any) => {
+        if (httpIdempotencyRecord) {
+          return Promise.reject(prismaError('P2002'));
+        }
+
+        httpIdempotencyRecord = {
+          id: 'http-idempotency-key-1',
+          scope: data.scope,
+          key: data.key,
+          requestHash: data.requestHash,
+          responseStatus: null,
+          responseBody: null,
+        };
+        return Promise.resolve(httpIdempotencyRecord);
+      }),
+      findUnique: jest.fn().mockImplementation(({ where }: any) => {
+        if (
+          httpIdempotencyRecord &&
+          where.scope_key.scope === httpIdempotencyRecord.scope &&
+          where.scope_key.key === httpIdempotencyRecord.key
+        ) {
+          return Promise.resolve(httpIdempotencyRecord);
+        }
+
+        return Promise.resolve(null);
+      }),
+      update: jest.fn().mockImplementation(({ data }: any) => {
+        if (!httpIdempotencyRecord) {
+          return Promise.reject(prismaError('P2025'));
+        }
+
+        httpIdempotencyRecord = {
+          ...httpIdempotencyRecord,
+          responseStatus: data.responseStatus,
+          responseBody: data.responseBody,
+        };
+        return Promise.resolve(httpIdempotencyRecord);
+      }),
+      delete: jest.fn().mockImplementation(() => {
+        httpIdempotencyRecord = undefined;
+        return Promise.resolve({});
+      }),
+    };
+
     const transactionMock = {
       user: { create: jest.fn().mockResolvedValue(mockUser) },
       auditLog: { create: jest.fn() },
@@ -333,6 +389,7 @@ describe('Companies (e2e)', () => {
           create: jest.fn(),
           update: jest.fn(),
         },
+        idempotencyKey: idempotencyKeyMock,
       })
       .overrideProvider(StorageService)
       .useValue({
@@ -437,6 +494,31 @@ describe('Companies (e2e)', () => {
       expect(response.body).toHaveProperty('data');
       expect(response.body.data.name).toBe('Acme Corp');
       expect(response.body.data.slug).toBe('acme-corp');
+    });
+
+    it('should replay a stored response when Idempotency-Key is reused', async () => {
+      const token = await generateToken();
+      const payload = {
+        name: 'Acme Corp',
+        industry: 'TECHNOLOGY',
+        description: 'A tech company',
+      };
+
+      const first = await request(app!.getHttpServer())
+        .post('/api/v1/companies')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Idempotency-Key', 'company-create-retry-1')
+        .send(payload)
+        .expect(201);
+
+      const second = await request(app!.getHttpServer())
+        .post('/api/v1/companies')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Idempotency-Key', 'company-create-retry-1')
+        .send(payload)
+        .expect(201);
+
+      expect(second.body).toEqual(first.body);
     });
 
     it('should return 400 for invalid industry enum', async () => {

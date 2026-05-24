@@ -9,14 +9,14 @@ import {
 export class CertificationDto {
   @IsString()
   @MaxLength(200)
-  name: string;
+  name!: string;
 
   @IsString()
   @MaxLength(200)
-  issuingOrganization: string;
+  issuingOrganization!: string;
 
   @IsDateString()
-  issueDate: string;
+  issueDate!: string;
 
   @IsOptional()
   @IsDateString()

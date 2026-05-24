@@ -23,6 +23,7 @@ import { MessageEventDto } from './dto/message-event.dto';
 import type { MessageReadDto } from './dto/message-read.dto';
 import type { TypingEventDto } from './dto/typing-event.dto';
 import { WsExceptionFilter } from './filters/ws-exception.filter';
+import { extractSocketAuthToken } from './socket-auth-token';
 import { WsCurrentUser } from './ws-current-user.decorator';
 import { WsJwtGuard } from './ws-jwt.guard';
 
@@ -55,7 +56,7 @@ interface AuthenticatedSocket extends Socket {
 )
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   constructor(
     private readonly messagingPolicy: MessagingPolicyService,
@@ -63,10 +64,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {}
 
   async handleConnection(client: Socket) {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const rawToken =
-      client.handshake.auth?.token ?? client.handshake.query?.token;
-    const token = typeof rawToken === 'string' ? rawToken : undefined;
+    const token = extractSocketAuthToken(client);
 
     if (!token) {
       client.disconnect(true);
@@ -78,8 +76,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         sub: string;
         email: string;
       }>(token);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-      client.data.user = { id: payload.sub, email: payload.email };
+      const authenticatedClient = client as AuthenticatedSocket;
+      authenticatedClient.data.user = { id: payload.sub, email: payload.email };
     } catch {
       client.disconnect(true);
     }
@@ -106,7 +104,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       throw new WsException('Not authorized to join this conversation');
     }
 
-    client.join(`conversation:${dto.conversationId}`);
+    await client.join(`conversation:${dto.conversationId}`);
 
     return { ok: true, conversationId: dto.conversationId };
   }

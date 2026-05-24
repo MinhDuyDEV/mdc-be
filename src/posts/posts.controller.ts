@@ -18,12 +18,12 @@ import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
 import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import type { CreateCommentDto } from './dto/create-comment.dto';
-import type { CreatePostDto } from './dto/create-post.dto';
-import type { CreateReactionDto } from './dto/create-reaction.dto';
-import type { UpdateCommentDto } from './dto/update-comment.dto';
-import type { UpdatePostDto } from './dto/update-post.dto';
+import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
+import { CreatePostDto } from './dto/create-post.dto';
+import { CreateReactionDto } from './dto/create-reaction.dto';
+import { UpdateCommentDto } from './dto/update-comment.dto';
+import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
 
 @Controller('posts')

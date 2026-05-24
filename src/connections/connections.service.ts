@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConnectionStatus, FollowStatus, Prisma } from '@prisma/client';
-import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -121,7 +120,7 @@ export class ConnectionsService {
         include: CONNECTION_INCLUDE,
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ConnectionRequested',
         aggregateType: 'Connection',
         aggregateId: connection.id,
@@ -156,7 +155,7 @@ export class ConnectionsService {
         include: CONNECTION_INCLUDE,
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ConnectionAccepted',
         aggregateType: 'Connection',
         aggregateId: updated.id,
@@ -444,7 +443,7 @@ export class ConnectionsService {
         data: { status: FollowStatus.INACTIVE },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'UserBlocked',
         aggregateType: 'Block',
         aggregateId: block.id,

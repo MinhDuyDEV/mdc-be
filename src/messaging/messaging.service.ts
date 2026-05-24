@@ -3,8 +3,11 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import type { PrismaTransaction } from '../infra/prisma';
+import {
+  DEFAULT_PAGE_LIMIT,
+  MAX_PAGE_LIMIT,
+  type CursorPaginationQueryDto,
+} from '../common/pagination/cursor-pagination.dto';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -100,7 +103,7 @@ export class MessagingService {
         include: { participants: true },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ConversationCreated',
         aggregateType: 'Conversation',
         aggregateId: conversation.id,
@@ -172,7 +175,7 @@ export class MessagingService {
         include: { participants: true },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ConversationCreated',
         aggregateType: 'Conversation',
         aggregateId: conversation.id,
@@ -187,7 +190,7 @@ export class MessagingService {
   }
 
   async listConversations(userId: string, query: CursorPaginationQueryDto) {
-    const limit = Math.min(query.limit, 100);
+    const limit = Math.min(query.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
     const where: Record<string, unknown> = {
       participants: {
         some: {
@@ -363,7 +366,7 @@ export class MessagingService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'MessageSent',
         aggregateType: 'Conversation',
         aggregateId: conversationId,
@@ -392,7 +395,7 @@ export class MessagingService {
       throw new ForbiddenException('NOT_A_PARTICIPANT');
     }
 
-    const limit = Math.min(query.limit, 100);
+    const limit = Math.min(query.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
     const where: Record<string, unknown> = {
       conversationId,
     };

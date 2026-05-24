@@ -7,7 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import type { AppConfig } from '../infra/config/app-config';
-import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
+import {
+  MAILER_TRANSPORTER,
+  type MailerTransporter,
+} from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { PasswordService } from './password.service';
 import { TokenService } from './token.service';
@@ -24,9 +27,7 @@ export class PasswordResetService {
     private readonly tokenService: TokenService,
     private readonly configService: ConfigService<AppConfig, true>,
     @Inject(MAILER_TRANSPORTER)
-    private readonly mailerService: {
-      sendMail: (options: any) => Promise<any>;
-    },
+    private readonly mailerService: MailerTransporter,
   ) {}
 
   async requestReset(email: string): Promise<{ message: string }> {

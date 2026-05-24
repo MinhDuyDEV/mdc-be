@@ -12,6 +12,7 @@ import { Server, Socket } from 'socket.io';
 import { NotificationEventDto } from './dto/notification-event.dto';
 import { WsExceptionFilter } from './filters/ws-exception.filter';
 import { RealtimeService } from './realtime.service';
+import { extractSocketAuthToken } from './socket-auth-token';
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -32,7 +33,7 @@ export class RealtimeGateway
   implements OnGatewayConnection, OnGatewayDisconnect, OnGatewayInit
 {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   constructor(
     private readonly realtimeService: RealtimeService,
@@ -40,28 +41,28 @@ export class RealtimeGateway
   ) {}
 
   afterInit(server: Server) {
-    // eslint-disable-next-line @typescript-eslint/no-misused-promises
-    server.use(async (socket, next) => {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      const rawToken =
-        socket.handshake.auth?.token ?? socket.handshake.query?.token;
-      const token = typeof rawToken === 'string' ? rawToken : undefined;
-      if (!token) {
-        next(new Error('Missing authentication token'));
-        return;
-      }
-      try {
-        const payload = await this.jwtService.verifyAsync<{
-          sub: string;
-          email: string;
-        }>(token);
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        socket.data.user = { id: payload.sub, email: payload.email };
-        next();
-      } catch {
-        next(new Error('Invalid or expired token'));
-      }
+    server.use((socket, next) => {
+      void this.authenticateSocket(socket as AuthenticatedSocket)
+        .then(() => next())
+        .catch((error: Error) => next(error));
     });
+  }
+
+  private async authenticateSocket(socket: AuthenticatedSocket): Promise<void> {
+    const token = extractSocketAuthToken(socket);
+    if (!token) {
+      throw new Error('Missing authentication token');
+    }
+
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: string;
+        email: string;
+      }>(token);
+      socket.data.user = { id: payload.sub, email: payload.email };
+    } catch {
+      throw new Error('Invalid or expired token');
+    }
   }
 
   async handleConnection(client: AuthenticatedSocket) {
@@ -72,7 +73,7 @@ export class RealtimeGateway
     }
 
     // Join user-specific room for targeted delivery
-    client.join(`user:${userId}`);
+    await client.join(`user:${userId}`);
 
     // Set presence
     await this.realtimeService.setUserOnline(userId);

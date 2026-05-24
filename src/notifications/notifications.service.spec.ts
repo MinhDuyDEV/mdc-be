@@ -34,7 +34,6 @@ function createService() {
       updateMany: jest.fn(),
     },
   };
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const service = new NotificationsService(mockPrisma as any);
   return { service, mockPrisma };
 }

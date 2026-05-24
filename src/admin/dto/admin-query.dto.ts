@@ -34,3 +34,13 @@ export class AdminJobQueryDto {
   @IsString()
   cursor?: string;
 }
+
+export class AdminDeadLetterQueryDto {
+  @IsOptional()
+  @IsString()
+  eventType?: string;
+
+  @IsOptional()
+  @IsUUID()
+  cursor?: string;
+}

@@ -22,10 +22,10 @@ import { CompanyRoleGuard } from '../common/guards/company-role.guard';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BillingService } from './billing.service';
-import type { CreatePlanDto } from './dto/create-plan.dto';
-import type { CreateSubscriptionDto } from './dto/create-subscription.dto';
-import type { ListInvoicesDto } from './dto/list-invoices.dto';
-import type { UpdatePlanDto } from './dto/update-plan.dto';
+import { CreatePlanDto } from './dto/create-plan.dto';
+import { CreateSubscriptionDto } from './dto/create-subscription.dto';
+import { ListInvoicesDto } from './dto/list-invoices.dto';
+import { UpdatePlanDto } from './dto/update-plan.dto';
 
 @Controller()
 export class BillingController {

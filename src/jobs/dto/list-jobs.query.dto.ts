@@ -1,6 +1,6 @@
 import { EmploymentType, JobStatus, WorkplaceType } from '@prisma/client';
 import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { CursorPaginationQueryDto } from '../../common/pagination/cursor-pagination.dto.js';
+import { CursorPaginationQueryDto } from '../../common/pagination/cursor-pagination.dto';
 
 export class ListJobsQueryDto extends CursorPaginationQueryDto {
   @IsOptional()

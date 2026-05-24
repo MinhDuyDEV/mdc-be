@@ -12,6 +12,7 @@ import {
 } from './api-response.types';
 
 const BYPASS_PATHS = new Set(['/', '/health/live', '/health/ready']);
+const BYPASS_PREFIXES = ['/api/v1/billing/webhooks/', '/billing/webhooks/'];
 
 @Injectable()
 export class ApiResponseInterceptor implements NestInterceptor {
@@ -21,7 +22,10 @@ export class ApiResponseInterceptor implements NestInterceptor {
       .getRequest<{ url?: string; path?: string }>();
     const requestPath = request.path ?? request.url?.split('?')[0] ?? '';
 
-    if (BYPASS_PATHS.has(requestPath)) {
+    if (
+      BYPASS_PATHS.has(requestPath) ||
+      BYPASS_PREFIXES.some((prefix) => requestPath.startsWith(prefix))
+    ) {
       return next.handle();
     }
 

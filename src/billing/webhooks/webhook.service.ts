@@ -2,10 +2,7 @@ import * as crypto from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { AppConfig } from '../../infra/config';
-import {
-  PrismaService,
-  type PrismaTransaction,
-} from '../../infra/prisma/prisma.service';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 import { IdempotencyService } from '../../outbox/idempotency.service';
 import { OutboxService } from '../../outbox/outbox.service';
 
@@ -48,7 +45,7 @@ export class WebhookService {
       // Idempotency check inside transaction — if claim fails, rollback
       const idempotencyKey = `${provider}:${eventId}`;
       try {
-        await this.idempotencyService.claim('WebhookEvent', idempotencyKey);
+        await this.idempotencyService.claim(tx, 'WebhookEvent', idempotencyKey);
       } catch {
         // Already processed
         return { processed: false, reason: 'duplicate' };
@@ -62,7 +59,7 @@ export class WebhookService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'PaymentProviderEventReceived',
         aggregateType: 'PaymentProviderEvent',
         aggregateId: event.id,

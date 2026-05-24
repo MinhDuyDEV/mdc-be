@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { ConnectionStatus, MediaVisibility } from '@prisma/client';
 import { randomUUID } from 'crypto';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import type { AppConfig } from '../infra/config/app-config';
@@ -52,6 +53,7 @@ export class MediaService {
         contentType,
         sizeBytes: sizeBytes ?? null,
         status: 'PENDING',
+        visibility: MediaVisibility.PRIVATE,
       },
     });
 
@@ -120,7 +122,7 @@ export class MediaService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'MediaAssetCompleted',
         aggregateType: 'MediaAsset',
         aggregateId: asset.id,
@@ -152,16 +154,21 @@ export class MediaService {
     }
   }
 
-  async getDownloadUrl(user: AuthenticatedUser, mediaId: string) {
+  async getDownloadUrl(user: AuthenticatedUser | undefined, mediaId: string) {
     const asset = await this.prisma.mediaAsset.findUnique({
       where: { id: mediaId },
     });
 
-    if (!asset || asset.ownerId !== user.id) {
+    if (!asset) {
       throw new NotFoundException('Media asset not found');
     }
 
     if (asset.status === 'DELETED' || asset.status === 'QUARANTINED') {
+      throw new NotFoundException('Media asset not found');
+    }
+
+    const canRead = await this.canReadAsset(user, asset);
+    if (!canRead) {
       throw new NotFoundException('Media asset not found');
     }
 
@@ -200,7 +207,7 @@ export class MediaService {
         data: { status: 'DELETED' },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'MediaAssetDeleted',
         aggregateType: 'MediaAsset',
         aggregateId: asset.id,
@@ -217,5 +224,39 @@ export class MediaService {
     });
 
     return updated;
+  }
+
+  private async canReadAsset(
+    user: AuthenticatedUser | undefined,
+    asset: { ownerId: string; visibility: MediaVisibility },
+  ): Promise<boolean> {
+    if (asset.visibility === MediaVisibility.PUBLIC) {
+      return true;
+    }
+
+    if (!user) {
+      return false;
+    }
+
+    if (asset.ownerId === user.id) {
+      return true;
+    }
+
+    if (asset.visibility !== MediaVisibility.CONNECTIONS_ONLY) {
+      return false;
+    }
+
+    const connection = await this.prisma.connection.findFirst({
+      where: {
+        status: ConnectionStatus.ACCEPTED,
+        OR: [
+          { requesterId: user.id, addresseeId: asset.ownerId },
+          { requesterId: asset.ownerId, addresseeId: user.id },
+        ],
+      },
+      select: { id: true },
+    });
+
+    return connection !== null;
   }
 }

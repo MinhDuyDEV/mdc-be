@@ -16,7 +16,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: npm audit --audit-level=high
+          cache: 'npm'
+      - run: npm ci
+      - run: npm audit --audit-level=moderate
 
   # dependency-review requires GitHub Advanced Security enabled on the repo.
   # Enable at: https://github.com/MinhDuyDEV/mdc-be/settings/security_analysis
@@ -29,12 +31,46 @@ jobs:
   #       with:
   #         fail-on-severity: high
 
-  # Placeholder for CodeQL
-  # codeql:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #     - uses: github/codeql-action/init@v3
-  #       with:
-  #         languages: javascript
-  #     - uses: github/codeql-action/analyze@v3
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+      - uses: github/codeql-action/analyze@v3
+
+  container-scan:
+    runs-on: ubuntu-latest
+    env:
+      TRIVY_IMAGE: aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e
+      TARGET_IMAGE: mdc-be:security-scan
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image for scanning
+        run: docker build -t "$TARGET_IMAGE" .
+      - name: Scan Dockerfile misconfigurations
+        run: >
+          docker run --rm
+          -v "$PWD:/work"
+          -w /work
+          "$TRIVY_IMAGE"
+          config
+          --exit-code 1
+          --severity HIGH,CRITICAL
+          --no-progress
+          Dockerfile
+      - name: Scan built image vulnerabilities
+        run: >
+          docker run --rm
+          -v /var/run/docker.sock:/var/run/docker.sock
+          "$TRIVY_IMAGE"
+          image
+          --exit-code 1
+          --severity HIGH,CRITICAL
+          --no-progress
+          "$TARGET_IMAGE"

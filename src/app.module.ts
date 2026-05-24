@@ -38,7 +38,7 @@ import { UsersModule } from './users/users.module';
       imports: [InfraModule],
       inject: [REDIS_CLIENT],
       useFactory: (redisClient: import('ioredis').Redis) => ({
-        throttlers: [{ limit: 10, ttl: 60000 }],
+        throttlers: [{ limit: 300, ttl: 60000 }],
         storage: new ThrottlerStorageRedisService(redisClient),
       }),
     }),

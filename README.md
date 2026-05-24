@@ -1,98 +1,97 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# mdc-be
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+NestJS 11 backend for a professional networking and jobs platform. The app is a modular monolith with domain modules for authentication, profiles, companies, jobs, applications, recruiting, posts, connections, messaging, notifications, search, analytics, billing, moderation, and admin operations.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+Core architecture choices:
 
-## Description
+- PostgreSQL through Prisma 6.
+- Redis for rate limiting, Socket.IO fanout, and worker leader locks.
+- S3-compatible media storage through AWS SDK or MinIO.
+- Elasticsearch for search indexes.
+- Transactional outbox for cross-domain side effects.
+- Runtime role separation through `APP_PROCESS_ROLE=api|worker|realtime|all`.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
-
-## Project setup
+## First 10 Minutes
 
 ```bash
-$ npm install
+npm install
+cp .env.example .env
+docker compose up -d
+npm run prisma:generate
+npm run prisma:validate
+npm run start:dev
 ```
 
-## Compile and run the project
+API defaults to `http://localhost:3000/api/v1`. Health checks are:
+
+- `GET /health/live`
+- `GET /health/ready`
+
+## Development
 
 ```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+npm run start:dev       # API with instrumentation preload
+npm run typecheck       # TypeScript only
+npm run lint            # strict ESLint, no auto-fix
+npm run lint:fix        # local auto-fix
+npm test                # unit tests with jest.setup.ts env defaults
+npm run test:e2e        # e2e tests
+npm run check           # typecheck + lint + unit tests
+npm run build           # Nest production build
 ```
 
-## Run tests
+E2E tests can start infrastructure through Testcontainers when enabled:
 
 ```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+MDC_E2E_TESTCONTAINERS=true npm run test:e2e
 ```
 
-## Deployment
-
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+## Database
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+npm run prisma:validate
+npm run prisma:generate
+npm run prisma:migrate
+npm run prisma:migrate:deploy
+npm run db:reset
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Schema changes live in `prisma/schema.prisma` plus `prisma/migrations/`. Run `npm run prisma:validate` after any schema edit and `npm run prisma:generate` after model/client-shape changes.
 
-## Resources
+## Runtime Roles
 
-Check out a few resources that may come in handy when working with NestJS:
+`APP_PROCESS_ROLE` controls what runs in each process:
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+- `api`: HTTP API only.
+- `worker`: background jobs, outbox processing, scheduled cleanup.
+- `realtime`: WebSocket gateways.
+- `all`: local development role that runs everything.
 
-## Support
+Use role-specific `DATABASE_URL` pool limits in deployment, as documented in `.env.example`.
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+## Outbox
 
-## Stay in touch
+Domain services emit events inside Prisma transactions with `OutboxService.emit(tx, event)`. Worker processes claim pending rows, validate payloads through the event schema registry, dispatch handlers with bounded parallelism, and move exhausted failures to the dead-letter table.
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+Operational docs:
 
-## License
+- [Architecture](docs/architecture.md)
+- [Outbox replay runbook](docs/runbooks/outbox-replay.md)
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+## Project Guide
+
+Read [AGENTS.md](AGENTS.md) before making changes. It documents domain boundaries, verification requirements, Beads workflow, and repository conventions. Subdirectories also include local `AGENTS.md` files for area-specific rules.
+
+Before claiming work complete, run at least:
+
+```bash
+npm run typecheck
+npm run lint
+npm test
+npm run build
+npm run prisma:validate
+```
+
+## Package
+
+Private application package. License remains `UNLICENSED` unless project ownership chooses a release license.

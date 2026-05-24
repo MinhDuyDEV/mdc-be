@@ -296,6 +296,35 @@ grep -rn "tx as any" src --include="*.ts" | grep -v ".spec.ts"   # zero
 - `npm run check` is the documented pre-PR command.
 - No `tx as any` in production code.
 
+## Phase 1 Result
+
+Changed:
+- `src/infra/prisma/prisma.service.ts:13` — `PrismaTransaction` now aliases `Prisma.TransactionClient`, matching Prisma interactive transactions.
+- `src/outbox/outbox.service.ts:14` — `OutboxService.emit` accepts typed transaction clients directly and no longer needs a runtime transaction-shape guard.
+- `package.json:16` — `lint` is verify-only with `--max-warnings 0`; `lint:fix` is the mutating script; `check` runs typecheck, lint, and unit tests.
+- `package.json:120` — Jest loads `../jest.setup.ts` before module imports so tests get safe env defaults without manual exports.
+- `package.json:123` — coverage now ignores DTO/module/barrel/constants files and enforces measured global thresholds.
+- `tsconfig.json:19` — `strict` mode is enabled.
+- `eslint.config.mjs:29` — `no-explicit-any`, `no-floating-promises`, and `no-unsafe-argument` are errors; spec/e2e files keep a documented mock-heavy override.
+- `jest.setup.ts:1` — unit-test env defaults cover database, Redis, S3, Elasticsearch, SMTP, OTel, auth, cookie, and billing config.
+- `test/AGENTS.md:16` — testing docs now point to `../jest.setup.ts`; `test/AGENTS.md:46` documents env-default behavior.
+- `src/realtime/socket-auth-token.ts:7` — shared typed Socket.IO token extraction removed production unsafe-assignment/member-access suppressions in realtime gateways.
+- `src/auth/auth.controller.ts:103` — decoded JWT payload is treated as `unknown` and narrowed before reading `sub`.
+
+Verification:
+- `npm run check` — pass; strict typecheck, lint with zero warnings, unit tests 75 suites / 739 tests.
+- `npm run build` — pass.
+- `npx prisma validate` — pass.
+- `npm run test:cov -- --runInBand --coverageReporters=json-summary` — pass; lines 64.76%, statements 65.53%, functions 62.62%, branches 55.37%.
+- temp copy without `.env`, run with clean process env: `npm test -- --runInBand` — pass; 75 suites / 739 tests.
+- `rg -n "tx as any" src --glob '*.ts'` — no matches.
+- `rg -n "as any|: any|<any>|@ts-ignore|eslint-disable" src --glob '*.ts' --glob '!*.spec.ts'` — no matches.
+- planted temporary `src/__lint_probe.ts` with explicit `any`; `npm run lint` failed as expected, then probe was removed and `npm run lint` passed again.
+
+Remaining:
+- none for Phase 1.
+- Future-phase target checks still find planned Phase 5 work: Socket.IO query-token fallback.
+
 ---
 
 ## Phase 2 — Auth Refresh Token Security Fix
@@ -465,6 +494,40 @@ npm run test:e2e -- auth.e2e-spec.ts
 - No `process.env` in `src/auth/`.
 - Refresh-token format matches ADR-0001.
 
+## Phase 2 Result
+
+Changed:
+- `src/auth/auth.controller.ts:12` — `AuthController` now injects `ConfigService<AppConfig, true>` for refresh-cookie config instead of reading ambient env.
+- `src/auth/auth.controller.ts:70` — login refresh-cookie options now come from validated config.
+- `src/auth/auth.controller.ts:142` — refresh endpoint reuses the same validated cookie options when rotating the cookie.
+- `src/auth/auth.controller.ts:225` — refresh-cookie `maxAge` now derives from `jwtRefreshExpiresIn`.
+- `src/auth/token-expiry.util.ts:3` — shared `expiresIn` parser returns milliseconds for cookies and dates for refresh-token expiry.
+- `src/auth/token.service.ts:8` — refresh-token expiry now uses the shared parser instead of duplicate private parsing.
+- `src/auth/auth.controller.spec.ts:114` — regression test proves login cookie uses `cookieSecure`, `cookieSameSite`, and `jwtRefreshExpiresIn` from `ConfigService`.
+- `src/auth/auth.guard.ts:62` — invalid tokens on `@OptionalAuth()` routes now leave `request.user` unset and continue as anonymous.
+- `src/auth/auth.guard.spec.ts:150` — regression test covers invalid optional-auth token degradation.
+- `prisma/schema.prisma` — `RefreshToken` now has token identity fields for opaque refresh tokens: `familyId`, `parentTokenId`, SHA-256 token-secret hash storage, and family/parent indexes.
+- `prisma/migrations/20260524093000_refresh_media_visibility_counts/migration.sql` — refresh-token backfill sets existing rows to self-rooted families for legacy dual-read compatibility.
+- `src/auth/token.service.ts` — refresh tokens are now opaque `<tokenId>.<secret>` values; lookup uses token ID, validation hashes the secret with SHA-256, rotation preserves token families, and replay revokes only the affected family.
+- `src/auth/token.service.ts` — legacy bcrypt refresh-token validation remains as a dual-read path for unexpired existing rows until natural expiry.
+- `src/auth/auth.controller.ts` — `/auth/refresh` is cookie-only and no longer requires a Bearer access token or `jwtService.decode()` to infer refresh identity.
+- `.env.example`, `jest.setup.ts`, `src/infra/config/*`, and workflow/test env — removed dead `JWT_REFRESH_SECRET` config after moving refresh tokens to opaque random secrets.
+
+Verification:
+- pre-fix `npm test -- auth.controller.spec.ts --runInBand` — failed as expected; cookie options were hardcoded to `secure: false`, `sameSite: 'lax'`, and 7-day maxAge.
+- `npm test -- auth.controller.spec.ts token.service.spec.ts --runInBand` — pass; 2 suites / 8 tests.
+- pre-fix `npm test -- auth.guard.spec.ts --runInBand` — failed as expected; invalid optional-auth token threw `UnauthorizedException`.
+- `npm test -- auth.guard.spec.ts --runInBand` — pass; 1 suite / 8 tests.
+- `npm run check` — pass; strict typecheck, lint with zero warnings, unit tests 75 suites / 740 tests.
+- `npm run build` — pass.
+- `npx prisma validate` — pass.
+- `rg -n "process\\.env" src/auth --glob '*.ts'` — no matches.
+- `npm test -- token.service.spec.ts auth.controller.spec.ts --runInBand` — pass; opaque refresh rotation, cookie-only refresh, replay revocation, expired/revoked handling, and legacy dual-read covered.
+- `npm run test:e2e -- auth.e2e-spec.ts --runInBand` — pass.
+
+Remaining:
+- none for Phase 2.
+
 ---
 
 ## Phase 3 — Media Authorization Model Fix
@@ -569,6 +632,23 @@ npm run test:e2e -- media.e2e-spec.ts
 - Private assets remain owner-only.
 - Backfill verification SQL recorded in `docs/runbooks/media-visibility-backfill.md`.
 
+## Phase 3 Result
+
+Changed:
+- `prisma/schema.prisma` — added `MediaVisibility` enum and `MediaAsset.visibility @default(PRIVATE)` with an index on `[visibility, status]`.
+- `prisma/migrations/20260524093000_refresh_media_visibility_counts/migration.sql` — conservative backfill keeps uncertain assets `PRIVATE`, marks only company logo/cover media and published public post media `PUBLIC`.
+- `src/media/media.controller.ts` — `GET /media/:id` now uses optional auth so anonymous requests can reach public media without weakening confirm/delete.
+- `src/media/media.service.ts` — download authorization now allows anonymous `PUBLIC`, owner-only `PRIVATE`, and accepted-connection `CONNECTIONS_ONLY`; denied access still returns not found to avoid enumeration.
+- `src/media/media.service.spec.ts` and `test/media.e2e-spec.ts` — added public-read/private-denial regression coverage.
+
+Verification:
+- `npx prisma validate` — pass.
+- `npm test -- media.service.spec.ts --runInBand` — pass.
+- `npm run test:e2e -- media.e2e-spec.ts --runInBand` — pass.
+
+Remaining:
+- none for Phase 3.
+
 ---
 
 ## Phase 4 — Billing/Webhook and Idempotency Correctness
@@ -672,6 +752,40 @@ npm run test:e2e -- billing.e2e-spec.ts
 - Webhook contract correct (no envelope wrap, raw-body required).
 - Idempotency rows roll back with their transaction.
 - Outbox attempts counter is accurate.
+
+## Phase 4 Result
+
+Changed:
+- `src/billing/webhooks/webhook-signature.guard.ts:42` — guard now hard-fails when `rawBody` is missing and never stringifies parsed request body for signature verification.
+- `src/billing/webhooks/webhook-signature.guard.spec.ts:68` — regression test covers missing raw body and proves signature verification is not called in that state.
+- `src/common/response/api-response.interceptor.ts:15` — billing webhook route prefixes bypass the global API response envelope.
+- `src/common/common.spec.ts:54` — regression test proves billing webhook responses pass through as provider-facing bodies rather than `{ data: ... }`.
+- `src/outbox/idempotency.service.ts:11` — `claim` now supports both standalone and transaction-client calls so idempotency rows can roll back with their caller transaction.
+- `src/billing/webhooks/webhook.service.ts:48` — webhook processing passes `tx` into the idempotency claim before provider-event persistence and outbox emit.
+- `src/companies/companies.service.ts:167` — company creation now claims idempotency inside the same transaction as the company/member/outbox writes.
+- `src/outbox/outbox.processor.ts:98` — dispatch failure now records one failed attempt before deciding requeue versus dead letter.
+- `src/outbox/outbox.processor.ts:150` — claim SQL marks events `PROCESSING` without incrementing `attempts`.
+- `src/outbox/outbox.processor.ts:454` — `recordFailure` increments `attempts` only on real dispatch failure and returns the updated count.
+- `src/outbox/idempotency.service.spec.ts:1` — regression coverage for transaction-scoped idempotency claims.
+- `src/billing/webhooks/webhook.service.spec.ts:1` — regression coverage for webhook idempotency using the provided transaction client.
+- `src/companies/companies.service.spec.ts:1` — regression coverage for company-create idempotency inside the transaction.
+- `src/outbox/outbox.processor.spec.ts:1` — regression coverage for claim-side attempts not incrementing and failure-side attempts incrementing once.
+
+Verification:
+- pre-fix `npm test -- webhook-signature.guard.spec.ts --runInBand` — failed as expected; missing `rawBody` did not throw.
+- pre-fix `npm test -- common.spec.ts --runInBand` — failed as expected; `/api/v1/billing/webhooks/stripe` response was wrapped in `{ data: ... }`.
+- `npm test -- common.spec.ts webhook-signature.guard.spec.ts webhook.service.spec.ts --runInBand` — pass; 3 suites / 20 tests.
+- `npm test -- outbox.processor.spec.ts idempotency.service.spec.ts webhook.service.spec.ts companies.service.spec.ts --runInBand` — pass; 4 suites / 38 tests.
+- `npm run check` — pass; strict typecheck, lint with zero warnings, unit tests 76 suites / 749 tests after Phase 4; latest full run after Phase 5 safe work passes 79 suites / 762 tests.
+- `npm run build` — pass.
+- `npx prisma validate` — pass.
+- `rg -n "JSON\\.stringify\\(request\\.body\\)" src --glob '*.ts'` — no matches.
+- `rg -n "attempts = attempts \\+ 1|getAttempts\\(" src/outbox --glob '*.ts'` — no matches.
+- `npm run test:e2e -- billing.e2e-spec.ts --runInBand` — pass; 1 suite / 14 tests.
+- `npm run test:e2e -- billing.e2e-spec.ts --runInBand --detectOpenHandles` — pass; 1 suite / 14 tests, no open handles reported.
+
+Remaining:
+- none for Phase 4.
 
 ---
 
@@ -861,6 +975,92 @@ curl -fsS http://localhost:3000/health/ready
 - OTel + NestJS shutdown ordering correct.
 - Outbox releases locks on shutdown.
 
+## Phase 5 Result
+
+Changed:
+- `src/realtime/socket-auth-token.ts:11` — WebSocket auth token extraction now accepts `handshake.auth.token` or `Authorization: Bearer ...` only; query-string tokens are no longer accepted.
+- `src/realtime/socket-auth-token.spec.ts:1` — unit tests cover auth-token precedence, Bearer header extraction, query-token rejection, and non-Bearer rejection.
+- `test/realtime.e2e-spec.ts:12` — realtime e2e imports `JwtService` as a runtime provider so Nest can resolve the test gateway.
+- `test/realtime.e2e-spec.ts:27` — realtime e2e uses the production WebSocket token helper.
+- `test/realtime.e2e-spec.ts:102` — test gateway no longer accepts query-string tokens.
+- `src/app.module.ts:41` — global throttler default is now 300 requests/minute instead of the audit-blocking 10 requests/minute.
+- `src/bootstrap.ts:28` — Helmet now emits a minimal JSON-API CSP with `default-src 'none'` and `frame-ancestors 'none'`.
+- `src/infra/logger/logger.module.ts:36` — shared request-ID resolution now honors inbound `x-request-id` and generates one when absent.
+- `src/infra/logger/logger.module.ts:47` — Pino `genReqId` now uses the same request ID and writes it to the response header.
+- `src/bootstrap.ts:68` — request-ID middleware now reuses `req.id` from Pino when present, ensuring response headers and error envelopes agree.
+- `src/common/errors/api-exception.filter.ts:87` — exception filter now has a logger dependency.
+- `src/common/errors/api-exception.filter.ts:115` — non-HttpException 500s are logged with stack trace and request ID before returning the public error envelope.
+- `src/common/common.spec.ts:100` — regression test proves plain errors do not leak but do log stack/request ID.
+- `src/infra/logger/logger.module.spec.ts:210` — request-ID resolver tests cover inbound and generated IDs.
+- `test/app.e2e-spec.ts:262` — e2e test verifies CSP header.
+- `test/app.e2e-spec.ts:272` — e2e test verifies inbound request ID echo.
+- `Dockerfile:23` — production dependency pruning happens in a separate stage; runtime no longer runs a second `npm ci`.
+- `Dockerfile:34` — runtime files are copied as the non-root `node` user.
+- `Dockerfile:41` — image now declares a `/health/live` healthcheck.
+- `.github/workflows/deploy.yml` — deleted per ADR-0003 because no real deploy target exists.
+- `.github/workflows/security.yml:21` — npm audit now runs at moderate severity after `npm ci`.
+- `.github/workflows/security.yml:34` — CodeQL JavaScript/TypeScript analysis is enabled.
+- `.github/workflows/security.yml:43` — container scanning now builds the Docker image and runs Trivy via pinned container image digest `aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e`.
+- `.github/dependabot.yml:1` — Dependabot now tracks npm, Docker, and GitHub Actions updates.
+- `package-lock.json` — transitive `qs` is updated to `6.15.2`, resolving `GHSA-q8mj-m7cp-5q26` without adding an override.
+- `src/instrumentation.config.ts:6` — OTel endpoint resolution now validates production presence and URL shape before SDK construction.
+- `src/instrumentation.ts:55` — trace and metric exporters use the validated OTLP endpoint.
+- `src/instrumentation.ts:83` — SDK startup is registered on `globalThis` for Nest-managed shutdown instead of owning SIGTERM with `process.exit(0)`.
+- `src/infra/observability/otel-shutdown.service.ts:17` — Nest shutdown hook now shuts down the started OTel SDK without importing instrumentation side effects.
+- `src/infra/infra.module.ts:50` — OTel shutdown provider is registered in `InfraModule`.
+- `src/outbox/outbox.processor.ts:35` — outbox processor now uses a stable per-process lock owner ID.
+- `src/outbox/outbox.processor.ts:132` — processor releases its own `PROCESSING` locks on Nest shutdown.
+- `src/outbox/outbox.processor.spec.ts:317` — regression test verifies shutdown lock release.
+- `src/*/*controller.ts` — DTOs used by `@Body()` and `@Query()` now use runtime imports instead of type-only imports so Nest's global `ValidationPipe` receives real metatypes.
+- `src/search/dto/search.query.dto.ts:13` — search entity types are shared by normal search validation and reindex query validation.
+- `src/search/search.controller.ts:105` — reindex `entityType` is validated through `SearchReindexQueryDto` instead of a compile-time-only string union.
+- `src/notifications/dto/list-notifications-query.dto.ts:1` — notifications now has a route-specific pagination DTO that preserves the documented service clamp to 50 while still validating integer/minimum shape.
+- `src/messaging/messaging.service.ts:192` — conversation and message pagination now default missing `limit` before passing `take` to Prisma.
+- `src/messaging/messaging.service.spec.ts:206` — regression tests cover missing-limit defaults for conversations and messages.
+- `test/helpers/e2e-mocks.ts:1` — shared e2e mock helpers provide Redis lifecycle methods, outbox shutdown `updateMany`, and `RolesGuard` permission shape.
+- `test/admin.e2e-spec.ts:20`, `test/analytics.e2e-spec.ts:181`, `test/moderation.e2e-spec.ts:21`, `test/search.e2e-spec.ts:128`, `test/auth.e2e-spec.ts:272`, `test/billing.e2e-spec.ts:15`, and `test/notifications.e2e-spec.ts:322` — e2e contracts now use valid UUID fixtures and restored validation expectations.
+- `test/helpers/e2e-global-setup.ts:1` — CI/local e2e can now start Postgres, Redis, MinIO, Elasticsearch, and MailHog with Testcontainers when `MDC_E2E_TESTCONTAINERS=true`.
+- `test/helpers/e2e-global-teardown.ts:1` — Testcontainers e2e teardown removes started infrastructure containers by recorded container ID.
+- `test/jest-e2e.json:5` — e2e Jest config wires the Testcontainers global setup/teardown.
+- `.github/workflows/ci.yml:13` — CI no longer uses GitHub service containers; e2e infra is delegated to Testcontainers per ADR-0008.
+- `.github/workflows/ci.yml:51` — CI env now explicitly includes refresh-cookie defaults and `BILLING_WEBHOOK_SECRET`, matching validated test config and preventing the prior Actions env failure.
+- `test/AGENTS.md:56` and `.github/workflows/AGENTS.md:21` — testing/workflow docs now describe the Testcontainers e2e path.
+
+Verification:
+- `npm test -- socket-auth-token.spec.ts --runInBand` — pass; 1 suite / 4 tests.
+- `npm test -- common.spec.ts logger.module.spec.ts --runInBand` — pass; 2 suites / 32 tests.
+- `npm test -- instrumentation.config.spec.ts otel-shutdown.service.spec.ts --runInBand` — pass; 2 suites / 6 tests.
+- `npm test -- outbox.processor.spec.ts --runInBand` — pass; 1 suite / 20 tests.
+- `npm test -- messaging.service.spec.ts search.controller.spec.ts --runInBand` — pass; 2 suites / 22 tests.
+- `npm run test:e2e -- app.e2e-spec.ts --runInBand` — pass; 1 suite / 9 tests.
+- `npm run test:e2e -- realtime.e2e-spec.ts --runInBand` — pass; 1 suite / 5 tests.
+- `npm run test:e2e -- admin.e2e-spec.ts analytics.e2e-spec.ts moderation.e2e-spec.ts search.e2e-spec.ts --runInBand` — pass; 4 suites / 47 tests.
+- `npm run test:e2e -- messaging.e2e-spec.ts --runInBand` — pass; 1 suite / 10 tests.
+- `npm run test:e2e -- billing.e2e-spec.ts --runInBand --detectOpenHandles` — pass; 1 suite / 14 tests.
+- `npm run test:e2e -- --runInBand` — pass; 21 suites / 183 tests passed / 25 skipped.
+- `docker build -t mdc-be:test .` — pass.
+- `docker image inspect mdc-be:test --format '{{.Config.User}} {{json .Config.Healthcheck}}'` — user is `node`; healthcheck is configured for `/health/live`.
+- `docker image inspect mdc-be:test --format '{{.Config.Env}}'` — no baked `APP_PROCESS_ROLE`; only base image env plus `NODE_ENV=production`.
+- `ruby -e "require 'yaml'; ..."` over `.github/workflows/ci.yml`, `.github/workflows/security.yml`, and `.github/dependabot.yml` — pass.
+- `npm run test:e2e -- --runInBand` after Testcontainers setup wiring with flag unset — pass; 21 suites / 183 tests passed / 25 skipped.
+- `npm audit --audit-level=moderate` — pass; found 0 vulnerabilities.
+- `npm ls qs` — all resolved instances are `qs@6.15.2`.
+- `rg -n "handshake\\.query\\.token" src --glob '*.ts'` — no matches.
+- `rg -n "JSON\\.stringify\\(request\\.body\\)" src --glob '*.ts'` — no matches.
+- `rg -n "process\\.env" src/auth --glob '*.ts'` — no matches.
+- `rg -n "attempts = attempts \\+ 1|getAttempts\\(" src/outbox --glob '*.ts'` — no matches.
+- `git diff --check` — pass.
+- `npm run check` — pass; strict typecheck, lint with zero warnings, unit tests 79 suites / 764 tests.
+- `npm run build` — pass.
+- `npx prisma validate` — pass.
+- `gh run list --repo MinhDuyDEV/mdc-be --workflow CI --limit 5` — latest remote CI runs are still failing; no green Actions proof exists for current uncommitted workflow changes.
+- `gh run view 26338111786 --repo MinhDuyDEV/mdc-be --log-failed` — latest main CI failure came from missing `BILLING_WEBHOOK_SECRET` during unit tests on an older workflow revision.
+- `ruby -e "require 'yaml'; YAML.load_file('.github/workflows/ci.yml')"` — pass after adding explicit CI env.
+
+Remaining:
+- no in-repo Phase 5 work remains.
+- Remote GitHub Actions proof still requires commit/push or another approved workflow-run path; current local workflow YAML parses and local verification is green, but no remote run exists for these uncommitted changes.
+
 ---
 
 ## Phase 6 — Outbox Scalability & Operational Tooling
@@ -991,6 +1191,83 @@ npm run test:e2e
 - Counter strategy unified.
 - Slug helper consolidated.
 
+## Phase 6 Result
+
+Changed:
+- `src/outbox/dead-letter.service.ts:43` — dead-letter replay now supports caller transactions, validates payloads against the event-schema registry, creates a new `PENDING` outbox row, and removes the dead-letter row.
+- `src/admin/dto/admin-query.dto.ts:38` — added dead-letter list query DTO with `eventType` and cursor validation.
+- `src/admin/admin.controller.ts:72` — added `GET /admin/outbox/dead-letter` guarded by admin role plus `MANAGE_ADMINS`.
+- `src/admin/admin.controller.ts:78` — added `POST /admin/outbox/dead-letter/:id/replay` guarded by admin role plus `MANAGE_ADMINS`.
+- `src/admin/admin.service.ts:132` — admin dead-letter listing returns 50-row pages with `hasNextPage` and `endCursor`.
+- `src/admin/admin.service.ts:151` — replay and audit log write now happen in one transaction under `admin.outbox.dead_letter.replay`.
+- `src/admin/admin.module.ts:4` — admin module imports `OutboxCoreModule` for `DeadLetterService`.
+- `docs/runbooks/outbox-replay.md:1` — added operator runbook for inspect/replay flow and verification checks.
+- `src/admin/admin.service.spec.ts:55` — tests cover dead-letter list pagination and transactional replay audit.
+- `src/outbox/dead-letter.service.spec.ts:48` — tests cover standalone replay and caller-transaction replay with registered event payloads.
+- `src/outbox/outbox.processor.ts:23` — claimed events now carry aggregate identity so dispatch can group by aggregate.
+- `src/outbox/outbox.processor.ts:30` — outbox dispatch uses a bounded in-process concurrency cap of 4.
+- `src/outbox/outbox.processor.ts:98` — claimed batches are grouped by aggregate and processed through the bounded worker loop instead of one global serial loop.
+- `src/outbox/outbox.processor.ts:189` — each aggregate group remains sequential while independent groups can process concurrently.
+- `src/outbox/outbox.processor.spec.ts:223` — regression test proves an independent fast aggregate can finish while another aggregate handler is still blocked.
+- `src/outbox/events/event-schema.registry.ts:1` — added per-event-type Zod payload schemas plus runtime validation helpers for emit and dispatch paths.
+- `src/outbox/outbox.service.ts:6` — outbox event inputs now use known event types and validate payloads before inserting `PENDING` rows.
+- `src/outbox/outbox.processor.ts:224` — dispatcher validates stored event payloads before routing handlers, so malformed rows fail and retry/dead-letter instead of silently running casts.
+- `src/companies/companies.service.ts:619` — `RecruiterSeatAllocated` payload now includes `recruiterUserId`, matching the dispatcher/notification contract while preserving existing `userId`.
+- `src/outbox/outbox.service.spec.ts:26` — outbox service tests now use registered event types and cover malformed-payload rejection before insert.
+- `src/outbox/outbox.processor.spec.ts:485` — processor tests cover dispatch-time payload rejection before handler calls.
+- `src/infra/scheduling/leader-lock.service.ts:7` — added Redis-backed leader locks using `SET key token PX ttl NX` plus token-checked Lua release.
+- `src/infra/infra.module.ts:51` — `LeaderLockService` is registered and exported from `InfraModule`.
+- `src/outbox/idempotency.service.ts:67` — hourly idempotency cleanup now runs only while holding the `idempotency-cleanup` leader lock.
+- `src/media/media-cleanup.service.ts:19` — media cleanup now runs only while holding the `media-cleanup` leader lock.
+- `src/infra/scheduling/leader-lock.service.spec.ts:1` — tests cover acquire, skip, and release-on-error behavior.
+- `src/outbox/idempotency.service.spec.ts:94` — tests cover locked idempotency cleanup and skipped cleanup when another worker holds the lock.
+- `src/media/media-cleanup.service.spec.ts:1` — tests cover locked media cleanup and skipped cleanup when another worker holds the lock.
+- `src/outbox/outbox.metrics.ts:10` — added an injectable OTel metrics wrapper for processed, failed, dead-lettered, dispatch-duration, and pending-count outbox metrics.
+- `src/outbox/outbox.processor.ts:63` — outbox processor now receives `OutboxMetrics` and registers an observable pending-events gauge backed by `outboxEvent.count`.
+- `src/outbox/outbox.processor.ts:101` — successful dispatch records `outbox.dispatch.duration_ms` and successful processing increments `outbox.events.processed`.
+- `src/outbox/outbox.processor.ts:117` — failed processing increments `outbox.events.failed` and dispatch failures record failed dispatch duration.
+- `src/outbox/outbox.processor.ts:136` — dead-letter transitions increment `outbox.events.dead_lettered`.
+- `src/outbox/outbox-processor.module.ts:23` — processor module registers `OutboxMetrics` for worker runtime injection.
+- `src/outbox/outbox.processor.spec.ts:124` — regression tests cover pending gauge callback, success metrics, failure metrics, dead-letter metrics, and shutdown unregister.
+- `.env.example:10` — documented role-specific `connection_limit` guidance for deployment `DATABASE_URL` values and added Prisma transaction timeout defaults.
+- `src/infra/config/app-config.ts:9` — typed Prisma transaction timeout settings are now part of validated app config.
+- `src/infra/config/validate-env.ts:130` — `PRISMA_TRANSACTION_MAX_WAIT_MS` and `PRISMA_TRANSACTION_TIMEOUT_MS` are validated as optional positive integers.
+- `src/infra/prisma/prisma.service.ts:18` — Prisma transactions now default to `maxWait=5000ms` and `timeout=15000ms`, overridable from config.
+- `src/infra/prisma/prisma.service.ts:48` — PrismaClient receives transaction defaults at construction so direct `$transaction` calls inherit them.
+- `src/infra/prisma/prisma.service.ts:78` — `withTransaction` passes the same timeout defaults explicitly.
+- `src/infra/config/validate-env.spec.ts:179` — regression tests cover Prisma transaction timeout parsing and invalid values.
+- `src/infra/prisma/prisma.service.spec.ts:40` — regression tests cover default and configured transaction options.
+- `src/companies/companies.service.ts:68` — added a single bounded P2002-aware slug retry helper with a 10-attempt cap and no pre-write `count`.
+- `src/companies/companies.service.ts:157` — company creation now uses the shared helper for slug writes.
+- `src/companies/companies.service.ts:323` — company rename now uses the shared helper, so slug collisions retry with numeric suffixes instead of using the deleted count-only `generateUniqueSlug`.
+- `src/companies/companies.service.spec.ts:126` — regression test covers create-side P2002 retry and proves `company.count` is no longer used for slug preflight.
+- `src/companies/companies.service.spec.ts:177` — regression test covers update-side P2002 retry on rename.
+- `prisma/schema.prisma` — removed denormalized `Company.followerCount`; entity relationship counts now use Prisma `_count` per ADR-0005.
+- `prisma/migrations/20260524093000_refresh_media_visibility_counts/migration.sql` — drops `companies.follower_count`.
+- `src/companies/companies.service.ts` — company responses derive `followerCount` and `memberCount` from `_count`; follow/unfollow no longer mutate a denormalized counter.
+- `src/outbox/processors/company-search-index.processor.ts`, `src/search/search-index.service.ts`, and `src/recommendations/recommendations.service.ts` — relationship count projections now use `_count` instead of stale denormalized fields.
+- `src/companies/companies.service.spec.ts`, `src/recommendations/recommendations.service.spec.ts`, `src/outbox/processors/company-search-index.processor.spec.ts`, and `src/search/search-index.service.spec.ts` — counter-strategy regression coverage updated.
+
+Verification:
+- `npm test -- admin.service.spec.ts dead-letter.service.spec.ts --runInBand` — pass; 2 suites / 8 tests.
+- `npm run test:e2e -- admin.e2e-spec.ts --runInBand` — pass; 1 suite / 13 tests. Jest still printed the existing open-handle warning after completion.
+- `npm test -- outbox.processor.spec.ts --runInBand` — pass; 1 suite / 23 tests.
+- `npm test -- outbox.service.spec.ts outbox.processor.spec.ts companies.service.spec.ts --runInBand` — pass; 3 suites / 37 tests.
+- `npm test -- leader-lock.service.spec.ts idempotency.service.spec.ts media-cleanup.service.spec.ts --runInBand` — pass; 3 suites / 12 tests.
+- `npm test -- outbox.processor.spec.ts --runInBand` — pass; 1 suite / 21 tests.
+- `npm test -- prisma.service.spec.ts validate-env.spec.ts --runInBand` — pass; 2 suites / 33 tests.
+- `npm test -- companies.service.spec.ts --runInBand` — pass; 1 suite / 10 tests.
+- `srcwalk find 'generateUniqueSlug, createCompanyWithUniqueSlug, withUniqueCompanySlug' --scope src/companies --scope test` — no `generateUniqueSlug` matches; shared helper used by create and update paths.
+- `npm run typecheck` — pass.
+- `npm run check` — pass; strict typecheck, lint with zero warnings, unit tests 81 suites / 782 tests.
+- `npm run build` — pass.
+- `npx prisma validate` — pass.
+- `git diff --check` — pass.
+- `npm test -- companies.service.spec.ts recommendations.service.spec.ts company-search-index.processor.spec.ts search-index.service.spec.ts --runInBand` — pass.
+
+Remaining:
+- none for Phase 6.
+
 ---
 
 ## Phase 7 — Maintainability, Documentation & Long-term Architecture
@@ -1082,6 +1359,114 @@ npm run check
 - Schema is navigable.
 - Cross-domain imports are gated.
 - Generic Idempotency-Key interceptor available.
+
+## Phase 7 Result
+
+Changed:
+- `README.md:1` — replaced default Nest starter README with project-specific onboarding, runtime-role notes, verification commands, and links to architecture/runbooks.
+- `package.json:4` — populated package description and author while keeping private `UNLICENSED` status documented in README pending an ownership license decision.
+- `prisma/schema.prisma:1` — added single-file region comments per ADR-0007 without changing schema shape or migrations.
+- `eslint.config.mjs:7` — added domain module inventory, current production allowlist, and `no-restricted-imports` boundary configs that fail new unapproved cross-domain imports.
+- `src/infra/logger/logger.module.ts:29` — added depth-2 request-body redaction paths for wrapped application/recruiting payloads.
+- `src/infra/logger/logger.module.spec.ts:179` — added regression tests for `screeningAnswers[*].answer` and nested recruiting/application PII fields.
+- `src/common/idempotency/idempotent-request.decorator.ts:3` — added opt-in metadata for request-header idempotency scopes.
+- `src/common/idempotency/idempotency-key.interceptor.ts:35` — added generic `Idempotency-Key` interceptor with body hash validation, stored-response replay, in-progress conflict handling, and claim cleanup on handler error.
+- `src/common/common.module.ts:9` — registered and exported the idempotency interceptor for module-level use.
+- `src/companies/companies.module.ts:10` — imported `CommonModule` so the company create demo can resolve the interceptor through DI.
+- `src/companies/companies.controller.ts:38` — opted `POST /companies` into `Idempotency-Key` replay behavior.
+- `src/common/idempotency/idempotency-key.interceptor.spec.ts:81` — covered claim, replay, mismatch, missing header, missing decorator, and handler-failure cleanup behavior.
+- `test/companies.e2e-spec.ts:500` — added e2e replay proof for repeated `Idempotency-Key` on company creation.
+- `.beads/issues.jsonl` — created audit TODO beads `mdc-be-x3g`, `mdc-be-n0v`, `mdc-be-dwe`, `mdc-be-qdx`, and `mdc-be-yha` without closing or syncing them.
+- `src/analytics/dto/analytics-response.dto.ts`, `src/outbox/processors/profile-creation.processor.ts`, and `src/recommendations/recommendations.service.ts` — production TODO comments now include Beads IDs.
+
+Verification:
+- `npm test -- idempotency-key.interceptor.spec.ts logger.module.spec.ts --runInBand` — pass; 2 suites / 31 tests.
+- `npm run test:e2e -- companies.e2e-spec.ts --runInBand` — pass; 1 suite / 12 tests.
+- `npm run typecheck` — pass.
+- `npm run lint` — pass.
+- `npx prisma validate` — pass.
+- `npm run check` — pass; strict typecheck, lint with zero warnings, unit tests 82 suites / 790 tests.
+- `npm run build` — pass.
+- `npm run test:e2e -- --runInBand` — pass; 21 suites / 184 tests passed / 25 skipped.
+- `git diff --check` — pass.
+- `br list --label audit-todo --json` — five open TODO beads exist.
+- `rg -n "TODO(?!\\()" src --glob '*.ts' -P` — no untracked production TODOs.
+
+Remaining:
+- no in-repo Phase 7 work remains.
+- Beads TODOs remain open by design; user approved create/update only, not close or sync.
+- License remains `UNLICENSED`; changing it is an ownership/legal decision outside code cleanup.
+
+## Current Completion Audit — 2026-05-24
+
+Completed or documented:
+- Phase 0 — ADRs, baseline, and Beads planning artifacts exist; Beads sync/closure remains unapproved.
+- Phase 1 — type safety, strict lint, `check`, Jest env defaults, and production `tx as any` removal are complete.
+- Phase 2 — cookie config, optional-auth policy, opaque refresh-token rotation, token-ID lookup, family-scoped replay revocation, cookie-only refresh, and legacy dual-read are complete.
+- Phase 3 — persisted media visibility, conservative backfill, public anonymous reads, private owner-only reads, and connections-only authorization are complete.
+- Phase 4 — webhook raw-body hard fail, envelope bypass, transaction-scoped idempotency, and outbox attempts semantics are complete.
+- Phase 5 — Docker hardening, request IDs, 500 logging, throttling, WebSocket query-token removal, OTel shutdown, outbox shutdown release, CSP, CodeQL, pinned-digest Trivy container scanning, Dependabot, `qs@6.15.2`, and Testcontainers CI wiring are complete in repo.
+- Phase 6 — event schema registry, bounded outbox dispatch, metrics, leader locks, DLQ admin/runbook, Prisma timeout config, slug helper consolidation, and `_count` entity counter strategy are complete.
+- Phase 7 — README, schema regions, boundary linting, `Idempotency-Key` opt-in interceptor, redaction depth tests, package metadata, and TODO ticketization are complete.
+
+Fresh verification:
+- `npx prisma generate` — pass.
+- `npx prisma validate` — pass.
+- `npm run typecheck` — pass.
+- `npm run lint` — pass.
+- `npm test` — pass; 82 suites / 798 tests.
+- `npm run build` — pass.
+- `npm run test:e2e -- --runInBand` — pass; 21 suites / 185 tests passed / 25 skipped.
+- `npm audit --audit-level=moderate` — pass; found 0 vulnerabilities.
+- `docker build -t mdc-be:test .` — pass.
+- `docker image inspect mdc-be:test --format '{{.Config.User}} {{json .Config.Healthcheck}}'` — user is `node`; `/health/live` healthcheck configured.
+- `ruby -e "require 'yaml'; %w[.github/workflows/ci.yml .github/workflows/security.yml .github/dependabot.yml].each { |p| YAML.load_file(p); puts %(ok #{p}) }"` — pass.
+- `git diff --check` — pass.
+- `rg -n "tx as any" src --glob '*.ts' --glob '!*.spec.ts'` — no production matches.
+- `rg -n "@ts-ignore|eslint-disable| as any" src --glob '*.ts' --glob '!*.spec.ts'` — no production matches.
+- `rg -n "process\\.env" src/auth --glob '*.ts'` — no matches.
+- `rg -n "handshake\\.query\\.token" src --glob '*.ts'` — no matches.
+- `rg -n "JSON\\.stringify\\(request\\.body\\)" src --glob '*.ts'` — no matches.
+- `rg -n "TODO(?!\\()" src --glob '*.ts' -P` — no untracked production TODOs.
+
+Known blockers:
+- Remote GitHub Actions proof still requires commit/push or another approved workflow-run path; no remote CI/security run exists for these uncommitted changes.
+- Commit, push, Beads close/sync, and production migration application remain unapproved.
+- License remains `UNLICENSED`; changing it is an ownership/legal decision outside audit cleanup.
+
+---
+
+## Final Result
+
+Completed:
+- Phase 0 — baseline, ADRs, and Beads planning artifacts.
+- Phase 1 — strict type/lint safety and local test reliability.
+- Phase 2 — refresh-token security rewrite.
+- Phase 3 — media authorization model.
+- Phase 4 — webhook/idempotency/outbox correctness.
+- Phase 5 — runtime, observability, Docker, CI wiring, audit, Trivy, and security guardrails.
+- Phase 6 — outbox scalability, operational tooling, and `_count` counter strategy.
+- Phase 7 — documentation, maintainability, boundary linting, idempotency header support, and TODO ticketization.
+
+Verification:
+- `npm run typecheck`: pass.
+- `npm run lint`: pass.
+- `npm test`: pass; 82 suites / 798 tests.
+- `npm run build`: pass.
+- `npx prisma generate`: pass.
+- `npx prisma validate`: pass.
+- `npm audit --audit-level=moderate`: pass.
+- `npm run test:e2e -- --runInBand`: pass; 21 suites / 185 tests passed / 25 skipped.
+- `docker build -t mdc-be:test .`: pass.
+- YAML workflow parse, Docker image inspect, invariant scans, and `git diff --check`: pass.
+
+Known blockers:
+- Remote GitHub Actions proof is unavailable until commit/push or an approved workflow-run path.
+- Beads sync/close and git commit/push require separate approval.
+- Production database migration/backfill application is not performed in this local audit run.
+
+Next recommended action:
+- Review the diff, then approve a local commit. After that, push and let GitHub Actions produce remote CI/security proof.
 
 ---
 

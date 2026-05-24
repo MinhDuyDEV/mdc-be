@@ -40,7 +40,6 @@ describe('Media (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
 
@@ -115,6 +114,7 @@ describe('Media (e2e)', () => {
       contentType: 'image/jpeg',
       sizeBytes: null,
       status: 'PENDING',
+      visibility: 'PRIVATE',
       etag: null,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -185,6 +185,7 @@ describe('Media (e2e)', () => {
               contentType: args.data.contentType,
               sizeBytes: args.data.sizeBytes ?? null,
               status: 'PENDING',
+              visibility: args.data.visibility ?? 'PRIVATE',
               etag: null,
               createdAt: new Date(),
               updatedAt: new Date(),
@@ -199,10 +200,14 @@ describe('Media (e2e)', () => {
             contentType: 'image/jpeg',
             sizeBytes: 1024,
             status: 'READY',
+            visibility: 'PRIVATE',
             etag: '"abc123"',
             createdAt: new Date(),
             updatedAt: new Date(),
           }),
+        },
+        connection: {
+          findFirst: jest.fn().mockResolvedValue(null),
         },
       })
       .overrideProvider(StorageService)
@@ -359,10 +364,47 @@ describe('Media (e2e)', () => {
   });
 
   describe('GET /api/v1/media/:id', () => {
-    it('should return 401 without token', async () => {
+    it('should hide private assets from anonymous users', async () => {
       await request(app!.getHttpServer())
         .get('/api/v1/media/media-123')
-        .expect(401);
+        .expect(404);
+    });
+
+    it('should return public assets to anonymous users', async () => {
+      const { PrismaService } = jest.requireActual<{
+        PrismaService: Type<unknown>;
+      }>('./../src/infra/prisma');
+      const prisma = app!.get<{
+        mediaAsset: { findUnique: jest.Mock };
+      }>(PrismaService);
+
+      prisma.mediaAsset.findUnique.mockResolvedValueOnce({
+        id: 'media-123',
+        ownerId: 'user-123',
+        purpose: 'avatar',
+        filename: 'photo.jpg',
+        s3Key: 'avatar/uuid-photo.jpg',
+        s3Bucket: 'mdc-media',
+        contentType: 'image/jpeg',
+        sizeBytes: 1024,
+        status: 'READY',
+        visibility: 'PUBLIC',
+        etag: '"abc123"',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const response = await request(app!.getHttpServer())
+        .get('/api/v1/media/media-123')
+        .expect(200);
+
+      expect(response.body.data).toEqual(
+        expect.objectContaining({
+          mediaId: 'media-123',
+          downloadUrl:
+            'https://signed.example.com/download/avatar/uuid-photo.jpg',
+        }),
+      );
     });
   });
 

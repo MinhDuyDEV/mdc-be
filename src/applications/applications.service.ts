@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ApplicationStatus, JobStatus, type Prisma } from '@prisma/client';
-import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -219,7 +218,7 @@ export class ApplicationsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ApplicationSubmitted',
         aggregateType: 'Application',
         aggregateId: created.id,
@@ -456,7 +455,7 @@ export class ApplicationsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ApplicationStatusChanged',
         aggregateType: 'Application',
         aggregateId: applicationId,
@@ -532,7 +531,7 @@ export class ApplicationsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ApplicationNoteAdded',
         aggregateType: 'Application',
         aggregateId: applicationId,

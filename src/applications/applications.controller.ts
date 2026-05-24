@@ -13,12 +13,12 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { MediaService } from '../media/media.service';
 import { ApplicationsService } from './applications.service';
-import type { CreateApplicationNoteDto } from './dto/application-note.dto';
-import type { SubmitApplicationDto } from './dto/submit-application.dto';
-import type { UpdateApplicationStatusDto } from './dto/update-status.dto';
+import { CreateApplicationNoteDto } from './dto/application-note.dto';
+import { SubmitApplicationDto } from './dto/submit-application.dto';
+import { UpdateApplicationStatusDto } from './dto/update-status.dto';
 
 /**
  * Applications API.

@@ -9,8 +9,10 @@ import {
   MailerService,
   mailerTransporterProvider,
 } from './mailer';
+import { OtelShutdownService } from './observability';
 import { PrismaService } from './prisma';
 import { REDIS_CLIENT, RedisHealthService, redisProvider } from './redis';
+import { LeaderLockService } from './scheduling';
 import {
   SEARCH_ENGINE_CLIENT,
   SearchEngineHealthService,
@@ -46,7 +48,9 @@ import {
     mailerTransporterProvider,
     MailerService,
     MailerHealthService,
+    LeaderLockService,
     HealthService,
+    OtelShutdownService,
   ],
   exports: [
     ConfigModule,
@@ -62,6 +66,7 @@ import {
     MAILER_TRANSPORTER,
     MailerService,
     MailerHealthService,
+    LeaderLockService,
     HealthService,
     LoggerModule,
   ],

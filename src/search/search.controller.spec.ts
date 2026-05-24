@@ -88,7 +88,7 @@ describe('SearchController', () => {
   it('should call searchIndex.reindexEntity', async () => {
     const req = { user: { id: 'admin-1' } };
 
-    const result = await controller.reindex('jobs', req);
+    const result = await controller.reindex({ entityType: 'jobs' }, req);
     expect(mockSearchIndex.reindexEntity).toHaveBeenCalledWith(
       'jobs',
       'admin-1',

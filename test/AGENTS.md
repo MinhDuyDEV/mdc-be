@@ -9,10 +9,11 @@ End-to-end testing for mdc-be validates the full application stack: HTTP routing
 
 ## KEY FILES
 
-| File | Purpose |
-|------|---------|
-| `app.e2e-spec.ts` | Contract tests for HTTP routes, health checks, security headers, validation, and payload limits |
-| `jest-e2e.json` | Jest configuration for e2e tests; runs files matching `.e2e-spec.ts` |
+| File               | Purpose                                                                                         |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| `app.e2e-spec.ts`  | Contract tests for HTTP routes, health checks, security headers, validation, and payload limits |
+| `jest-e2e.json`    | Jest configuration for e2e tests; runs files matching `.e2e-spec.ts`                            |
+| `../jest.setup.ts` | Unit-test environment defaults loaded before module imports                                     |
 
 ## TESTING APPROACH
 
@@ -26,9 +27,13 @@ const moduleFixture = await Test.createTestingModule({
   controllers: [ContractController], // test-only controllers
 })
   .overrideProvider(PrismaService)
-  .useValue({ /* mocked */ })
+  .useValue({
+    /* mocked */
+  })
   .overrideProvider(RedisHealthService)
-  .useValue({ /* mocked */ })
+  .useValue({
+    /* mocked */
+  })
   .compile();
 
 app = moduleFixture.createNestApplication({ bodyParser: false });
@@ -38,7 +43,7 @@ await app.init();
 
 ### Environment Setup
 
-Each test suite sets environment variables before bootstrapping:
+Unit tests load safe defaults from `../jest.setup.ts` before module imports so `npm test` works without manual shell exports. E2E suites may still set or override environment variables before bootstrapping:
 
 - `NODE_ENV=test`
 - `PORT=3000`
@@ -47,6 +52,8 @@ Each test suite sets environment variables before bootstrapping:
 - `DATABASE_URL=postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public`
 - `REDIS_URL=redis://localhost:6379`
 - `HEALTH_DATABASE_TIMEOUT_MS=1000`, `HEALTH_REDIS_TIMEOUT_MS=1000`
+
+CI sets `MDC_E2E_TESTCONTAINERS=true`; `test/helpers/e2e-global-setup.ts` starts Postgres, Redis, MinIO, Elasticsearch, and MailHog with Testcontainers on the standard local ports before e2e suites run.
 
 Environment is restored after each test to prevent cross-test pollution.
 
@@ -64,7 +71,9 @@ Tests use **supertest** to make HTTP requests against the running app:
 request(app.getHttpServer())
   .get('/api/v1/contract')
   .expect(200)
-  .expect(response => { /* assertions */ })
+  .expect((response) => {
+    /* assertions */
+  });
 ```
 
 ## TESTING REQUIREMENTS
@@ -96,11 +105,15 @@ Every e2e test validates a specific contract:
 it('describes the contract being tested', async () => {
   const response = await request(app!.getHttpServer())
     .post('/api/v1/endpoint')
-    .send({ /* payload */ })
+    .send({
+      /* payload */
+    })
     .expect(200); // or expected status code
 
   expect(response.body).toEqual({
-    data: { /* expected response */ }
+    data: {
+      /* expected response */
+    },
   });
 });
 ```
@@ -117,8 +130,8 @@ it('rejects invalid input', async () => {
   expect(response.body.error.code).toBe('VALIDATION_ERROR');
   expect(response.body.error.details).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ property: 'invalidField' })
-    ])
+      expect.objectContaining({ property: 'invalidField' }),
+    ]),
   );
 });
 ```
@@ -170,6 +183,7 @@ it('rejects oversized payloads', () => {
 
 - **Postgres** — Mocked via `PrismaService`
 - **Redis** — Mocked via `RedisHealthService`
+- **Full e2e infra in CI** — Started by Testcontainers global setup when `MDC_E2E_TESTCONTAINERS=true`
 
 ## RUNNING TESTS
 

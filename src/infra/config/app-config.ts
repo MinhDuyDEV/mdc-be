@@ -7,6 +7,8 @@ export interface AppConfig {
   bodyJsonLimit: string;
   bodyUrlencodedLimit: string;
   databaseUrl: string;
+  prismaTransactionMaxWaitMs: number;
+  prismaTransactionTimeoutMs: number;
   redisUrl: string;
   healthDatabaseTimeoutMs: number;
   healthRedisTimeoutMs: number;
@@ -44,7 +46,6 @@ export interface AppConfig {
   // JWT Authentication
   jwtAccessSecret: string;
   jwtAccessExpiresIn: string;
-  jwtRefreshSecret: string;
   jwtRefreshExpiresIn: string;
   // Cookie Configuration
   cookieSecret: string;

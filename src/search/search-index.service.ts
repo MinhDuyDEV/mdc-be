@@ -439,6 +439,12 @@ export class SearchIndexService {
         members: {
           include: { user: { select: { displayName: true } } },
         },
+        _count: {
+          select: {
+            followers: true,
+            members: true,
+          },
+        },
       },
     });
 
@@ -456,8 +462,8 @@ export class SearchIndexService {
         size: c.employeeCount,
         website: c.website,
         verified: c.verified,
-        followerCount: c.followerCount,
-        memberCount: c.members.length,
+        followerCount: c._count.followers,
+        memberCount: c._count.members,
         memberNames: c.members.map((m) => m.user.displayName),
         createdAt: c.createdAt.toISOString(),
         updatedAt: c.updatedAt.toISOString(),

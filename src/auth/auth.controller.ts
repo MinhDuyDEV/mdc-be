@@ -9,23 +9,25 @@ import {
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Throttle } from '@nestjs/throttler';
-import type { Request, Response } from 'express';
+import type { CookieOptions, Request, Response } from 'express';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
+import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthService } from './auth.service';
-import type { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
-import type { LoginDto } from './dto/login.dto';
-import type { RegisterDto } from './dto/register.dto';
-import type { RequestPasswordResetDto } from './dto/request-password-reset.dto';
-import type { ResendVerificationDto } from './dto/resend-verification.dto';
-import type { VerifyEmailDto } from './dto/verify-email.dto';
+import { ConfirmPasswordResetDto } from './dto/confirm-password-reset.dto';
+import { LoginDto } from './dto/login.dto';
+import { RegisterDto } from './dto/register.dto';
+import { RequestPasswordResetDto } from './dto/request-password-reset.dto';
+import { ResendVerificationDto } from './dto/resend-verification.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
 import { EmailVerificationService } from './email-verification.service';
 import { PasswordResetService } from './password-reset.service';
 import { TokenService } from './token.service';
+import { parseExpiresInToMs } from './token-expiry.util';
 
 @Controller('auth')
 export class AuthController {
@@ -36,8 +38,8 @@ export class AuthController {
     private readonly tokenService: TokenService,
     private readonly emailVerificationService: EmailVerificationService,
     private readonly passwordResetService: PasswordResetService,
-    private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
   @Public()
@@ -62,15 +64,12 @@ export class AuthController {
     const ip = request.ip;
     const userAgent = request.headers['user-agent'];
     const result = await this.authService.login(dto, ip, userAgent);
-    const cookieSecure = process.env.COOKIE_SECURE === 'true';
 
-    response.cookie('refreshToken', result.refreshToken, {
-      httpOnly: true,
-      secure: cookieSecure,
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/api/v1/auth',
-    });
+    response.cookie(
+      'refreshToken',
+      result.refreshToken,
+      this.getRefreshCookieOptions(),
+    );
 
     return {
       accessToken: result.accessToken,
@@ -92,38 +91,8 @@ export class AuthController {
       throw new UnauthorizedException('No refresh token');
     }
 
-    // Extract userId from the old access token (if present) or from the refresh token lookup
-    // For now, we need to decode the access token to get userId
-    const authHeader = request.headers.authorization;
-    let userId: string;
-
-    if (authHeader?.startsWith('Bearer ')) {
-      try {
-        const accessToken = authHeader.substring(7);
-        // JwtService.decode returns null | { [key: string]: unknown } | string (from @nestjs/jwt)
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        const raw = this.jwtService.decode(accessToken);
-        const decoded: { sub: string } | null =
-          typeof raw === 'object' && raw !== null && 'sub' in raw
-            ? (raw as { sub: string })
-            : null;
-        if (!decoded) {
-          throw new UnauthorizedException('Invalid access token');
-        }
-        userId = decoded.sub;
-      } catch {
-        throw new UnauthorizedException('Invalid access token');
-      }
-    } else {
-      throw new UnauthorizedException('Access token required for refresh');
-    }
-
-    // Validate and rotate refresh token
-    const { newToken } = await this.tokenService.validateAndRotateRefreshToken(
-      userId,
-      oldToken,
-      '', // familyId not tracked in current implementation
-    );
+    const { newToken, userId } =
+      await this.tokenService.validateAndRotateRefreshToken(oldToken);
 
     // Generate new access token
     const user = await this.prisma.user.findUnique({
@@ -141,13 +110,7 @@ export class AuthController {
     );
 
     // Set new refresh token cookie
-    response.cookie('refreshToken', newToken, {
-      httpOnly: true,
-      secure: process.env.COOKIE_SECURE === 'true',
-      sameSite: 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/api/v1/auth',
-    });
+    response.cookie('refreshToken', newToken, this.getRefreshCookieOptions());
 
     return { accessToken, refreshToken: newToken };
   }
@@ -227,5 +190,19 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async confirmPasswordReset(@Body() dto: ConfirmPasswordResetDto) {
     return this.passwordResetService.confirmReset(dto.token, dto.newPassword);
+  }
+
+  private getRefreshCookieOptions(): CookieOptions {
+    const expiresIn = this.configService.get('jwtRefreshExpiresIn', {
+      infer: true,
+    });
+
+    return {
+      httpOnly: true,
+      secure: this.configService.get('cookieSecure', { infer: true }),
+      sameSite: this.configService.get('cookieSameSite', { infer: true }),
+      maxAge: parseExpiresInToMs(expiresIn),
+      path: '/api/v1/auth',
+    };
   }
 }

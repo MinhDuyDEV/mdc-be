@@ -9,11 +9,10 @@ GitHub Actions workflow definitions for continuous integration, security scannin
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `ci.yml` | Continuous integration workflow: runs tests, linting, and type checking on pull requests and main branch pushes |
-| `security.yml` | Security scanning workflow: dependency audits, vulnerability scanning, and SAST analysis |
-| `deploy.yml` | Deployment workflow: builds Docker image and deploys to production environment |
+| File           | Description                                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`       | Continuous integration workflow: runs tests, linting, and type checking on pull requests and main branch pushes |
+| `security.yml` | Security scanning workflow: dependency audits, vulnerability scanning, and SAST analysis                        |
 
 ## For AI Agents
 
@@ -22,7 +21,7 @@ GitHub Actions workflow definitions for continuous integration, security scannin
 - **Test workflows locally** — use `act` or GitHub CLI before pushing
 - **Pin action versions** — use `@v4` or commit SHA, not `@main`
 - **Use secrets for credentials** — reference via `${{ secrets.SECRET_NAME }}`
-- **Add service containers** — use `services:` block for Postgres, Redis, etc.
+  - **E2E infrastructure** — ADR-0008 uses Testcontainers via `MDC_E2E_TESTCONTAINERS=true`, not GitHub service containers.
 - **Cache dependencies** — use `actions/cache@v4` for npm, Docker layers
 - **Set up matrix builds** — test multiple Node.js versions if needed
 - **Add status checks** — configure branch protection rules for required workflows
@@ -49,6 +48,7 @@ gh run view <run-id> --log
 ### Common Patterns
 
 **CI Workflow Structure:**
+
 ```yaml
 name: CI
 on:
@@ -60,18 +60,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+      env:
+        MDC_E2E_TESTCONTAINERS: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -86,6 +76,7 @@ jobs:
 ```
 
 **Security Workflow:**
+
 ```yaml
 name: Security
 on:
@@ -99,25 +90,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: npm audit --audit-level=moderate
-```
-
-**Deployment Workflow:**
-```yaml
-name: Deploy
-on:
-  push:
-    branches: [main]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/build-push-action@v5
-        with:
-          push: true
-          tags: ${{ secrets.REGISTRY }}/mdc-be:${{ github.sha }}
+        - run: npm ci
+        - run: npm audit --audit-level=moderate
 ```
 
 ## Dependencies
@@ -140,20 +114,17 @@ jobs:
 ## Workflow Details
 
 **CI Workflow (`ci.yml`):**
+
 - Triggers on pull requests and main branch pushes
-- Runs Postgres and Redis service containers
+  - Starts E2E infra through Jest Testcontainers global setup when `MDC_E2E_TESTCONTAINERS=true`
 - Executes: `npm ci`, `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:e2e`
 - Fails if any step returns non-zero exit code
 
 **Security Workflow (`security.yml`):**
-- Triggers weekly and on pull requests
-- Runs `npm audit` to check for vulnerable dependencies
-- Fails if moderate or higher severity vulnerabilities found
 
-**Deploy Workflow (`deploy.yml`):**
-- Triggers on main branch pushes
-- Builds Docker image with multi-stage build
-- Pushes image to container registry
-- Deploys to production environment
+- Triggers weekly, on pull requests, and on main pushes
+- Runs `npm audit --audit-level=moderate`
+- Runs CodeQL JavaScript/TypeScript analysis
+- Fails if moderate or higher severity npm vulnerabilities are found
 
 <!-- MANUAL: -->

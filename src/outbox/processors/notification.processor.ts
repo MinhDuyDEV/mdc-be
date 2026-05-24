@@ -51,14 +51,10 @@ interface UserBlockedPayload {
   blockedUserId: string;
 }
 
-interface PrismaForRecipients {
-  companyMember: {
-    findMany: (args: unknown) => Promise<Array<{ userId: string }>>;
-  };
-  recruiterSeat: {
-    findMany: (args: unknown) => Promise<Array<{ userId: string | null }>>;
-  };
-}
+type PrismaForRecipients = Pick<
+  PrismaService,
+  'companyMember' | 'recruiterSeat'
+>;
 
 async function resolveCompanyRecruiters(
   prisma: PrismaForRecipients,
@@ -310,12 +306,12 @@ export class NotificationProcessor {
     );
   }
 
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async processUserBlocked(payload: UserBlockedPayload): Promise<void> {
+  processUserBlocked(payload: UserBlockedPayload): Promise<void> {
     // Phase 5 stub: log only, no notification sent to blocked user
     this.logger.debug(
       `UserBlocked: blocker=${payload.blockerUserId}, blocked=${payload.blockedUserId} (Phase 5 stub — no notification)`,
     );
+    return Promise.resolve();
   }
 
   private async insertNotification(opts: {

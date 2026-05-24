@@ -80,7 +80,6 @@ describe('CompaniesService', () => {
         id: 'user-1',
         emailVerifiedAt: new Date(),
       });
-      mockPrismaValue.company.count.mockResolvedValue(0);
       const created = {
         id: 'company-1',
         name: 'Acme',
@@ -94,6 +93,7 @@ describe('CompaniesService', () => {
       });
 
       expect(mockIdempotencyService.claim).toHaveBeenCalledWith(
+        mockPrismaValue,
         'CompanyCreate',
         'user-1:Acme',
       );
@@ -120,7 +120,44 @@ describe('CompaniesService', () => {
           aggregateId: 'company-1',
         }),
       );
-      expect(result).toEqual(created);
+      expect(result).toEqual({
+        ...created,
+        followerCount: 0,
+        memberCount: 1,
+      });
+    });
+
+    it('retries company creation on slug unique conflicts without pre-counting', async () => {
+      mockPrismaValue.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        emailVerifiedAt: new Date(),
+      });
+      const created = {
+        id: 'company-1',
+        name: 'Acme',
+        slug: 'acme-2',
+      };
+      mockPrismaValue.company.create
+        .mockRejectedValueOnce({ code: 'P2002' })
+        .mockResolvedValue(created);
+
+      const result = await service.createCompany('user-1', {
+        name: 'Acme',
+        industry: Industry.TECHNOLOGY,
+      });
+
+      expect(mockPrismaValue.company.count).not.toHaveBeenCalled();
+      expect(mockPrismaValue.company.create).toHaveBeenNthCalledWith(1, {
+        data: expect.objectContaining({ slug: 'acme' }),
+      });
+      expect(mockPrismaValue.company.create).toHaveBeenNthCalledWith(2, {
+        data: expect.objectContaining({ slug: 'acme-2' }),
+      });
+      expect(result).toEqual({
+        ...created,
+        followerCount: 0,
+        memberCount: 1,
+      });
     });
 
     it('throws ForbiddenException when email not verified (FR1)', async () => {
@@ -145,6 +182,55 @@ describe('CompaniesService', () => {
     });
   });
 
+  describe('updateCompany', () => {
+    it('retries slug update on unique conflicts', async () => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({
+        id: 'c1',
+        name: 'Old Name',
+        slug: 'old-name',
+      });
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: 'm1',
+        role: CompanyRole.ADMIN,
+      });
+      const updated = {
+        id: 'c1',
+        name: 'Acme',
+        slug: 'acme-2',
+      };
+      mockPrismaValue.company.update
+        .mockRejectedValueOnce({ code: 'P2002' })
+        .mockResolvedValue(updated);
+
+      const result = await service.updateCompany('user-1', 'c1', {
+        name: 'Acme',
+        industry: Industry.TECHNOLOGY,
+      });
+
+      expect(mockPrismaValue.company.update).toHaveBeenNthCalledWith(1, {
+        where: { id: 'c1' },
+        data: expect.objectContaining({
+          name: 'Acme',
+          industry: Industry.TECHNOLOGY,
+          slug: 'acme',
+        }),
+      });
+      expect(mockPrismaValue.company.update).toHaveBeenNthCalledWith(2, {
+        where: { id: 'c1' },
+        data: expect.objectContaining({
+          name: 'Acme',
+          industry: Industry.TECHNOLOGY,
+          slug: 'acme-2',
+        }),
+      });
+      expect(mockOutboxService.emit).toHaveBeenCalledWith(
+        mockPrismaValue,
+        expect.objectContaining({ eventType: 'CompanyUpdated' }),
+      );
+      expect(result).toEqual(updated);
+    });
+  });
+
   describe('followCompany', () => {
     it('returns no-op when already following (FR7 idempotent)', async () => {
       mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
@@ -160,7 +246,7 @@ describe('CompaniesService', () => {
       expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
     });
 
-    it('creates follower record and increments count when not following', async () => {
+    it('creates follower record without mutating denormalized counts', async () => {
       mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
       mockPrismaValue.companyFollower.findUnique.mockResolvedValue(null);
 
@@ -169,10 +255,7 @@ describe('CompaniesService', () => {
       expect(mockPrismaValue.companyFollower.create).toHaveBeenCalledWith({
         data: { companyId: 'c1', userId: 'user-1' },
       });
-      expect(mockPrismaValue.company.update).toHaveBeenCalledWith({
-        where: { id: 'c1' },
-        data: { followerCount: { increment: 1 } },
-      });
+      expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
       expect(mockOutboxService.emit).toHaveBeenCalledWith(
         mockPrismaValue,
         expect.objectContaining({ eventType: 'CompanyFollowed' }),
@@ -198,7 +281,7 @@ describe('CompaniesService', () => {
       );
     });
 
-    it('removes follower and decrements count', async () => {
+    it('removes follower without mutating denormalized counts', async () => {
       mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
       mockPrismaValue.companyFollower.findUnique.mockResolvedValue({
         id: 'f1',
@@ -209,6 +292,7 @@ describe('CompaniesService', () => {
       expect(mockPrismaValue.companyFollower.delete).toHaveBeenCalledWith({
         where: { id: 'f1' },
       });
+      expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
       expect(mockOutboxService.emit).toHaveBeenCalledWith(
         mockPrismaValue,
         expect.objectContaining({ eventType: 'CompanyUnfollowed' }),

@@ -4,13 +4,13 @@ import {
   type ExecutionContext,
   Inject,
   Injectable,
+  InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { WebhookService } from './webhook.service';
 
 interface WebhookRequest {
   headers: Record<string, string | undefined>;
-  body: unknown;
   rawBody?: Buffer | string;
 }
 
@@ -39,11 +39,17 @@ export class WebhookSignatureGuard implements CanActivate {
       throw new BadRequestException('WEBHOOK_TIMESTAMP_TOO_OLD');
     }
 
-    const rawBody: string =
-      request.rawBody instanceof Buffer
-        ? request.rawBody.toString('utf-8')
-        : ((request.rawBody as string | undefined) ??
-          JSON.stringify(request.body));
+    const requestRawBody = request.rawBody;
+    if (requestRawBody === undefined) {
+      throw new InternalServerErrorException(
+        'Raw body required for webhook signature verification',
+      );
+    }
+
+    const rawBody =
+      typeof requestRawBody === 'string'
+        ? requestRawBody
+        : requestRawBody.toString('utf-8');
     const isValid = this.webhookService.verifySignature(
       rawBody,
       signature,

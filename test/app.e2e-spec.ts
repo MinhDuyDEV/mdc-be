@@ -69,7 +69,6 @@ describe('AppController (e2e)', () => {
     process.env.HEALTH_MAILER_TIMEOUT_MS = '1000';
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32';
     process.env.COOKIE_SECURE = 'false';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
@@ -256,6 +255,24 @@ describe('AppController (e2e)', () => {
     return request(app!.getHttpServer())
       .get('/')
       .expect('x-content-type-options', 'nosniff')
+      .expect(200);
+  });
+
+  it('sets minimal CSP for JSON API responses', () => {
+    return request(app!.getHttpServer())
+      .get('/')
+      .expect(
+        'content-security-policy',
+        "default-src 'none';frame-ancestors 'none'",
+      )
+      .expect(200);
+  });
+
+  it('echoes inbound request IDs on responses', () => {
+    return request(app!.getHttpServer())
+      .get('/')
+      .set('x-request-id', 'req-e2e-1')
+      .expect('x-request-id', 'req-e2e-1')
       .expect(200);
   });
 

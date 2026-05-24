@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { WsException } from '@nestjs/websockets';
 import { Socket } from 'socket.io';
+import { extractSocketAuthToken } from './socket-auth-token';
 
 interface AuthenticatedSocket extends Socket {
   data: {
@@ -43,13 +44,6 @@ export class WsJwtGuard implements CanActivate {
   }
 
   private extractToken(client: Socket): string | undefined {
-    // Prefer handshake.auth.token (recommended by Socket.io)
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const authToken = client.handshake.auth?.token;
-    if (typeof authToken === 'string') return authToken;
-
-    const queryToken = client.handshake.query?.token;
-    if (typeof queryToken === 'string') return queryToken;
-    return undefined;
+    return extractSocketAuthToken(client);
   }
 }

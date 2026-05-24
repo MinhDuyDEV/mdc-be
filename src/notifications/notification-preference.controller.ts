@@ -2,7 +2,7 @@ import { Body, Controller, Get, Put, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
+import { UpdateNotificationPreferenceDto } from './dto/update-notification-preference.dto';
 import { NotificationPreferenceService } from './notification-preference.service';
 
 @Controller('notifications/preferences')

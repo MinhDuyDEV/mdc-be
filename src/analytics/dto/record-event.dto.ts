@@ -8,10 +8,10 @@ export enum AnalyticsEventType {
 
 export class RecordEventDto {
   @IsEnum(AnalyticsEventType)
-  eventType: AnalyticsEventType;
+  eventType!: AnalyticsEventType;
 
   @IsUUID()
-  targetId: string;
+  targetId!: string;
 
   @IsOptional()
   @IsString()

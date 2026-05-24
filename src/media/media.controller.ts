@@ -10,7 +10,8 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { InitiateUploadDto } from './dto/initiate-upload.dto';
+import { OptionalAuth } from '../common/auth/public.decorator';
+import { InitiateUploadDto } from './dto/initiate-upload.dto';
 import { MediaService } from './media.service';
 
 @Controller('media')
@@ -35,10 +36,11 @@ export class MediaController {
     return this.mediaService.confirmUpload(user, id);
   }
 
+  @OptionalAuth()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getDownloadUrl(
-    @CurrentUser() user: AuthenticatedUser,
+    @CurrentUser() user: AuthenticatedUser | undefined,
     @Param('id') id: string,
   ) {
     return this.mediaService.getDownloadUrl(user, id);

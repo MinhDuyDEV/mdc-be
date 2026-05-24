@@ -51,6 +51,22 @@ describe('CommonModule primitives', () => {
     expect(result).toBe('Hello World!');
   });
 
+  it('bypasses billing webhook routes when wrapping responses', async () => {
+    const interceptor = new ApiResponseInterceptor();
+    const context = {
+      switchToHttp: () => ({
+        getRequest: () => ({ path: '/api/v1/billing/webhooks/stripe' }),
+      }),
+    } as never;
+    const response = { received: true, processed: true };
+
+    const result = await lastValueFrom(
+      interceptor.intercept(context, { handle: () => of(response) }),
+    );
+
+    expect(result).toBe(response);
+  });
+
   it('maps exceptions to the public error envelope', () => {
     const filter = new ApiExceptionFilter();
     const json = jest.fn();
@@ -82,13 +98,14 @@ describe('CommonModule primitives', () => {
   });
 
   it('maps plain errors to an internal server error envelope', () => {
-    const filter = new ApiExceptionFilter();
+    const logger = { error: jest.fn() };
+    const filter = new ApiExceptionFilter(logger);
     const json = jest.fn();
     const status = jest.fn(() => ({ json }));
     const host = {
       switchToHttp: () => ({
         getResponse: () => ({ status }),
-        getRequest: () => ({}),
+        getRequest: () => ({ id: 'req-from-pino' }),
       }),
     } as never;
 
@@ -99,8 +116,13 @@ describe('CommonModule primitives', () => {
       error: {
         code: 'INTERNAL_SERVER_ERROR',
         message: 'Internal server error',
+        requestId: 'req-from-pino',
       },
     });
+    expect(logger.error).toHaveBeenCalledWith(
+      'Unhandled exception normalized to 500. requestId=req-from-pino',
+      expect.stringContaining('do not leak this'),
+    );
   });
 
   it('maps HTTP parser errors to the public error envelope', () => {

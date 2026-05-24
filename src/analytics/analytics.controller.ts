@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -17,7 +19,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AnalyticsService } from './analytics.service';
-import type { RecordEventDto } from './dto';
+import { RecordEventDto } from './dto';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -25,6 +27,7 @@ export class AnalyticsController {
 
   @Post('events')
   @UseGuards(AuthGuard)
+  @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 60, ttl: 60000 } })
   @OptionalAuth()
   recordEvent(

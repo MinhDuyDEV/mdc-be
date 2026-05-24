@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { type INestApplication, RequestMethod } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -15,12 +14,20 @@ import {
   createValidationPipe,
 } from './common';
 import type { AppConfig } from './infra';
+import { resolveRequestId } from './infra/logger/logger.module';
 
 export function configureApp(app: INestApplication): void {
   const configService = app.get(ConfigService<AppConfig, true>);
 
   app.use(
     helmet({
+      contentSecurityPolicy: {
+        useDefaults: false,
+        directives: {
+          defaultSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+        },
+      },
       hsts:
         configService.get('nodeEnv', { infer: true }) === 'production'
           ? { maxAge: 63072000, includeSubDomains: true, preload: true }
@@ -55,8 +62,10 @@ export function configureApp(app: INestApplication): void {
 
   // Request ID middleware
   app.use((req: Request, res: Response, next: NextFunction) => {
+    const loggerRequestId = typeof req.id === 'string' ? req.id : undefined;
     const requestId =
-      (req.headers['x-request-id'] as string | undefined) ?? randomUUID();
+      loggerRequestId ?? resolveRequestId(req.headers['x-request-id']);
+    req.id = requestId;
     res.setHeader('x-request-id', requestId);
     next();
   });

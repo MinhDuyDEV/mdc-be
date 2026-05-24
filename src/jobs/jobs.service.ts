@@ -8,7 +8,6 @@ import {
 import { ApplyMode, JobStatus, Prisma } from '@prisma/client';
 import { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -207,7 +206,7 @@ export class JobsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'JobCreated',
         aggregateType: 'Job',
         aggregateId: job.id,
@@ -278,7 +277,7 @@ export class JobsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'JobUpdated',
         aggregateType: 'Job',
         aggregateId: jobId,
@@ -521,7 +520,7 @@ export class JobsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'JobPublished',
         aggregateType: 'Job',
         aggregateId: jobId,
@@ -555,7 +554,7 @@ export class JobsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'JobClosed',
         aggregateType: 'Job',
         aggregateId: jobId,
@@ -585,7 +584,7 @@ export class JobsService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'JobDeleted',
         aggregateType: 'Job',
         aggregateId: jobId,
@@ -683,7 +682,7 @@ export class JobsService {
     }
 
     await this.prisma.$transaction(async (tx) => {
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'ExternalApplyClicked',
         aggregateType: 'Job',
         aggregateId: jobId,

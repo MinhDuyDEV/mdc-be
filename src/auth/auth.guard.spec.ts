@@ -147,7 +147,7 @@ describe('AuthGuard', () => {
       });
     });
 
-    it('should throw UnauthorizedException for invalid token on optional auth', async () => {
+    it('should allow anonymous access for invalid token on optional auth', async () => {
       jest.spyOn(reflector, 'getAllAndOverride').mockImplementation((key) => {
         if (key === IS_PUBLIC_ROUTE) return false;
         if (key === IS_OPTIONAL_AUTH) return true;
@@ -168,9 +168,10 @@ describe('AuthGuard', () => {
         .spyOn(jwtService, 'verifyAsync')
         .mockRejectedValue(new Error('Invalid'));
 
-      await expect(guard.canActivate(context)).rejects.toThrow(
-        UnauthorizedException,
-      );
+      const result = await guard.canActivate(context);
+
+      expect(result).toBe(true);
+      expect(context.switchToHttp().getRequest().user).toBeUndefined();
     });
   });
 });

@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 
+import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { MessagingService } from './messaging.service';
 
 describe('MessagingService', () => {
@@ -217,6 +218,37 @@ describe('MessagingService', () => {
       });
       expect(result.data).toHaveLength(1);
       expect(result.meta).toBeDefined();
+    });
+
+    it('defaults missing limit before calling Prisma', async () => {
+      prisma.conversation.findMany.mockResolvedValue([]);
+
+      const result = await service.listConversations(
+        'user-1',
+        {} as CursorPaginationQueryDto,
+      );
+
+      expect(prisma.conversation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 21 }),
+      );
+      expect(result.meta.limit).toBe(20);
+    });
+  });
+
+  describe('getMessages', () => {
+    it('defaults missing limit before calling Prisma', async () => {
+      prisma.message.findMany.mockResolvedValue([]);
+
+      const result = await service.getMessages(
+        'user-1',
+        'conv-1',
+        {} as CursorPaginationQueryDto,
+      );
+
+      expect(prisma.message.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 21 }),
+      );
+      expect(result.meta.limit).toBe(20);
     });
   });
 

@@ -13,8 +13,8 @@ import {
  */
 @Injectable()
 export class PolicyGuard implements CanActivate {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   canActivate(context: ExecutionContext): boolean {
+    void context;
     // Phase 0A: always permitted.
     return true;
   }

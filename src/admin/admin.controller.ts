@@ -5,6 +5,7 @@ import {
   Param,
   ParseUUIDPipe,
   Patch,
+  Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -14,8 +15,9 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AdminService } from './admin.service';
-import type {
+import {
   AdminCompanyQueryDto,
+  AdminDeadLetterQueryDto,
   AdminJobQueryDto,
   AdminUserQueryDto,
   UpdateUserStatusDto,
@@ -66,5 +68,21 @@ export class AdminController {
   @Permissions('MANAGE_JOBS')
   async listJobs(@Query() query: AdminJobQueryDto) {
     return this.service.listJobs(query);
+  }
+
+  @Get('outbox/dead-letter')
+  @Permissions('MANAGE_ADMINS')
+  async listDeadLetters(@Query() query: AdminDeadLetterQueryDto) {
+    return this.service.listDeadLetters(query);
+  }
+
+  @Post('outbox/dead-letter/:id/replay')
+  @Permissions('MANAGE_ADMINS')
+  async replayDeadLetter(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser('id') adminId: string,
+  ) {
+    await this.service.replayDeadLetter(id, adminId);
+    return { data: { success: true } };
   }
 }

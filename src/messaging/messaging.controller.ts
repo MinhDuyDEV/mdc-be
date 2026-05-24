@@ -16,10 +16,10 @@ import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import type { CreateConversationDto } from './dto/create-conversation.dto';
-import type { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
-import type { SendMessageDto } from './dto/send-message.dto';
+import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { CreateConversationDto } from './dto/create-conversation.dto';
+import { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
+import { SendMessageDto } from './dto/send-message.dto';
 import { MessagingService } from './messaging.service';
 
 @Controller('conversations')

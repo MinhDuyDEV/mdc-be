@@ -17,10 +17,10 @@ import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
 import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
-import type { CreateJobDto } from './dto/create-job.dto';
-import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
-import type { UpdateJobDto } from './dto/update-job.dto';
+import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { CreateJobDto } from './dto/create-job.dto';
+import { ListJobsQueryDto } from './dto/list-jobs.query.dto';
+import { UpdateJobDto } from './dto/update-job.dto';
 import { JobsService } from './jobs.service';
 
 @Controller('jobs')

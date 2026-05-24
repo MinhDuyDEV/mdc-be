@@ -5,5 +5,5 @@ export class CreateConversationDto {
   @ArrayMinSize(1)
   @ArrayMaxSize(1)
   @IsUUID('all', { each: true })
-  participantIds: string[];
+  participantIds!: string[];
 }

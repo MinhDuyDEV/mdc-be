@@ -4,6 +4,7 @@ import {
   type ExceptionFilter,
   HttpException,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import type { ApiErrorResponse } from './error-response.types';
 
@@ -15,6 +16,10 @@ interface ErrorResponseRequest {
 interface ErrorResponseReply {
   status(code: number): ErrorResponseReply;
   json(body: ApiErrorResponse): void;
+}
+
+interface ExceptionLogger {
+  error(message: string, trace?: string): void;
 }
 
 function normalizeDetails(response: string | object): {
@@ -79,6 +84,12 @@ function getRequestId(request: ErrorResponseRequest): string | undefined {
 
 @Catch()
 export class ApiExceptionFilter implements ExceptionFilter {
+  constructor(
+    private readonly logger: ExceptionLogger = new Logger(
+      ApiExceptionFilter.name,
+    ),
+  ) {}
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const response = http.getResponse<ErrorResponseReply>();
@@ -102,6 +113,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
           : { message: 'Internal server error' };
 
     const requestId = getRequestId(request);
+    if (!(exception instanceof HttpException) && status >= 500) {
+      const trace = exception instanceof Error ? exception.stack : undefined;
+      const suffix = requestId === undefined ? '' : ` requestId=${requestId}`;
+      this.logger.error(
+        `Unhandled exception normalized to 500.${suffix}`,
+        trace,
+      );
+    }
+
     const body: ApiErrorResponse = {
       error: {
         code: normalized.code ?? HttpStatus[status] ?? 'INTERNAL_SERVER_ERROR',

@@ -19,27 +19,28 @@ RUN npx prisma generate
 # Build
 RUN npm run build
 
+# Production dependencies stage
+FROM builder AS production-deps
+
+RUN npm prune --omit=dev && npm cache clean --force
+
 # Runtime stage
-FROM node:20-alpine
+FROM node:20-alpine AS runtime
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY prisma ./prisma/
+ENV NODE_ENV=production
 
-# Install production dependencies only
-RUN npm ci --omit=dev
+COPY --chown=node:node package*.json ./
+COPY --chown=node:node prisma ./prisma/
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node --from=production-deps /app/node_modules ./node_modules
 
-# Copy built app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-
-# Expose port
 EXPOSE 3000
 
-# Default to 'all' role
-ENV APP_PROCESS_ROLE=all
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD wget -qO- "http://127.0.0.1:${PORT:-3000}/health/live" || exit 1
 
-# Start app
+USER node
+
 CMD ["node", "--require", "./dist/instrumentation.js", "dist/main.js"]

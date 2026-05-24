@@ -3,6 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import {
+  createAdminPermissions,
+  createOutboxEventMock,
+  createRedisMock,
+} from './helpers/e2e-mocks';
 
 jest.setTimeout(30_000);
 
@@ -45,7 +50,6 @@ describe('Analytics (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
     process.env.APP_PROCESS_ROLE = 'all';
@@ -98,7 +102,10 @@ describe('Analytics (e2e)', () => {
           .fn()
           .mockImplementation((args: { where: { userId: string } }) => {
             if (args?.where?.userId === adminUserId) {
-              return Promise.resolve({ role: 'ADMIN' });
+              return Promise.resolve({
+                role: 'ADMIN',
+                permissions: createAdminPermissions('VIEW_ANALYTICS'),
+              });
             }
             return Promise.resolve(null);
           }),
@@ -113,7 +120,7 @@ describe('Analytics (e2e)', () => {
       application: { count: jest.fn().mockResolvedValue(1) },
       report: { count: jest.fn().mockResolvedValue(0) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
-      outboxEvent: { create: jest.fn() },
+      outboxEvent: createOutboxEventMock(),
       idempotencyKey: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -128,14 +135,7 @@ describe('Analytics (e2e)', () => {
       refreshToken: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
     };
 
-    const mockRedis = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue('OK'),
-      del: jest.fn().mockResolvedValue(1),
-      setex: jest.fn().mockResolvedValue('OK'),
-      keys: jest.fn().mockResolvedValue([]),
-      incr: jest.fn().mockResolvedValue(1),
-    };
+    const mockRedis = createRedisMock();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -177,7 +177,7 @@ describe('Analytics (e2e)', () => {
         .post('/api/v1/analytics/events')
         .send({
           eventType: 'profile_view',
-          targetId: '00000000-0000-0000-0000-000000000001',
+          targetId: '00000000-0000-4000-8000-000000000001',
           source: 'search',
         })
         .expect(200);
@@ -192,7 +192,7 @@ describe('Analytics (e2e)', () => {
         .set('Authorization', `Bearer ${t}`)
         .send({
           eventType: 'company_view',
-          targetId: '00000000-0000-0000-0000-000000000002',
+          targetId: '00000000-0000-4000-8000-000000000002',
         })
         .expect(200);
 
@@ -204,7 +204,7 @@ describe('Analytics (e2e)', () => {
         .post('/api/v1/analytics/events')
         .send({
           eventType: 'invalid_type',
-          targetId: '00000000-0000-0000-0000-000000000001',
+          targetId: '00000000-0000-4000-8000-000000000001',
         })
         .expect(400);
     });
@@ -221,7 +221,7 @@ describe('Analytics (e2e)', () => {
         .post('/api/v1/analytics/events')
         .send({
           eventType: 'post_impression',
-          targetId: '00000000-0000-0000-0000-000000000003',
+          targetId: '00000000-0000-4000-8000-000000000003',
         })
         .expect(200);
 
@@ -268,7 +268,7 @@ describe('Analytics (e2e)', () => {
     it('should return 401 for anonymous users', async () => {
       await request(app!.getHttpServer())
         .get(
-          '/api/v1/analytics/entity/profile_view/00000000-0000-0000-0000-000000000001',
+          '/api/v1/analytics/entity/profile_view/00000000-0000-4000-8000-000000000001',
         )
         .expect(401);
     });
@@ -277,7 +277,7 @@ describe('Analytics (e2e)', () => {
       const t = token(regularUserId);
       await request(app!.getHttpServer())
         .get(
-          '/api/v1/analytics/entity/profile_view/00000000-0000-0000-0000-000000000001',
+          '/api/v1/analytics/entity/profile_view/00000000-0000-4000-8000-000000000001',
         )
         .set('Authorization', `Bearer ${t}`)
         .expect(403);
@@ -287,7 +287,7 @@ describe('Analytics (e2e)', () => {
       const t = token(adminUserId);
       const res = await request(app!.getHttpServer())
         .get(
-          '/api/v1/analytics/entity/profile_view/00000000-0000-0000-0000-000000000001',
+          '/api/v1/analytics/entity/profile_view/00000000-0000-4000-8000-000000000001',
         )
         .set('Authorization', `Bearer ${t}`)
         .expect(200);

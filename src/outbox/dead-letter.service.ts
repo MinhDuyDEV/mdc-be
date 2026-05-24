@@ -1,10 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../infra/prisma';
+import { Prisma } from '@prisma/client';
+import { PrismaService, type PrismaTransaction } from '../infra/prisma';
+import { validateOutboxPayload } from './events';
 
 export interface DeadLetterEvent {
   id: string;
   eventType: string;
-  payload: unknown;
+  payload: Prisma.JsonValue;
+}
+
+function toInputJsonValue(
+  value: Prisma.JsonValue,
+): Prisma.InputJsonValue | typeof Prisma.JsonNull {
+  return value === null ? Prisma.JsonNull : value;
 }
 
 @Injectable()
@@ -17,8 +25,7 @@ export class DeadLetterService {
         data: {
           outboxEventId: event.id,
           eventType: event.eventType,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          payload: event.payload as any,
+          payload: toInputJsonValue(event.payload),
           reason: error.message,
         },
       });
@@ -34,30 +41,54 @@ export class DeadLetterService {
     });
   }
 
-  async replay(deadLetterId: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
-      const deadLetter = await tx.outboxDeadLetter.findUnique({
-        where: { id: deadLetterId },
-      });
-
-      if (!deadLetter) {
-        throw new Error(`Dead letter event not found: ${deadLetterId}`);
+  async replay(deadLetterId: string): Promise<void>;
+  async replay(tx: PrismaTransaction, deadLetterId: string): Promise<void>;
+  async replay(
+    txOrDeadLetterId: PrismaTransaction | string,
+    maybeDeadLetterId?: string,
+  ): Promise<void> {
+    if (typeof txOrDeadLetterId !== 'string') {
+      if (!maybeDeadLetterId) {
+        throw new Error('Dead letter id is required');
       }
+      await this.replayWithClient(txOrDeadLetterId, maybeDeadLetterId);
+      return;
+    }
 
-      // Create a new PENDING event from the dead-letter payload
-      await tx.outboxEvent.create({
-        data: {
-          eventType: deadLetter.eventType,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          payload: deadLetter.payload as any,
-          status: 'PENDING',
-        },
-      });
+    await this.prisma.$transaction(async (tx) => {
+      await this.replayWithClient(tx, txOrDeadLetterId);
+    });
+  }
 
-      // Remove the dead-letter record
-      await tx.outboxDeadLetter.delete({
-        where: { id: deadLetterId },
-      });
+  private async replayWithClient(
+    tx: PrismaTransaction,
+    deadLetterId: string,
+  ): Promise<void> {
+    const deadLetter = await tx.outboxDeadLetter.findUnique({
+      where: { id: deadLetterId },
+    });
+
+    if (!deadLetter) {
+      throw new Error(`Dead letter event not found: ${deadLetterId}`);
+    }
+
+    const payload = validateOutboxPayload(
+      deadLetter.eventType,
+      deadLetter.payload,
+    );
+
+    // Create a new PENDING event from the dead-letter payload
+    await tx.outboxEvent.create({
+      data: {
+        eventType: deadLetter.eventType,
+        payload,
+        status: 'PENDING',
+      },
+    });
+
+    // Remove the dead-letter record
+    await tx.outboxDeadLetter.delete({
+      where: { id: deadLetterId },
     });
   }
 }

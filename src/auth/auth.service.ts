@@ -73,7 +73,7 @@ export class AuthService {
       });
 
       // Emit outbox event
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'UserRegistered',
         aggregateType: 'User',
         aggregateId: user.id,
@@ -150,7 +150,7 @@ export class AuthService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'UserLoggedIn',
         aggregateType: 'User',
         aggregateId: user.id,

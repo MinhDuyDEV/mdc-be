@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   Query,
+  UseInterceptors,
   UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
@@ -16,6 +17,10 @@ import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
 import { CompanyRole } from '../common/decorators/company-role.decorator';
 import { CompanyRoleGuard } from '../common/guards/company-role.guard';
+import {
+  IdempotencyKeyInterceptor,
+  IdempotentRequest,
+} from '../common/idempotency';
 import { CompaniesService } from './companies.service';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { AddMemberDto } from './dto/add-member.dto';
@@ -31,6 +36,8 @@ export class CompaniesController {
   constructor(private readonly companiesService: CompaniesService) {}
 
   @Post()
+  @IdempotentRequest('CompaniesController.createCompany')
+  @UseInterceptors(IdempotencyKeyInterceptor)
   @HttpCode(HttpStatus.CREATED)
   async createCompany(
     @CurrentUser() user: AuthenticatedUser,

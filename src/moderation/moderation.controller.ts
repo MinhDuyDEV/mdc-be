@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -17,11 +19,8 @@ import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import type {
-  CreateModerationActionDto,
-  CreateReportDto,
-  ReportResponseDto,
-} from './dto';
+import { CreateModerationActionDto, CreateReportDto } from './dto';
+import type { ReportResponseDto } from './dto';
 import { ModerationService } from './moderation.service';
 
 @Controller('moderation')
@@ -66,6 +65,7 @@ export class ModerationController {
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin', 'moderator')
   @Permissions('MODERATE_CONTENT')
+  @HttpCode(HttpStatus.OK)
   async applyAction(
     @Body() dto: CreateModerationActionDto,
     @CurrentUser() user: AuthenticatedUser,

@@ -1,5 +1,5 @@
 import { OmitType, PartialType } from '@nestjs/mapped-types';
-import { CreateJobDto } from './create-job.dto.js';
+import { CreateJobDto } from './create-job.dto';
 
 /**
  * All CreateJobDto fields are optional except companyId which is omitted —

@@ -1,5 +1,8 @@
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
+import type { Request, Response } from 'express';
+import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
@@ -10,9 +13,11 @@ import { TokenService } from './token.service';
 describe('AuthController', () => {
   let controller: AuthController;
   let authService: AuthService;
+  let configService: ConfigService<AppConfig, true>;
+  let moduleRef: TestingModule;
 
   beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
+    moduleRef = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         {
@@ -25,6 +30,7 @@ describe('AuthController', () => {
         {
           provide: TokenService,
           useValue: {
+            generateAccessToken: jest.fn(),
             validateAndRotateRefreshToken: jest.fn(),
             revokeRefreshToken: jest.fn(),
           },
@@ -62,11 +68,26 @@ describe('AuthController', () => {
             },
           },
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn((key: keyof AppConfig) => {
+              const values: Partial<AppConfig> = {
+                cookieSecure: true,
+                cookieSameSite: 'none',
+                jwtRefreshExpiresIn: '2h',
+              };
+              return values[key];
+            }),
+          },
+        },
       ],
     }).compile();
 
-    controller = module.get<AuthController>(AuthController);
-    authService = module.get<AuthService>(AuthService);
+    controller = moduleRef.get<AuthController>(AuthController);
+    authService = moduleRef.get<AuthService>(AuthService);
+    configService =
+      moduleRef.get<ConfigService<AppConfig, true>>(ConfigService);
   });
 
   it('should be defined', () => {
@@ -89,6 +110,100 @@ describe('AuthController', () => {
         dto,
         '127.0.0.1',
         'test-agent',
+      );
+    });
+  });
+
+  describe('login', () => {
+    it('sets refresh cookie options from ConfigService', async () => {
+      const dto = { email: 'test@example.com', password: 'password123' };
+      const loginResult = {
+        accessToken: 'access-token',
+        refreshToken: 'refresh-token',
+        user: { id: 'user-123', email: dto.email, emailVerifiedAt: null },
+      };
+      const mockRequest = {
+        ip: '127.0.0.1',
+        headers: { 'user-agent': 'test-agent' },
+      } as unknown as Request;
+      const mockResponse = {
+        cookie: jest.fn(),
+      } as unknown as Response;
+
+      jest.spyOn(authService, 'login').mockResolvedValue(loginResult);
+
+      const result = await controller.login(dto, mockResponse, mockRequest);
+
+      expect(result).toEqual({
+        accessToken: loginResult.accessToken,
+        user: loginResult.user,
+      });
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'refresh-token',
+        {
+          httpOnly: true,
+          secure: true,
+          sameSite: 'none',
+          maxAge: 2 * 60 * 60 * 1000,
+          path: '/api/v1/auth',
+        },
+      );
+      expect(configService.get).toHaveBeenCalledWith('cookieSecure', {
+        infer: true,
+      });
+      expect(configService.get).toHaveBeenCalledWith('cookieSameSite', {
+        infer: true,
+      });
+      expect(configService.get).toHaveBeenCalledWith('jwtRefreshExpiresIn', {
+        infer: true,
+      });
+    });
+  });
+
+  describe('refresh', () => {
+    it('rotates with cookie only and does not require a bearer token', async () => {
+      const tokenService = moduleRef.get<TokenService>(TokenService);
+      const prisma = moduleRef.get<PrismaService>(PrismaService);
+      const mockRequest = {
+        cookies: { refreshToken: 'refresh-token' },
+        headers: {},
+      } as unknown as Request;
+      const mockResponse = {
+        cookie: jest.fn(),
+      } as unknown as Response;
+
+      jest
+        .spyOn(tokenService, 'validateAndRotateRefreshToken')
+        .mockResolvedValue({
+          newToken: 'new-refresh-token',
+          newFamilyId: 'family-1',
+          userId: 'user-123',
+        });
+      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
+        id: 'user-123',
+        email: 'test@example.com',
+      } as never);
+      jest
+        .spyOn(tokenService, 'generateAccessToken')
+        .mockResolvedValue('new-access-token');
+
+      const result = await controller.refresh(mockRequest, mockResponse);
+
+      expect(tokenService.validateAndRotateRefreshToken).toHaveBeenCalledWith(
+        'refresh-token',
+      );
+      expect(result).toEqual({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+      });
+      expect(mockResponse.cookie).toHaveBeenCalledWith(
+        'refreshToken',
+        'new-refresh-token',
+        expect.objectContaining({
+          httpOnly: true,
+          path: '/api/v1/auth',
+        }),
       );
     });
   });

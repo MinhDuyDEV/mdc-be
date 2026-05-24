@@ -12,6 +12,12 @@ import {
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
 import { PrismaInstrumentation } from '@prisma/instrumentation';
+import { resolveOtelExporterOtlpEndpoint } from './instrumentation.config';
+
+interface OpenTelemetryGlobal {
+  __mdcOtelSdk?: NodeSDK;
+  __mdcOtelStarted?: boolean;
+}
 
 function loadPackageJsonVersion(): string {
   try {
@@ -46,6 +52,7 @@ function getInstrumentations() {
 const isDevelopment = process.env.NODE_ENV === 'development';
 const serviceName = process.env.OTEL_SERVICE_NAME || 'mdc-be';
 const serviceVersion = loadPackageJsonVersion();
+const otlpEndpoint = resolveOtelExporterOtlpEndpoint(process.env);
 
 function createTraceExporter() {
   if (isDevelopment) {
@@ -53,7 +60,7 @@ function createTraceExporter() {
   }
 
   return new OTLPTraceExporter({
-    url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+    url: otlpEndpoint,
   });
 }
 
@@ -67,22 +74,15 @@ const sdk = new NodeSDK({
     ? undefined
     : new PeriodicExportingMetricReader({
         exporter: new OTLPMetricExporter({
-          url: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+          url: otlpEndpoint,
         }),
       }),
   instrumentations: getInstrumentations(),
 });
 
-sdk.start();
-
-// Graceful shutdown on SIGTERM
-process.on('SIGTERM', () => {
-  sdk
-    .shutdown()
-    .catch((err: unknown) => {
-      console.error('Error during OpenTelemetry shutdown:', err);
-    })
-    .finally(() => {
-      process.exit(0);
-    });
-});
+const otelGlobal = globalThis as typeof globalThis & OpenTelemetryGlobal;
+if (!otelGlobal.__mdcOtelStarted) {
+  sdk.start();
+  otelGlobal.__mdcOtelSdk = sdk;
+  otelGlobal.__mdcOtelStarted = true;
+}

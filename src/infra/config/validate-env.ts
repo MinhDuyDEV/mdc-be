@@ -128,6 +128,16 @@ export function validateEnv(env: RawEnv): AppConfig {
     bodyJsonLimit: parseBodyLimit(env, 'BODY_JSON_LIMIT'),
     bodyUrlencodedLimit: parseBodyLimit(env, 'BODY_URLENCODED_LIMIT'),
     databaseUrl: requireString(env, 'DATABASE_URL'),
+    prismaTransactionMaxWaitMs: parseOptionalPositiveInteger(
+      env,
+      'PRISMA_TRANSACTION_MAX_WAIT_MS',
+      5000,
+    ),
+    prismaTransactionTimeoutMs: parseOptionalPositiveInteger(
+      env,
+      'PRISMA_TRANSACTION_TIMEOUT_MS',
+      15000,
+    ),
     redisUrl: requireString(env, 'REDIS_URL'),
     healthDatabaseTimeoutMs: parsePositiveInteger(
       env,
@@ -195,7 +205,6 @@ export function validateEnv(env: RawEnv): AppConfig {
     jwtAccessSecret: requireString(env, 'JWT_ACCESS_SECRET'),
     jwtAccessExpiresIn:
       parseOptionalString(env, 'JWT_ACCESS_EXPIRES_IN') || '15m',
-    jwtRefreshSecret: requireString(env, 'JWT_REFRESH_SECRET'),
     jwtRefreshExpiresIn:
       parseOptionalString(env, 'JWT_REFRESH_EXPIRES_IN') || '7d',
     // Cookie Configuration

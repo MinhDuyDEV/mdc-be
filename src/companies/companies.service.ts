@@ -65,70 +65,52 @@ function slugify(text: string): string {
     .replace(/^-+|-+$/g, '');
 }
 
-async function generateUniqueSlug(
-  prisma: PrismaService,
-  name: string,
-): Promise<string> {
-  const baseSlug = slugify(name);
-  let slug = baseSlug;
-  let counter = 2;
+const MAX_COMPANY_SLUG_ATTEMPTS = 10;
 
-  while (await prisma.company.count({ where: { slug, deletedAt: null } })) {
-    slug = `${baseSlug}-${counter}`;
-    counter++;
-    if (counter > 100) {
-      throw new ConflictException('Unable to generate unique slug');
+function isUniqueConstraintError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    error.code === 'P2002'
+  );
+}
+
+async function withUniqueCompanySlug<T>(
+  name: string,
+  operation: (slug: string) => Promise<T>,
+): Promise<T> {
+  const baseSlug = slugify(name);
+
+  for (let attempt = 0; attempt < MAX_COMPANY_SLUG_ATTEMPTS; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    try {
+      return await operation(slug);
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        continue;
+      }
+      throw error;
     }
   }
 
-  return slug;
+  throw new ConflictException('Unable to generate unique slug');
 }
 
 /**
- * Try to insert a company row, retrying with a numeric suffix on slug
+ * Try a company slug mutation, retrying with a numeric suffix on slug
  * P2002 (unique-constraint) conflicts. Closes the TOCTOU window between
- * `count` and `create` when two concurrent calls pick the same slug.
+ * slug selection and the write when two concurrent calls pick the same slug.
  *
  * The DB enforces uniqueness via `companies_slug_active_key`
  * (partial unique on slug WHERE deleted_at IS NULL).
  */
 async function createCompanyWithUniqueSlug<T>(
-  tx: Prisma.TransactionClient,
   baseName: string,
   buildData: (slug: string) => Prisma.CompanyCreateInput,
   create: (data: Prisma.CompanyCreateInput) => Promise<T>,
 ): Promise<T> {
-  const baseSlug = slugify(baseName);
-  // Pre-pick a slug that's free at the moment we start. The retry loop
-  // below covers concurrent inserts that race past this check.
-  let counter = 1;
-  let slug = baseSlug;
-  for (let attempt = 0; attempt < 100; attempt++) {
-    const taken = await tx.company.count({
-      where: { slug, deletedAt: null },
-    });
-    if (taken === 0) {
-      try {
-        return await create(buildData(slug));
-      } catch (e) {
-        // Prisma P2002 = unique constraint violation
-        if (
-          typeof e === 'object' &&
-          e !== null &&
-          'code' in e &&
-          (e as { code?: string }).code === 'P2002'
-        ) {
-          counter++;
-          slug = `${baseSlug}-${counter}`;
-          continue;
-        }
-        throw e;
-      }
-    }
-    counter++;
-    slug = `${baseSlug}-${counter}`;
-  }
-  throw new ConflictException('Unable to generate unique slug');
+  return withUniqueCompanySlug(baseName, (slug) => create(buildData(slug)));
 }
 
 const COMPANY_INCLUDES = {
@@ -141,6 +123,22 @@ const COMPANY_INCLUDES = {
     },
   },
 } as const;
+
+function withCompanyRelationshipCounts<
+  T extends { _count?: { followers?: number; members?: number } },
+>(
+  company: T,
+): Omit<T, '_count'> & {
+  followerCount: number;
+  memberCount: number;
+} {
+  const { _count, ...rest } = company;
+  return {
+    ...rest,
+    followerCount: _count?.followers ?? 0,
+    memberCount: _count?.members ?? 0,
+  };
+}
 
 @Injectable()
 export class CompaniesService {
@@ -164,15 +162,15 @@ export class CompaniesService {
       throw new ForbiddenException('EMAIL_NOT_VERIFIED');
     }
 
-    // NFR: idempotent creation per (user, name) tuple
-    await this.idempotencyService.claim(
-      'CompanyCreate',
-      `${userId}:${data.name}`,
-    );
-
     return this.prisma.$transaction(async (tx) => {
-      const company = await createCompanyWithUniqueSlug(
+      // NFR: idempotent creation per (user, name) tuple
+      await this.idempotencyService.claim(
         tx,
+        'CompanyCreate',
+        `${userId}:${data.name}`,
+      );
+
+      const company = await createCompanyWithUniqueSlug(
         data.name,
         (slug) => ({
           name: data.name,
@@ -206,7 +204,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyCreated',
         aggregateType: 'Company',
         aggregateId: company.id,
@@ -218,7 +216,7 @@ export class CompaniesService {
         },
       });
 
-      return company;
+      return { ...company, followerCount: 0, memberCount: 1 };
     });
   }
 
@@ -232,7 +230,7 @@ export class CompaniesService {
       throw new NotFoundException('Company not found');
     }
 
-    return company;
+    return withCompanyRelationshipCounts(company);
   }
 
   async followCompany(userId: string, companyId: string) {
@@ -260,12 +258,7 @@ export class CompaniesService {
         data: { companyId, userId },
       });
 
-      await tx.company.update({
-        where: { id: companyId },
-        data: { followerCount: { increment: 1 } },
-      });
-
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyFollowed',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -298,12 +291,7 @@ export class CompaniesService {
         where: { id: existing.id },
       });
 
-      await tx.company.update({
-        where: { id: companyId },
-        data: { followerCount: { decrement: 1 } },
-      });
-
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyUnfollowed',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -338,41 +326,44 @@ export class CompaniesService {
         );
       }
 
-      // Regenerate slug if name changed
-      let slug: string | undefined;
-      if (data.name && data.name !== company.name) {
-        slug = await generateUniqueSlug(tx as any, data.name);
-      }
+      const updateData: Prisma.CompanyUpdateInput = {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.industry !== undefined && { industry: data.industry }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
+        ...(data.website !== undefined && { website: data.website }),
+        ...(data.employeeCount !== undefined && {
+          employeeCount: data.employeeCount,
+        }),
+        ...(data.foundedYear !== undefined && {
+          foundedYear: data.foundedYear,
+        }),
+        ...(data.headquarters !== undefined && {
+          headquarters: data.headquarters,
+        }),
+        ...(data.logoMediaAssetId !== undefined && {
+          logoMediaAssetId: data.logoMediaAssetId,
+        }),
+        ...(data.coverMediaAssetId !== undefined && {
+          coverMediaAssetId: data.coverMediaAssetId,
+        }),
+      };
 
-      const updated = await tx.company.update({
-        where: { id: companyId },
-        data: {
-          ...(data.name !== undefined && { name: data.name }),
-          ...(slug !== undefined && { slug }),
-          ...(data.industry !== undefined && { industry: data.industry }),
-          ...(data.description !== undefined && {
-            description: data.description,
-          }),
-          ...(data.website !== undefined && { website: data.website }),
-          ...(data.employeeCount !== undefined && {
-            employeeCount: data.employeeCount,
-          }),
-          ...(data.foundedYear !== undefined && {
-            foundedYear: data.foundedYear,
-          }),
-          ...(data.headquarters !== undefined && {
-            headquarters: data.headquarters,
-          }),
-          ...(data.logoMediaAssetId !== undefined && {
-            logoMediaAssetId: data.logoMediaAssetId,
-          }),
-          ...(data.coverMediaAssetId !== undefined && {
-            coverMediaAssetId: data.coverMediaAssetId,
-          }),
-        },
-      });
+      const updated =
+        data.name && data.name !== company.name
+          ? await withUniqueCompanySlug(data.name, (slug) =>
+              tx.company.update({
+                where: { id: companyId },
+                data: { ...updateData, slug },
+              }),
+            )
+          : await tx.company.update({
+              where: { id: companyId },
+              data: updateData,
+            });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyUpdated',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -427,7 +418,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'MemberInvited',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -518,7 +509,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'MemberJoined',
         aggregateType: 'Company',
         aggregateId: invitation.companyId,
@@ -624,13 +615,14 @@ export class CompaniesService {
         tx,
       );
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'RecruiterSeatAllocated',
         aggregateType: 'Company',
         aggregateId: companyId,
         payload: {
           companyId,
           seatId: seat.id,
+          recruiterUserId: targetUserId,
           userId: targetUserId,
           allocatedBy: userId,
         },
@@ -681,7 +673,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'RecruiterSeatDeallocated',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -705,7 +697,7 @@ export class CompaniesService {
     if (!company) {
       throw new NotFoundException('Company not found');
     }
-    return company;
+    return withCompanyRelationshipCounts(company);
   }
 
   async listCompanies(query: ListCompaniesDto) {
@@ -738,7 +730,11 @@ export class CompaniesService {
         foundedYear: true,
         verified: true,
         verifiedAt: true,
-        followerCount: true,
+        _count: {
+          select: {
+            followers: true,
+          },
+        },
         logoMediaAssetId: true,
         coverMediaAssetId: true,
         createdAt: true,
@@ -746,7 +742,9 @@ export class CompaniesService {
     });
 
     const hasMore = rows.length > limit;
-    const data = hasMore ? rows.slice(0, limit) : rows;
+    const data = (hasMore ? rows.slice(0, limit) : rows).map((company) =>
+      withCompanyRelationshipCounts(company),
+    );
     const nextCursor =
       hasMore && data.length > 0 ? data[data.length - 1].id : null;
 
@@ -807,7 +805,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyMemberAdded',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -925,7 +923,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyMemberRoleChanged',
         aggregateType: 'Company',
         aggregateId: companyId,
@@ -995,7 +993,7 @@ export class CompaniesService {
         },
       });
 
-      await this.outboxService.emit(tx as any, {
+      await this.outboxService.emit(tx, {
         eventType: 'CompanyMemberRemoved',
         aggregateType: 'Company',
         aggregateId: companyId,

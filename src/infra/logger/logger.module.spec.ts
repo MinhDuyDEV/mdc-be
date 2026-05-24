@@ -1,7 +1,7 @@
 import { Writable } from 'node:stream';
 import pino from 'pino';
 
-import { REDACTION_PATHS } from './logger.module';
+import { REDACTION_PATHS, resolveRequestId } from './logger.module';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -176,6 +176,60 @@ describe('REDACTION_PATHS — Pino redaction coverage', () => {
     });
   });
 
+  describe('Phase 7 PII — depth-2 request-body paths', () => {
+    it('redacts screening answer values inside wrapped request bodies', () => {
+      logger.info({
+        req: {
+          headers: {},
+          body: {
+            application: {
+              screeningAnswers: [
+                { question: 'Can you work remotely?', answer: 'secret answer' },
+              ],
+            },
+          },
+        },
+      });
+
+      const application = bodyOf(lastLog())['application'] as Record<
+        string,
+        unknown
+      >;
+      const screeningAnswers = application['screeningAnswers'] as Array<
+        Record<string, unknown>
+      >;
+
+      expect(screeningAnswers[0]['question']).toBe('Can you work remotely?');
+      expect(screeningAnswers[0]['answer']).toBe('[REDACTED]');
+    });
+
+    it('redacts common nested recruiting/application text fields', () => {
+      logger.info({
+        req: {
+          headers: {},
+          body: {
+            application: {
+              coverLetter: 'letter',
+              candidateNote: 'candidate note',
+              applicationNote: 'application note',
+              resumeBytes: 'resume bytes',
+            },
+          },
+        },
+      });
+
+      const application = bodyOf(lastLog())['application'] as Record<
+        string,
+        unknown
+      >;
+
+      expect(application['coverLetter']).toBe('[REDACTED]');
+      expect(application['candidateNote']).toBe('[REDACTED]');
+      expect(application['applicationNote']).toBe('[REDACTED]');
+      expect(application['resumeBytes']).toBe('[REDACTED]');
+    });
+  });
+
   // ── Non-sensitive fields are NOT redacted ─────────────────────────────────
 
   describe('non-sensitive fields are NOT redacted', () => {
@@ -204,5 +258,16 @@ describe('REDACTION_PATHS — Pino redaction coverage', () => {
       expect(log['userId']).toBe('u-123');
       expect(log['action']).toBe('login');
     });
+  });
+});
+
+describe('resolveRequestId', () => {
+  it('uses the inbound request ID header when present', () => {
+    expect(resolveRequestId('req-1')).toBe('req-1');
+    expect(resolveRequestId(['req-2', 'ignored'])).toBe('req-2');
+  });
+
+  it('generates a request ID when no header exists', () => {
+    expect(resolveRequestId(undefined)).toEqual(expect.any(String));
   });
 });

@@ -3,6 +3,11 @@ import { JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import type { App } from 'supertest/types';
+import {
+  createAdminPermissions,
+  createOutboxEventMock,
+  createRedisMock,
+} from './helpers/e2e-mocks';
 
 jest.setTimeout(30_000);
 
@@ -13,6 +18,8 @@ describe('Admin (e2e)', () => {
 
   const adminUserId = 'aaaa0000-0000-4000-8000-000000000001';
   const regularUserId = 'bbbb0000-0000-4000-8000-000000000002';
+  const managedUserId = 'cccc0000-0000-4000-8000-000000000003';
+  const companyId = 'dddd0000-0000-4000-8000-000000000004';
 
   beforeEach(async () => {
     originalEnv = { ...process.env };
@@ -45,7 +52,6 @@ describe('Admin (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
     process.env.APP_PROCESS_ROLE = 'all';
@@ -66,7 +72,7 @@ describe('Admin (e2e)', () => {
     const mockPrisma = {
       $connect: jest.fn(),
       $disconnect: jest.fn(),
-      $queryRaw: jest.fn().mockResolvedValue([{ id: 'user-1' }]),
+      $queryRaw: jest.fn().mockResolvedValue([{ id: managedUserId }]),
       $executeRaw: jest.fn().mockResolvedValue(0),
       $transaction: jest
         .fn()
@@ -91,13 +97,13 @@ describe('Admin (e2e)', () => {
           }),
         findMany: jest.fn().mockResolvedValue([
           {
-            id: 'user-1',
+            id: managedUserId,
             email: 'user1@test.com',
             displayName: 'User One',
             status: 'ACTIVE',
           },
           {
-            id: 'user-2',
+            id: 'eeee0000-0000-4000-8000-000000000005',
             email: 'user2@test.com',
             displayName: 'User Two',
             status: 'ACTIVE',
@@ -105,21 +111,22 @@ describe('Admin (e2e)', () => {
         ]),
         update: jest
           .fn()
-          .mockResolvedValue({ id: 'user-1', status: 'SUSPENDED' }),
+          .mockResolvedValue({ id: managedUserId, status: 'SUSPENDED' }),
         count: jest.fn().mockResolvedValue(0),
       },
       company: {
         findUnique: jest
           .fn()
-          .mockResolvedValue({ id: 'company-1', name: 'Test Corp' }),
+          .mockResolvedValue({ id: companyId, name: 'Test Corp' }),
         findMany: jest
           .fn()
           .mockResolvedValue([
-            { id: 'company-1', name: 'Test Corp', verified: false },
+            { id: companyId, name: 'Test Corp', verified: false },
           ]),
         update: jest.fn().mockResolvedValue({}),
       },
       companyVerification: {
+        upsert: jest.fn().mockResolvedValue({ status: 'VERIFIED' }),
         update: jest.fn().mockResolvedValue({ status: 'VERIFIED' }),
       },
       job: {
@@ -138,14 +145,21 @@ describe('Admin (e2e)', () => {
           .fn()
           .mockImplementation((args: { where: { userId: string } }) => {
             if (args?.where?.userId === adminUserId) {
-              return Promise.resolve({ role: 'ADMIN' });
+              return Promise.resolve({
+                role: 'ADMIN',
+                permissions: createAdminPermissions(
+                  'MANAGE_USERS',
+                  'MANAGE_COMPANIES',
+                  'MANAGE_JOBS',
+                ),
+              });
             }
             return Promise.resolve(null);
           }),
       },
       adminPermission: { findMany: jest.fn().mockResolvedValue([]) },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
-      outboxEvent: { create: jest.fn() },
+      outboxEvent: createOutboxEventMock(),
       idempotencyKey: {
         create: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -172,14 +186,7 @@ describe('Admin (e2e)', () => {
       moderationAction: { create: jest.fn().mockResolvedValue({}) },
     };
 
-    const mockRedis = {
-      get: jest.fn().mockResolvedValue(null),
-      set: jest.fn().mockResolvedValue('OK'),
-      del: jest.fn().mockResolvedValue(1),
-      setex: jest.fn().mockResolvedValue('OK'),
-      keys: jest.fn().mockResolvedValue([]),
-      incr: jest.fn().mockResolvedValue(1),
-    };
+    const mockRedis = createRedisMock();
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -260,7 +267,7 @@ describe('Admin (e2e)', () => {
     it('should return 403 for regular users', async () => {
       const t = token(regularUserId);
       await request(app!.getHttpServer())
-        .patch('/api/v1/admin/users/user-1/status')
+        .patch(`/api/v1/admin/users/${managedUserId}/status`)
         .set('Authorization', `Bearer ${t}`)
         .send({ status: 'SUSPENDED', reason: 'Spam' })
         .expect(403);
@@ -269,7 +276,7 @@ describe('Admin (e2e)', () => {
     it('should return 200 for admin suspending a user', async () => {
       const t = token(adminUserId);
       const res = await request(app!.getHttpServer())
-        .patch('/api/v1/admin/users/user-1/status')
+        .patch(`/api/v1/admin/users/${managedUserId}/status`)
         .set('Authorization', `Bearer ${t}`)
         .send({ status: 'SUSPENDED', reason: 'Repeated spam' })
         .expect(200);
@@ -280,7 +287,7 @@ describe('Admin (e2e)', () => {
     it('should return 400 for invalid status', async () => {
       const t = token(adminUserId);
       await request(app!.getHttpServer())
-        .patch('/api/v1/admin/users/user-1/status')
+        .patch(`/api/v1/admin/users/${managedUserId}/status`)
         .set('Authorization', `Bearer ${t}`)
         .send({ status: 'INVALID', reason: 'Test' })
         .expect(400);
@@ -316,7 +323,7 @@ describe('Admin (e2e)', () => {
     it('should return 403 for regular users', async () => {
       const t = token(regularUserId);
       await request(app!.getHttpServer())
-        .patch('/api/v1/admin/companies/company-1/verification')
+        .patch(`/api/v1/admin/companies/${companyId}/verification`)
         .set('Authorization', `Bearer ${t}`)
         .send({ notes: 'Verified' })
         .expect(403);
@@ -325,7 +332,7 @@ describe('Admin (e2e)', () => {
     it('should return 200 for admin verifying a company', async () => {
       const t = token(adminUserId);
       const res = await request(app!.getHttpServer())
-        .patch('/api/v1/admin/companies/company-1/verification')
+        .patch(`/api/v1/admin/companies/${companyId}/verification`)
         .set('Authorization', `Bearer ${t}`)
         .send({ notes: 'Documents verified' })
         .expect(200);

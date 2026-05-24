@@ -107,7 +107,7 @@ export class RecommendationsService {
         displayName: user.displayName,
         headline: user.profile?.headline || null,
         location: user.profile?.location || null,
-        profilePictureUrl: null, // TODO: populate when user avatar field is available
+        profilePictureUrl: null, // TODO(mdc-be-qdx): populate when user avatar field is available
         score: scored.score,
       });
     }
@@ -124,8 +124,10 @@ export class RecommendationsService {
         : undefined;
     // Strip internal score from response data
     const cleanData: RecommendedPersonDto[] = paginated.data.map(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ score, ...rest }) => rest,
+      ({ score, ...rest }) => {
+        void score;
+        return rest;
+      },
     );
     const result: RecommendationsResponseDto<RecommendedPersonDto> = {
       data: cleanData,
@@ -259,8 +261,10 @@ export class RecommendationsService {
         ? encodeScoreCursor(lastItem.score, lastItem.id)
         : undefined;
     const cleanData: RecommendedJobDto[] = paginated.data.map(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ score, ...rest }) => rest,
+      ({ score, ...rest }) => {
+        void score;
+        return rest;
+      },
     );
     const result: RecommendationsResponseDto<RecommendedJobDto> = {
       data: cleanData,
@@ -339,8 +343,12 @@ export class RecommendationsService {
         id: true,
         name: true,
         industry: true,
-        followerCount: true,
         verified: true,
+        _count: {
+          select: {
+            followers: true,
+          },
+        },
       },
     });
 
@@ -354,9 +362,9 @@ export class RecommendationsService {
         id: company.id,
         name: company.name,
         industry: company.industry,
-        followerCount: company.followerCount,
+        followerCount: company._count.followers,
         verified: company.verified,
-        logoUrl: null, // TODO: populate when company logo field is available
+        logoUrl: null, // TODO(mdc-be-yha): populate when company logo field is available
         score: scored.score,
       });
     }
@@ -369,8 +377,10 @@ export class RecommendationsService {
         ? encodeScoreCursor(lastItem.score, lastItem.id)
         : undefined;
     const cleanData: RecommendedCompanyDto[] = paginated.data.map(
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      ({ score, ...rest }) => rest,
+      ({ score, ...rest }) => {
+        void score;
+        return rest;
+      },
     );
     const result: RecommendationsResponseDto<RecommendedCompanyDto> = {
       data: cleanData,

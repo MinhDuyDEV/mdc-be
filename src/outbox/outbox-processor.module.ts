@@ -3,6 +3,7 @@ import { InfraModule } from '../infra';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SearchModule } from '../search';
 import { OutboxCoreModule } from './outbox-core.module';
+import { OutboxMetrics } from './outbox.metrics';
 import { OutboxProcessor } from './outbox.processor';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
 import { BillingProcessor } from './processors/billing.processor';
@@ -22,6 +23,7 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
     NotificationProcessor,
     PostInteractionProcessor,
     PostSearchIndexProcessor,
+    OutboxMetrics,
     OutboxProcessor,
     ProfileCreationProcessor,
     ProfileSearchIndexProcessor,

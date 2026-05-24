@@ -1,7 +1,5 @@
 import { DeadLetterService } from './dead-letter.service';
 
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
-
 describe('DeadLetterService', () => {
   function createService() {
     const mockPrisma = {
@@ -54,8 +52,12 @@ describe('DeadLetterService', () => {
     mockPrisma.$transaction.mockImplementation((fn: any) => fn(mockPrisma));
     mockPrisma.outboxDeadLetter.findUnique.mockResolvedValue({
       id: 'dl-1',
-      eventType: 'test.event',
-      payload: { foo: 'bar' },
+      eventType: 'UserRegistered',
+      payload: {
+        userId: 'user-1',
+        email: 'test@example.com',
+        createdAt: new Date().toISOString(),
+      },
     });
     mockPrisma.outboxEvent.create.mockResolvedValue({ id: 'new-event-1' });
     mockPrisma.outboxDeadLetter.delete.mockResolvedValue({});
@@ -68,7 +70,7 @@ describe('DeadLetterService', () => {
     });
     expect(mockPrisma.outboxEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        eventType: 'test.event',
+        eventType: 'UserRegistered',
         status: 'PENDING',
       }),
     });
@@ -84,5 +86,36 @@ describe('DeadLetterService', () => {
     mockPrisma.outboxDeadLetter.findUnique.mockResolvedValue(null);
 
     await expect(service.replay('nonexistent')).rejects.toThrow(/not found/);
+  });
+
+  it('should replay using provided transaction client', async () => {
+    const { service, mockPrisma } = createService();
+    const tx = {
+      outboxDeadLetter: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'dl-1',
+          eventType: 'UserLoggedIn',
+          payload: {
+            userId: 'user-1',
+            email: 'test@example.com',
+            loginAt: new Date().toISOString(),
+          },
+        }),
+        delete: jest.fn().mockResolvedValue({}),
+      },
+      outboxEvent: {
+        create: jest.fn().mockResolvedValue({ id: 'new-event-1' }),
+      },
+    };
+
+    await service.replay(tx as any, 'dl-1');
+
+    expect(tx.outboxEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        eventType: 'UserLoggedIn',
+        status: 'PENDING',
+      }),
+    });
+    expect(mockPrisma.$transaction).not.toHaveBeenCalled();
   });
 });

@@ -9,7 +9,6 @@ function createController() {
     markRead: jest.fn(),
     markAllRead: jest.fn(),
   };
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   const controller = new NotificationsController(mockService as any);
   return { controller, mockService };
 }

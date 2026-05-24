@@ -6,10 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import {
-  PrismaService,
-  PrismaTransaction,
-} from '../infra/prisma/prisma.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { FEATURE_KEY_TO_ENTITLEMENT } from './billing.constants';
@@ -129,7 +126,7 @@ export class BillingService {
         periodEnd,
       );
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'SubscriptionCreated',
         aggregateType: 'Subscription',
         aggregateId: subscription.id,
@@ -161,7 +158,7 @@ export class BillingService {
         data: { cancelAtPeriodEnd: true, canceledAt: new Date() },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'SubscriptionCancelled',
         aggregateType: 'Subscription',
         aggregateId: subscription.id,

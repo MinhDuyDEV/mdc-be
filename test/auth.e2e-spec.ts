@@ -40,7 +40,6 @@ describe('Auth (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
 
@@ -269,11 +268,13 @@ describe('Auth (e2e)', () => {
   });
 
   describe('POST /api/v1/auth/login', () => {
-    it('should return 401 for missing credentials', async () => {
-      await request(app!.getHttpServer())
+    it('should return 400 for missing credentials', async () => {
+      const response = await request(app!.getHttpServer())
         .post('/api/v1/auth/login')
         .send({})
-        .expect(401);
+        .expect(400);
+
+      expect(response.body.error.code).toBe('VALIDATION_ERROR');
     });
   });
 

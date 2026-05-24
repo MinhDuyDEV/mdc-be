@@ -12,8 +12,8 @@ describe('Billing (e2e)', () => {
   let app: INestApplication<App> | undefined;
   let originalEnv: NodeJS.ProcessEnv;
 
-  const companyId = '00000000-0000-0000-0000-000000000001';
-  const planId = '00000000-0000-0000-0000-000000000010';
+  const companyId = '00000000-0000-4000-8000-000000000001';
+  const planId = '00000000-0000-4000-8000-000000000010';
 
   const mockPlan = {
     id: planId,
@@ -97,7 +97,6 @@ describe('Billing (e2e)', () => {
     process.env.OTEL_SERVICE_NAME = 'mdc-be-test';
     process.env.OTEL_EXPORTER_OTLP_ENDPOINT = 'http://localhost:4318';
     process.env.JWT_ACCESS_SECRET = 'test-access-secret-min-32-chars-long';
-    process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-min-32-chars-long';
     process.env.COOKIE_SECRET = 'test-cookie-secret-min-32-chars-long';
     process.env.COOKIE_SECURE = 'false';
     process.env.BILLING_WEBHOOK_SECRET = 'whsec_test_secret';
@@ -314,6 +313,11 @@ describe('Billing (e2e)', () => {
       .useValue({ emit: jest.fn() })
       .overrideProvider(REDIS_CLIENT)
       .useValue({
+        status: 'ready',
+        connect: jest.fn().mockResolvedValue(undefined),
+        ping: jest.fn().mockResolvedValue('PONG'),
+        quit: jest.fn().mockResolvedValue(undefined),
+        disconnect: jest.fn(),
         get: jest.fn(),
         set: jest.fn(),
         del: jest.fn(),
@@ -371,7 +375,7 @@ describe('Billing (e2e)', () => {
   // POST /api/v1/billing/admin/plans
   // ---------------------------------------------------------------------------
   describe('POST /api/v1/billing/admin/plans', () => {
-    const path = '/api/v1/billing/admin/plans';
+    const path = '/api/v1/admin/billing/plans';
 
     it('returns 401 without auth', async () => {
       await request(app!.getHttpServer())
@@ -413,7 +417,7 @@ describe('Billing (e2e)', () => {
   // POST /api/v1/billing/companies/:companyId/subscription
   // ---------------------------------------------------------------------------
   describe('POST /api/v1/billing/companies/:companyId/subscription', () => {
-    const path = `/api/v1/billing/companies/${companyId}/subscription`;
+    const path = `/api/v1/companies/${companyId}/subscription`;
 
     it('returns 401 without auth', async () => {
       await request(app!.getHttpServer())
@@ -474,7 +478,7 @@ describe('Billing (e2e)', () => {
   // GET /api/v1/billing/companies/:companyId/subscription
   // ---------------------------------------------------------------------------
   describe('GET /api/v1/billing/companies/:companyId/subscription', () => {
-    const path = `/api/v1/billing/companies/${companyId}/subscription`;
+    const path = `/api/v1/companies/${companyId}/subscription`;
 
     it('returns 401 without auth', async () => {
       await request(app!.getHttpServer()).get(path).expect(401);
@@ -501,7 +505,7 @@ describe('Billing (e2e)', () => {
   // GET /api/v1/billing/companies/:companyId/invoices
   // ---------------------------------------------------------------------------
   describe('GET /api/v1/billing/companies/:companyId/invoices', () => {
-    const path = `/api/v1/billing/companies/${companyId}/invoices`;
+    const path = `/api/v1/companies/${companyId}/invoices`;
 
     it('returns 401 without auth', async () => {
       await request(app!.getHttpServer()).get(path).expect(401);

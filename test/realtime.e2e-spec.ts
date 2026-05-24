@@ -9,7 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { JwtModule, type JwtService } from '@nestjs/jwt';
+import { JwtModule, JwtService } from '@nestjs/jwt';
 import { Test, type TestingModule } from '@nestjs/testing';
 import {
   type OnGatewayConnection,
@@ -24,6 +24,7 @@ import { AuthGuard } from '../src/auth/auth.guard';
 import { CurrentUser } from '../src/common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../src/common/auth/current-user.interface';
 import { Public } from '../src/common/auth/public.decorator';
+import { extractSocketAuthToken } from '../src/realtime/socket-auth-token';
 import { getWsClient } from './helpers/ws-client.helper';
 
 const JWT_SECRET = 'test-access-secret-min-32-chars-long';
@@ -93,12 +94,12 @@ class TestNotificationPreferenceController {
 })
 class TestRealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
-  server: Server;
+  server!: Server;
 
   constructor(private readonly jwtService: JwtService) {}
 
   async handleConnection(client: Socket) {
-    const token = client.handshake.auth?.token ?? client.handshake.query?.token;
+    const token = extractSocketAuthToken(client);
 
     if (!token) {
       client.disconnect(true);
@@ -109,9 +110,9 @@ class TestRealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const payload = await this.jwtService.verifyAsync<{
         sub: string;
         email: string;
-      }>(token as string);
+      }>(token);
       client.data.user = { id: payload.sub, email: payload.email };
-      client.join(`user:${payload.sub}`);
+      await client.join(`user:${payload.sub}`);
     } catch {
       client.disconnect(true);
     }

@@ -11,11 +11,11 @@ import {
 export class ExperienceDto {
   @IsString()
   @MaxLength(200)
-  title: string;
+  title!: string;
 
   @IsString()
   @MaxLength(200)
-  company: string;
+  company!: string;
 
   @IsOptional()
   @IsUrl()
@@ -32,7 +32,7 @@ export class ExperienceDto {
   description?: string;
 
   @IsDateString()
-  startDate: string;
+  startDate!: string;
 
   @IsOptional()
   @IsDateString()

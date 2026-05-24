@@ -7,7 +7,6 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { EntitlementsService } from '../billing/entitlements/entitlements.service';
-import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -146,7 +145,7 @@ export class RecruitingService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'CandidateSaved',
         aggregateType: 'SavedCandidate',
         aggregateId: saved.id,
@@ -351,7 +350,7 @@ export class RecruitingService {
         },
       });
 
-      await this.outboxService.emit(tx as PrismaTransaction, {
+      await this.outboxService.emit(tx, {
         eventType: 'CandidateAddedToTalentPool',
         aggregateType: 'TalentPoolCandidate',
         aggregateId: created.id,

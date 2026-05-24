@@ -2,15 +2,15 @@ import { IsIn, IsInt, IsString, Min } from 'class-validator';
 
 export class InitiateUploadDto {
   @IsIn(['avatar', 'resume', 'attachment'])
-  purpose: string;
+  purpose!: string;
 
   @IsString()
-  filename: string;
+  filename!: string;
 
   @IsString()
-  contentType: string;
+  contentType!: string;
 
   @IsInt()
   @Min(1)
-  sizeBytes: number;
+  sizeBytes!: number;
 }

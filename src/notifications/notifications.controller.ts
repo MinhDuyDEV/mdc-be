@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
-import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { ListNotificationsQueryDto } from './dto/list-notifications-query.dto';
 import { NotificationsService } from './notifications.service';
 
 @Controller('notifications')
@@ -27,7 +27,7 @@ export class NotificationsController {
   @HttpCode(HttpStatus.OK)
   async list(
     @CurrentUser() user: AuthenticatedUser,
-    @Query() query: CursorPaginationQueryDto,
+    @Query() query: ListNotificationsQueryDto,
   ) {
     const result = await this.notificationsService.list(
       user.id,

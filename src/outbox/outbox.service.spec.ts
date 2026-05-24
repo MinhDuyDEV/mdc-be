@@ -1,5 +1,4 @@
 import { Test } from '@nestjs/testing';
-/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import { PrismaService } from '../infra/prisma';
 import { OutboxService } from './outbox.service';
 
@@ -32,18 +31,25 @@ describe('OutboxService', () => {
     };
 
     await service.emit(mockTx as any, {
-      eventType: 'user.created',
+      eventType: 'UserRegistered',
       aggregateType: 'User',
       aggregateId: 'user-123',
-      payload: { email: 'test@example.com' },
+      payload: {
+        userId: 'user-123',
+        email: 'test@example.com',
+        createdAt: new Date().toISOString(),
+      },
     });
 
     expect(mockTx.outboxEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        eventType: 'user.created',
+        eventType: 'UserRegistered',
         aggregateType: 'User',
         aggregateId: 'user-123',
-        payload: { email: 'test@example.com' },
+        payload: expect.objectContaining({
+          userId: 'user-123',
+          email: 'test@example.com',
+        }),
         status: 'PENDING',
       }),
     });
@@ -57,34 +63,77 @@ describe('OutboxService', () => {
     };
 
     await service.emit(mockTx as any, {
-      eventType: 'system.healthcheck',
-      payload: { ok: true },
+      eventType: 'UserLoggedIn',
+      payload: {
+        userId: 'user-123',
+        email: 'test@example.com',
+        loginAt: new Date().toISOString(),
+      },
     });
 
     expect(mockTx.outboxEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        eventType: 'system.healthcheck',
-        payload: { ok: true },
+        eventType: 'UserLoggedIn',
+        payload: expect.objectContaining({ userId: 'user-123' }),
         status: 'PENDING',
       }),
     });
   });
 
-  it('should throw if called outside transaction', async () => {
-    await expect(
-      service.emit(null as any, {
-        eventType: 'test.event',
-        payload: {},
-      }),
-    ).rejects.toThrow(/must be called inside a Prisma transaction/);
+  it('should set availableAt when emitting events', async () => {
+    const mockTx = {
+      outboxEvent: {
+        create: jest.fn().mockResolvedValue({ id: 'test-id' }),
+      },
+    };
+
+    await service.emit(mockTx as any, {
+      eventType: 'UserLoggedIn',
+      payload: {
+        userId: 'user-123',
+        email: 'test@example.com',
+        loginAt: new Date().toISOString(),
+      },
+    });
+
+    const [createArgs] = mockTx.outboxEvent.create.mock.calls[0];
+    expect(createArgs.data.availableAt).toBeInstanceOf(Date);
   });
 
-  it('should throw if tx has no outboxEvent create method', async () => {
+  it('should keep aggregate fields optional', async () => {
+    const mockTx = {
+      outboxEvent: {
+        create: jest.fn().mockResolvedValue({ id: 'test-id' }),
+      },
+    };
+
+    await service.emit(mockTx as any, {
+      eventType: 'UserLoggedIn',
+      payload: {
+        userId: 'user-123',
+        email: 'test@example.com',
+        loginAt: new Date().toISOString(),
+      },
+    });
+
+    const [createArgs] = mockTx.outboxEvent.create.mock.calls[0];
+    expect(createArgs.data.aggregateType).toBeUndefined();
+    expect(createArgs.data.aggregateId).toBeUndefined();
+  });
+
+  it('rejects malformed event payloads before insert', async () => {
+    const mockTx = {
+      outboxEvent: {
+        create: jest.fn().mockResolvedValue({ id: 'test-id' }),
+      },
+    };
+
     await expect(
-      service.emit({} as any, {
-        eventType: 'test.event',
+      service.emit(mockTx as any, {
+        eventType: 'CompanyCreated',
         payload: {},
       }),
-    ).rejects.toThrow(/must be called inside a Prisma transaction/);
+    ).rejects.toThrow('Invalid outbox payload for CompanyCreated');
+    expect(mockTx.outboxEvent.create).not.toHaveBeenCalled();
   });
 });

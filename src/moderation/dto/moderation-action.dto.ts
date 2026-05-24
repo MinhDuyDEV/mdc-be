@@ -11,20 +11,20 @@ import {
 
 export class CreateModerationActionDto {
   @IsUUID()
-  reportId: string;
+  reportId!: string;
 
   @IsEnum(ModerationActionType)
-  actionType: ModerationActionType;
+  actionType!: ModerationActionType;
 
   @IsEnum(ReportEntityType)
-  targetEntity: ReportEntityType;
+  targetEntity!: ReportEntityType;
 
   @IsUUID()
-  targetId: string;
+  targetId!: string;
 
   @IsString()
   @MaxLength(2000)
-  reason: string;
+  reason!: string;
 
   @IsOptional()
   @IsInt()

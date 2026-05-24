@@ -2,12 +2,10 @@ import type { INestApplicationContext } from '@nestjs/common';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import type { Redis } from 'ioredis';
-import type { ServerOptions } from 'socket.io';
+import type { Server, ServerOptions } from 'socket.io';
 import { REDIS_CLIENT } from '../../infra/redis/redis.constants';
 
-// socket.io returns `any` from createIOServer — IoAdapter base type uses `any` too
-
-type SocketIOServer = any;
+type SocketIOServer = Server;
 
 export class RedisIoAdapter extends IoAdapter {
   private adapterConstructor: ReturnType<typeof createAdapter> | null = null;
@@ -30,11 +28,9 @@ export class RedisIoAdapter extends IoAdapter {
   }
 
   createIOServer(port: number, options?: ServerOptions): SocketIOServer {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const server = super.createIOServer(port, options);
+    const server = super.createIOServer(port, options) as SocketIOServer;
 
     if (this.adapterConstructor) {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
       server.adapter(this.adapterConstructor);
     }
 

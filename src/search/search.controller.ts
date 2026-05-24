@@ -12,7 +12,7 @@ import { AuthGuard } from '../auth/auth.guard';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
-import type { SearchQueryDto } from './dto/search.query.dto';
+import { SearchQueryDto, SearchReindexQueryDto } from './dto/search.query.dto';
 import type { SearchResponseDto } from './dto/search.response.dto';
 import { SearchIndexService } from './search-index.service';
 import { SearchQueryService } from './search-query.service';
@@ -103,14 +103,16 @@ export class SearchController {
   @Permissions('MANAGE_JOBS')
   @HttpCode(HttpStatus.ACCEPTED)
   async reindex(
-    @Query('entityType')
-    entityType: 'profiles' | 'companies' | 'jobs' | 'posts',
+    @Query() query: SearchReindexQueryDto,
     @Request() req: AuthenticatedRequest,
   ): Promise<{ message: string; runId: string }> {
     const userId = req.user?.id ?? '';
-    const runId = await this.searchIndex.reindexEntity(entityType, userId);
+    const runId = await this.searchIndex.reindexEntity(
+      query.entityType,
+      userId,
+    );
     return {
-      message: `Reindex started for ${entityType}`,
+      message: `Reindex started for ${query.entityType}`,
       runId,
     };
   }

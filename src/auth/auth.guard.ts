@@ -59,9 +59,9 @@ export class AuthGuard implements CanActivate {
       request.user = user;
       return true;
     } catch {
-      // On optional-auth routes: missing token is allowed, but bad token is rejected
       if (isOptionalAuth) {
-        throw new UnauthorizedException('Invalid or expired access token');
+        request.user = undefined;
+        return true;
       }
       throw new UnauthorizedException('Invalid or expired access token');
     }

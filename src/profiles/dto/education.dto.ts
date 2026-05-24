@@ -3,11 +3,11 @@ import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
 export class EducationDto {
   @IsString()
   @MaxLength(200)
-  school: string;
+  school!: string;
 
   @IsString()
   @MaxLength(200)
-  degree: string;
+  degree!: string;
 
   @IsOptional()
   @IsString()
@@ -15,7 +15,7 @@ export class EducationDto {
   fieldOfStudy?: string;
 
   @IsDateString()
-  startDate: string;
+  startDate!: string;
 
   @IsOptional()
   @IsDateString()

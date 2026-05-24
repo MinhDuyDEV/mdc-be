@@ -2,7 +2,7 @@ import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { Public } from '../common/auth/public.decorator';
-import type { FeedQueryDto } from './dto/feed-query.dto';
+import { FeedQueryDto } from './dto/feed-query.dto';
 import { FeedService } from './feed.service';
 
 @Controller('feed')

@@ -7,7 +7,10 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { randomBytes } from 'crypto';
 import type { AppConfig } from '../infra/config';
-import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
+import {
+  MAILER_TRANSPORTER,
+  type MailerTransporter,
+} from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { PasswordService } from './password.service';
 
@@ -22,9 +25,7 @@ export class EmailVerificationService {
     private readonly passwordService: PasswordService,
     private readonly configService: ConfigService<AppConfig, true>,
     @Inject(MAILER_TRANSPORTER)
-    private readonly mailerService: {
-      sendMail: (options: any) => Promise<any>;
-    },
+    private readonly mailerService: MailerTransporter,
   ) {}
 
   async generateToken(userId: string): Promise<string> {

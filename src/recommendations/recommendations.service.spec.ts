@@ -552,8 +552,8 @@ describe('RecommendationsService', () => {
           id: 'company-1',
           name: 'Acme Corp',
           industry: 'Technology',
-          followerCount: 100,
           verified: true,
+          _count: { followers: 100 },
         },
       ]);
 
@@ -586,15 +586,15 @@ describe('RecommendationsService', () => {
           id: 'company-1',
           name: 'Acme Corp',
           industry: 'Technology',
-          followerCount: 100,
           verified: true,
+          _count: { followers: 100 },
         },
         {
           id: 'company-2',
           name: 'Beta Inc',
           industry: 'Finance',
-          followerCount: 50,
           verified: false,
+          _count: { followers: 50 },
         },
       ]);
       // company-3 should NOT be fetched (sentinel row enrichment is skipped)
@@ -625,15 +625,15 @@ describe('RecommendationsService', () => {
           id: 'company-1',
           name: 'Acme Corp',
           industry: 'Technology',
-          followerCount: 100,
           verified: true,
+          _count: { followers: 100 },
         },
         {
           id: 'company-2',
           name: 'Beta Inc',
           industry: 'Finance',
-          followerCount: 50,
           verified: false,
+          _count: { followers: 50 },
         },
       ]);
 
