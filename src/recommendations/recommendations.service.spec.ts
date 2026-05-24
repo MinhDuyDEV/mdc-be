@@ -131,6 +131,7 @@ describe('RecommendationsService', () => {
             headline: 'Engineer',
             location: 'SF',
           },
+          mediaAssets: [{ id: 'media-avatar-1' }],
         },
         {
           id: 'user-3',
@@ -139,6 +140,7 @@ describe('RecommendationsService', () => {
             headline: 'Designer',
             location: 'NYC',
           },
+          mediaAssets: [],
         },
       ]);
 
@@ -152,7 +154,22 @@ describe('RecommendationsService', () => {
       expect(result.data[0]).toMatchObject({
         id: 'user-2',
         displayName: 'Alice',
+        profilePictureUrl: '/api/v1/media/media-avatar-1',
       });
+      expect(prisma.user.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            mediaAssets: expect.objectContaining({
+              where: {
+                purpose: 'avatar',
+                status: 'READY',
+                visibility: 'PUBLIC',
+              },
+              take: 1,
+            }),
+          }),
+        }),
+      );
       // score should NOT be in response
       expect(result.data[0]).not.toHaveProperty('score');
     });
@@ -553,6 +570,11 @@ describe('RecommendationsService', () => {
           name: 'Acme Corp',
           industry: 'Technology',
           verified: true,
+          logoMediaAsset: {
+            id: 'media-logo-1',
+            status: 'READY',
+            visibility: 'PUBLIC',
+          },
           _count: { followers: 100 },
         },
       ]);
@@ -569,8 +591,47 @@ describe('RecommendationsService', () => {
         name: 'Acme Corp',
         industry: 'Technology',
         verified: true,
+        logoUrl: '/api/v1/media/media-logo-1',
       });
+      expect(prisma.company.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: expect.objectContaining({
+            logoMediaAsset: {
+              select: { id: true, status: true, visibility: true },
+            },
+          }),
+        }),
+      );
       expect(result.data[0]).not.toHaveProperty('score');
+    });
+
+    it('does not expose a non-public company logo media URL', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findCompanyRecommendations.mockResolvedValue([
+        { id: 'company-1', score: 4 },
+      ]);
+      prisma.company.findMany.mockResolvedValue([
+        {
+          id: 'company-1',
+          name: 'Acme Corp',
+          industry: 'Technology',
+          verified: true,
+          logoMediaAsset: {
+            id: 'media-logo-private',
+            status: 'READY',
+            visibility: 'PRIVATE',
+          },
+          _count: { followers: 100 },
+        },
+      ]);
+
+      const result = await service.getCompanyRecommendations(
+        'u1',
+        undefined,
+        20,
+      );
+
+      expect(result.data[0].logoUrl).toBeNull();
     });
 
     it('sets hasNextPage=true and slices to limit when repository returns limit+1 rows', async () => {

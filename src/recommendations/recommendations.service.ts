@@ -26,6 +26,10 @@ export class RecommendationsService {
     @Inject(REDIS_CLIENT) private readonly redis: Redis,
   ) {}
 
+  private mediaUrl(mediaId: string | null | undefined): string | null {
+    return mediaId ? `/api/v1/media/${mediaId}` : null;
+  }
+
   async getPeopleRecommendations(
     userId: string,
     cursor: string | undefined,
@@ -92,6 +96,16 @@ export class RecommendationsService {
             location: true,
           },
         },
+        mediaAssets: {
+          where: {
+            purpose: 'avatar',
+            status: 'READY',
+            visibility: 'PUBLIC',
+          },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { id: true },
+        },
       },
     });
 
@@ -107,7 +121,7 @@ export class RecommendationsService {
         displayName: user.displayName,
         headline: user.profile?.headline || null,
         location: user.profile?.location || null,
-        profilePictureUrl: null, // TODO(mdc-be-qdx): populate when user avatar field is available
+        profilePictureUrl: this.mediaUrl(user.mediaAssets?.[0]?.id),
         score: scored.score,
       });
     }
@@ -344,6 +358,13 @@ export class RecommendationsService {
         name: true,
         industry: true,
         verified: true,
+        logoMediaAsset: {
+          select: {
+            id: true,
+            status: true,
+            visibility: true,
+          },
+        },
         _count: {
           select: {
             followers: true,
@@ -364,7 +385,11 @@ export class RecommendationsService {
         industry: company.industry,
         followerCount: company._count.followers,
         verified: company.verified,
-        logoUrl: null, // TODO(mdc-be-yha): populate when company logo field is available
+        logoUrl:
+          company.logoMediaAsset?.status === 'READY' &&
+          company.logoMediaAsset.visibility === 'PUBLIC'
+            ? this.mediaUrl(company.logoMediaAsset.id)
+            : null,
         score: scored.score,
       });
     }

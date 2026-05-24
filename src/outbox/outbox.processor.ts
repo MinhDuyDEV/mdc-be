@@ -17,6 +17,7 @@ import { MessagingProcessor } from './processors/messaging.processor';
 import { NotificationProcessor } from './processors/notification.processor';
 import { PostInteractionProcessor } from './processors/post-interaction.processor';
 import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
+import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
 import { SubscriptionProcessor } from './processors/subscription.processor';
 
@@ -59,6 +60,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly postInteraction: PostInteractionProcessor,
     @Inject(PostSearchIndexProcessor)
     private readonly postSearchIndex: PostSearchIndexProcessor,
+    @Inject(ProfileCreationProcessor)
+    private readonly profileCreation: ProfileCreationProcessor,
     @Inject(ProfileSearchIndexProcessor)
     private readonly profileSearchIndex: ProfileSearchIndexProcessor,
     @Inject(BillingProcessor)
@@ -262,6 +265,11 @@ export class OutboxProcessor implements OnApplicationShutdown {
   private async dispatch(event: ClaimedEvent): Promise<void> {
     const payload = validateOutboxPayload(event.eventType, event.payload);
     switch (event.eventType) {
+      case 'UserRegistered':
+        await this.profileCreation.processUserRegistered(
+          payload as { userId: string; email: string },
+        );
+        return;
       case 'ProfileUpdated':
         await this.profileSearchIndex.processProfileUpdated(
           payload as { profileId: string; userId: string },

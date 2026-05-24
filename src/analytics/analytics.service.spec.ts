@@ -80,4 +80,31 @@ describe('AnalyticsService', () => {
       expect(result.dailyNewPosts).toBe(5);
     });
   });
+
+  describe('getEntityAnalytics', () => {
+    it('returns total, unique viewer, and date-range counts', async () => {
+      prisma.$queryRaw
+        .mockResolvedValueOnce([{ total: 10n }])
+        .mockResolvedValueOnce([{ count: 3n }])
+        .mockResolvedValueOnce([{ count: 4n }])
+        .mockResolvedValueOnce([{ count: 8n }]);
+
+      const result = await service.getEntityAnalytics('profile_view', 'p1');
+
+      expect(result).toEqual({
+        totalViews: 10,
+        uniqueViewers: 3,
+        last7Days: 4,
+        last30Days: 8,
+      });
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(4);
+      const queryCalls = prisma.$queryRaw.mock.calls as Array<
+        [TemplateStringsArray]
+      >;
+      const queries = queryCalls.map(([strings]) => String.raw(strings));
+      expect(queries[1]).toContain('COUNT(DISTINCT user_id)');
+      expect(queries[2]).toContain('created_at >=');
+      expect(queries[3]).toContain('created_at >=');
+    });
+  });
 });

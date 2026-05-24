@@ -68,6 +68,9 @@ describe('OutboxProcessor', () => {
     const mockProfileSearchIndex = {
       processProfileUpdated: jest.fn(),
     };
+    const mockProfileCreation = {
+      processUserRegistered: jest.fn().mockResolvedValue(undefined),
+    };
 
     const mockBillingProcessor = {
       processPaymentProviderEvent: jest.fn().mockResolvedValue(undefined),
@@ -101,6 +104,7 @@ describe('OutboxProcessor', () => {
       mockMessagingProcessor as any,
       mockPostInteraction as any,
       mockPostSearchIndex as any,
+      mockProfileCreation as any,
       mockProfileSearchIndex as any,
       mockBillingProcessor as any,
       mockSubscriptionProcessor as any,
@@ -116,6 +120,7 @@ describe('OutboxProcessor', () => {
       mockJobSearchIndex,
       mockApplicationEmail,
       mockNotification,
+      mockProfileCreation,
       mockMetrics,
       mockLogger,
     };
@@ -177,7 +182,8 @@ describe('OutboxProcessor', () => {
 
   describe('processOutbox', () => {
     it('should mark claimed events as PROCESSED on success', async () => {
-      const { processor, mockPrisma, mockMetrics } = createProcessor();
+      const { processor, mockPrisma, mockMetrics, mockProfileCreation } =
+        createProcessor();
 
       // stale lock recovery (no stale locks)
       mockPrisma.$executeRaw.mockResolvedValue(0);
@@ -224,6 +230,11 @@ describe('OutboxProcessor', () => {
         'success',
         expect.any(Number),
       );
+      expect(mockProfileCreation.processUserRegistered).toHaveBeenCalledWith({
+        userId: 'user-1',
+        email: 'test@example.com',
+        createdAt: expect.any(String),
+      });
     });
 
     it('processes independent aggregate groups in parallel', async () => {

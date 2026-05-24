@@ -1,10 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 
 interface UserRegisteredPayload {
   userId: string;
   email: string;
+}
+
+function isPrismaUniqueViolation(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }
 
 @Injectable()
@@ -14,28 +23,37 @@ export class ProfileCreationProcessor {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
-   * Polls for UserRegistered events and creates profile shells.
-   * Idempotent — skips if profile already exists for the user.
-   */
-  @Cron(CronExpression.EVERY_10_SECONDS, {
-    name: 'profile-creation-processor',
-    waitForCompletion: true,
-  })
-  handleUserRegistered(): void {
-    // In future: this will be called by the main OutboxProcessor dispatching to handlers
-    // For now, it's a standalone cron that checks for unprocessed UserRegistered events
-    this.logger.debug(
-      'Profile creation processor tick (no-op in current phase)',
-    );
-  }
-
-  /**
    * Called by the main outbox processor when a UserRegistered event is encountered.
    */
-  processUserRegistered(_payload: UserRegisteredPayload): void {
-    void _payload;
-    // TODO(mdc-be-dwe): Implement in future phase
-    // 1. Check if profile already exists for userId
-    // 2. If not, create profile shell via prisma.profile.create()
+  async processUserRegistered(payload: UserRegisteredPayload): Promise<void> {
+    const existing = await this.prisma.profile.findUnique({
+      where: { userId: payload.userId },
+      select: { id: true },
+    });
+
+    if (existing) {
+      this.logger.debug(
+        `Profile already exists for user ${payload.userId} — skipping shell creation`,
+      );
+      return;
+    }
+
+    try {
+      const profile = await this.prisma.profile.create({
+        data: { userId: payload.userId },
+        select: { id: true },
+      });
+      this.logger.debug(
+        `Created profile shell ${profile.id} for user ${payload.userId}`,
+      );
+    } catch (error) {
+      if (isPrismaUniqueViolation(error)) {
+        this.logger.debug(
+          `Profile shell for user ${payload.userId} already created concurrently — skipping`,
+        );
+        return;
+      }
+      throw error;
+    }
   }
 }
