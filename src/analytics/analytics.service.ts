@@ -1,22 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
-import * as crypto from 'crypto';
-import { PrismaService } from '../infra/prisma/prisma.service';
+import { Injectable, Logger } from "@nestjs/common";
+import * as crypto from "crypto";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { readCount, type CountResult } from "../common/db/bigint";
 import {
   AnalyticsEventType,
   type DashboardMetricsDto,
   type EntityAnalyticsDto,
   type RecordEventDto,
-} from './dto';
+} from "./dto";
 
 const SLOT_COUNT = 20;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-type CountResult = { count: bigint | number | null };
-type EntityEventMetrics = Pick<
-  EntityAnalyticsDto,
-  'uniqueViewers' | 'last7Days' | 'last30Days'
->;
+type EntityEventMetrics = Pick<EntityAnalyticsDto, "uniqueViewers" | "last7Days" | "last30Days">;
 
 @Injectable()
 export class AnalyticsService {
@@ -30,7 +27,7 @@ export class AnalyticsService {
     ip: string,
     userAgent: string,
   ): Promise<void> {
-    const ipHash = crypto.createHash('sha256').update(ip).digest('hex');
+    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
     const slot = Math.floor(Math.random() * SLOT_COUNT);
 
     await this.writeEventAsync(dto, userId, ipHash, userAgent, slot);
@@ -89,10 +86,7 @@ export class AnalyticsService {
     });
   }
 
-  async getEntityAnalytics(
-    entityType: string,
-    entityId: string,
-  ): Promise<EntityAnalyticsDto> {
+  async getEntityAnalytics(entityType: string, entityId: string): Promise<EntityAnalyticsDto> {
     const [totalResult, eventMetrics] = await Promise.all([
       this.prisma.$queryRaw<{ total: bigint }[]>`
         SELECT SUM(count) as total
@@ -120,11 +114,11 @@ export class AnalyticsService {
     const since30Days = new Date(now - THIRTY_DAYS_MS);
 
     switch (entityType) {
-      case 'profile_view':
+      case "profile_view":
         return this.getProfileViewMetrics(entityId, since7Days, since30Days);
-      case 'company_view':
+      case "company_view":
         return this.getCompanyViewMetrics(entityId, since7Days, since30Days);
-      case 'post_impression':
+      case "post_impression":
         return this.getPostImpressionMetrics(entityId, since7Days, since30Days);
       default:
         this.logger.warn(`Unknown entity type: ${entityType}`);
@@ -159,9 +153,9 @@ export class AnalyticsService {
     ]);
 
     return {
-      uniqueViewers: this.readCount(uniqueViewers),
-      last7Days: this.readCount(last7Days),
-      last30Days: this.readCount(last30Days),
+      uniqueViewers: readCount(uniqueViewers),
+      last7Days: readCount(last7Days),
+      last30Days: readCount(last30Days),
     };
   }
 
@@ -192,9 +186,9 @@ export class AnalyticsService {
     ]);
 
     return {
-      uniqueViewers: this.readCount(uniqueViewers),
-      last7Days: this.readCount(last7Days),
-      last30Days: this.readCount(last30Days),
+      uniqueViewers: readCount(uniqueViewers),
+      last7Days: readCount(last7Days),
+      last30Days: readCount(last30Days),
     };
   }
 
@@ -225,15 +219,10 @@ export class AnalyticsService {
     ]);
 
     return {
-      uniqueViewers: this.readCount(uniqueViewers),
-      last7Days: this.readCount(last7Days),
-      last30Days: this.readCount(last30Days),
+      uniqueViewers: readCount(uniqueViewers),
+      last7Days: readCount(last7Days),
+      last30Days: readCount(last30Days),
     };
-  }
-
-  private readCount(result: CountResult[]): number {
-    const count = result[0]?.count;
-    return count === null || count === undefined ? 0 : Number(count);
   }
 
   async getDashboardMetrics(): Promise<DashboardMetricsDto> {
