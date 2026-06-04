@@ -10,29 +10,12 @@ import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { ConnectionsPolicyService } from './connections-policy.service';
 import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
-
-interface CursorPayload {
-  createdAt: string;
-  id: string;
-}
-
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
-  ).toString('base64');
-}
-
-function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as CursorPayload;
-    if (!decoded?.createdAt || !decoded?.id) return null;
-    return decoded;
-  } catch {
-    return null;
-  }
-}
+import {
+  decodeCursor,
+  encodeCursor,
+  buildCursorWhere,
+  paginateRows,
+} from '../common/pagination/cursor';
 
 const CONNECTION_INCLUDE = {
   requester: {
@@ -229,15 +212,7 @@ export class ConnectionsService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        const cursorDate = new Date(decoded.createdAt);
-        cursorWhere = {
-          OR: [
-            { createdAt: { lt: cursorDate } },
-            {
-              AND: [{ createdAt: cursorDate }, { id: { lt: decoded.id } }],
-            },
-          ],
-        };
+        cursorWhere = buildCursorWhere(decoded);
       }
     }
 
@@ -256,13 +231,9 @@ export class ConnectionsService {
       include: CONNECTION_INCLUDE,
     });
 
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   async listPendingRequests(
@@ -275,15 +246,7 @@ export class ConnectionsService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        const cursorDate = new Date(decoded.createdAt);
-        cursorWhere = {
-          OR: [
-            { createdAt: { lt: cursorDate } },
-            {
-              AND: [{ createdAt: cursorDate }, { id: { lt: decoded.id } }],
-            },
-          ],
-        };
+        cursorWhere = buildCursorWhere(decoded);
       }
     }
 
@@ -302,13 +265,9 @@ export class ConnectionsService {
       include: CONNECTION_INCLUDE,
     });
 
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   // ─────────────────────── Follows ────────────────────────────────────────

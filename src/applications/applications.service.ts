@@ -20,6 +20,7 @@ import {
 import type { CreateApplicationNoteDto } from './dto/application-note.dto';
 import type { SubmitApplicationDto } from './dto/submit-application.dto';
 import type { UpdateApplicationStatusDto } from './dto/update-status.dto';
+import { decodeCursor, encodeCursor } from '../common/pagination/cursor';
 
 const APPLICATION_INCLUDES = {
   answers: true,
@@ -34,29 +35,6 @@ const APPLICATION_INCLUDES_WITH_NOTES = {
     orderBy: { createdAt: 'desc' as const },
   },
 } as const;
-
-interface CursorPayload {
-  submittedAt: string;
-  id: string;
-}
-
-function encodeCursor(submittedAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ submittedAt: submittedAt.toISOString(), id }),
-  ).toString('base64');
-}
-
-function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as CursorPayload;
-    if (!decoded?.submittedAt || !decoded?.id) return null;
-    return decoded;
-  } catch {
-    return null;
-  }
-}
 
 /**
  * Applications domain service.
@@ -250,12 +228,14 @@ export class ApplicationsService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        const cursorDate = new Date(decoded.submittedAt);
         cursorWhere = {
           OR: [
-            { submittedAt: { lt: cursorDate } },
+            { submittedAt: { lt: decoded.createdAt } },
             {
-              AND: [{ submittedAt: cursorDate }, { id: { lt: decoded.id } }],
+              AND: [
+                { submittedAt: decoded.createdAt },
+                { id: { lt: decoded.id } },
+              ],
             },
           ],
         };
@@ -304,12 +284,14 @@ export class ApplicationsService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        const cursorDate = new Date(decoded.submittedAt);
         cursorWhere = {
           OR: [
-            { submittedAt: { lt: cursorDate } },
+            { submittedAt: { lt: decoded.createdAt } },
             {
-              AND: [{ submittedAt: cursorDate }, { id: { lt: decoded.id } }],
+              AND: [
+                { submittedAt: decoded.createdAt },
+                { id: { lt: decoded.id } },
+              ],
             },
           ],
         };
