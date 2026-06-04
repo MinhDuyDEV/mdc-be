@@ -103,6 +103,7 @@ describe('AnalyticsService', () => {
       >;
       const queries = queryCalls.map(([strings]) => String.raw(strings));
       expect(queries[1]).toContain('COUNT(DISTINCT user_id)');
+      expect(queries[1]).toContain('created_at >=');
       expect(queries[2]).toContain('created_at >=');
       expect(queries[3]).toContain('created_at >=');
     });

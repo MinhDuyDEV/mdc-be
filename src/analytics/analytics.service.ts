@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import {
@@ -20,6 +20,8 @@ type EntityEventMetrics = Pick<
 
 @Injectable()
 export class AnalyticsService {
+  private readonly logger = new Logger(AnalyticsService.name);
+
   constructor(private readonly prisma: PrismaService) {}
 
   async recordEvent(
@@ -125,6 +127,7 @@ export class AnalyticsService {
       case 'post_impression':
         return this.getPostImpressionMetrics(entityId, since7Days, since30Days);
       default:
+        this.logger.warn(`Unknown entity type: ${entityType}`);
         return { uniqueViewers: 0, last7Days: 0, last30Days: 0 };
     }
   }
@@ -139,6 +142,7 @@ export class AnalyticsService {
         SELECT COUNT(DISTINCT user_id) AS count
         FROM profile_views
         WHERE profile_id = ${profileId}::uuid
+          AND created_at >= ${since30Days}
       `,
       this.prisma.$queryRaw<CountResult[]>`
         SELECT COUNT(*) AS count
@@ -171,6 +175,7 @@ export class AnalyticsService {
         SELECT COUNT(DISTINCT user_id) AS count
         FROM company_views
         WHERE company_id = ${companyId}::uuid
+          AND created_at >= ${since30Days}
       `,
       this.prisma.$queryRaw<CountResult[]>`
         SELECT COUNT(*) AS count
@@ -203,6 +208,7 @@ export class AnalyticsService {
         SELECT COUNT(DISTINCT user_id) AS count
         FROM post_impressions
         WHERE post_id = ${postId}::uuid
+          AND created_at >= ${since30Days}
       `,
       this.prisma.$queryRaw<CountResult[]>`
         SELECT COUNT(*) AS count
