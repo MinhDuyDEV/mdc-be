@@ -53,7 +53,7 @@ jobs:
       COOKIE_SAME_SITE: lax
       BILLING_WEBHOOK_SECRET: test-billing-webhook-secret
 
-      steps:
+    steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
