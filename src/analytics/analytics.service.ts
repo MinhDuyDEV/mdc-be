@@ -1,20 +1,23 @@
-import { Injectable, Logger } from "@nestjs/common";
-import * as crypto from "crypto";
-import { Prisma } from "@prisma/client";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import { readCount, type CountResult } from "../common/db/bigint";
+import { Injectable, Logger } from '@nestjs/common';
+import * as crypto from 'crypto';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { readCount, type CountResult } from '../common/db/bigint';
 import {
   AnalyticsEventType,
   type DashboardMetricsDto,
   type EntityAnalyticsDto,
   type RecordEventDto,
-} from "./dto";
+} from './dto';
 
 const SLOT_COUNT = 20;
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
-type EntityEventMetrics = Pick<EntityAnalyticsDto, "uniqueViewers" | "last7Days" | "last30Days">;
+type EntityEventMetrics = Pick<
+  EntityAnalyticsDto,
+  'uniqueViewers' | 'last7Days' | 'last30Days'
+>;
 
 type EventWriteArgs = {
   targetId: string;
@@ -38,7 +41,10 @@ interface EntityConfig {
    * Insert one event row into the Prisma model that corresponds to this
    * entity type.
    */
-  readonly writeEvent: (tx: Prisma.TransactionClient, args: EventWriteArgs) => Promise<unknown>;
+  readonly writeEvent: (
+    tx: Prisma.TransactionClient,
+    args: EventWriteArgs,
+  ) => Promise<unknown>;
 }
 
 /**
@@ -52,24 +58,24 @@ interface EntityConfig {
  */
 const ENTITY_CONFIGS: Record<AnalyticsEventType, EntityConfig> = {
   [AnalyticsEventType.PROFILE_VIEW]: {
-    eventTable: "profile_views",
-    entityIdColumn: "profile_id",
+    eventTable: 'profile_views',
+    entityIdColumn: 'profile_id',
     writeEvent: (tx, { targetId, userId, ipHash, userAgent, source }) =>
       tx.profileView.create({
         data: { profileId: targetId, userId, ipHash, userAgent, source },
       }),
   },
   [AnalyticsEventType.COMPANY_VIEW]: {
-    eventTable: "company_views",
-    entityIdColumn: "company_id",
+    eventTable: 'company_views',
+    entityIdColumn: 'company_id',
     writeEvent: (tx, { targetId, userId, ipHash, userAgent, source }) =>
       tx.companyView.create({
         data: { companyId: targetId, userId, ipHash, userAgent, source },
       }),
   },
   [AnalyticsEventType.POST_IMPRESSION]: {
-    eventTable: "post_impressions",
-    entityIdColumn: "post_id",
+    eventTable: 'post_impressions',
+    entityIdColumn: 'post_id',
     writeEvent: (tx, { targetId, userId, ipHash, source }) =>
       tx.postImpression.create({
         data: { postId: targetId, userId, ipHash, source },
@@ -89,7 +95,7 @@ export class AnalyticsService {
     ip: string,
     userAgent: string,
   ): Promise<void> {
-    const ipHash = crypto.createHash("sha256").update(ip).digest("hex");
+    const ipHash = crypto.createHash('sha256').update(ip).digest('hex');
     const slot = Math.floor(Math.random() * SLOT_COUNT);
 
     await this.writeEventAsync(dto, userId, ipHash, userAgent, slot);

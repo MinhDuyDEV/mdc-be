@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CompanyRole, type Prisma } from '@prisma/client';
-import { slugify, withUniqueSlug } from '../common/strings/slug';
+import { withUniqueSlug } from '../common/strings/slug';
 import { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';

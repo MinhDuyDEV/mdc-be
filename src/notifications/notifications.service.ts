@@ -1,16 +1,19 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import type { CursorPaginationMeta } from "../common/pagination/cursor-pagination.dto";
-import { PrismaService } from "../infra/prisma/prisma.service";
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import type { CursorPaginationMeta } from '../common/pagination/cursor-pagination.dto';
+import { PrismaService } from '../infra/prisma/prisma.service';
 import {
   decodeCursor,
-  encodeCursor,
   buildCursorWhere,
   paginateRows,
-} from "../common/pagination/cursor";
+} from '../common/pagination/cursor';
 import {
   type NotificationResponseDto,
   toNotificationResponse,
-} from "./dto/notification.response.dto";
+} from './dto/notification.response.dto';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -33,21 +36,25 @@ export class NotificationsService {
    * List notifications for a user with cursor pagination.
    * Ordered by (createdAt DESC, id DESC). Limit clamped to [1, 50].
    */
-  async list(userId: string, cursor?: string, limit = 20): Promise<NotificationListResult> {
+  async list(
+    userId: string,
+    cursor?: string,
+    limit = 20,
+  ): Promise<NotificationListResult> {
     const clampedLimit = Math.min(Math.max(limit, 1), 50);
 
     // Build cursor WHERE clause only when a cursor is provided.
     const cursorWhere = cursor
       ? (() => {
           const decoded = decodeCursor(cursor);
-          if (!decoded) throw new BadRequestException("INVALID_CURSOR");
+          if (!decoded) throw new BadRequestException('INVALID_CURSOR');
           return buildCursorWhere(decoded);
         })()
       : {};
 
     const rows = await this.prisma.notification.findMany({
       where: { userId, ...cursorWhere },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: clampedLimit + 1,
     });
 
@@ -74,13 +81,16 @@ export class NotificationsService {
    * Returns 404 if not found OR belongs to another user — avoids existence oracle.
    * Idempotent: skips the UPDATE when readAt is already set.
    */
-  async markRead(userId: string, notificationId: string): Promise<NotificationResponseDto> {
+  async markRead(
+    userId: string,
+    notificationId: string,
+  ): Promise<NotificationResponseDto> {
     const notification = await this.prisma.notification.findFirst({
       where: { id: notificationId, userId },
     });
 
     if (!notification) {
-      throw new NotFoundException("NOTIFICATION_NOT_FOUND");
+      throw new NotFoundException('NOTIFICATION_NOT_FOUND');
     }
 
     // Already read — return as-is without touching the DB.

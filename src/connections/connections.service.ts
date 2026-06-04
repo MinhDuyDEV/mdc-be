@@ -12,7 +12,6 @@ import { ConnectionsPolicyService } from './connections-policy.service';
 import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 import {
   decodeCursor,
-  encodeCursor,
   buildCursorWhere,
   paginateRows,
 } from '../common/pagination/cursor';
