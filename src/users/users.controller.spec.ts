@@ -1,10 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ProfilesService } from '../profiles/profiles.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 
 describe('UsersController', () => {
   let controller: UsersController;
   let usersService: UsersService;
+  let profilesService: ProfilesService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -15,6 +17,11 @@ describe('UsersController', () => {
           useValue: {
             getOwnProfile: jest.fn(),
             updateOwnProfile: jest.fn(),
+          },
+        },
+        {
+          provide: ProfilesService,
+          useValue: {
             getPublicProfile: jest.fn(),
           },
         },
@@ -23,6 +30,7 @@ describe('UsersController', () => {
 
     controller = module.get<UsersController>(UsersController);
     usersService = module.get<UsersService>(UsersService);
+    profilesService = module.get<ProfilesService>(ProfilesService);
   });
 
   it('should be defined', () => {
@@ -54,11 +62,18 @@ describe('UsersController', () => {
   });
 
   describe('GET /users/:id', () => {
-    it('should call usersService.getPublicProfile', async () => {
-      jest.spyOn(usersService, 'getPublicProfile').mockResolvedValue({} as any);
+    it('should delegate to profilesService.getPublicProfile', async () => {
+      const profile = { id: 'profile-123', userId: 'user-123' };
+      jest
+        .spyOn(profilesService, 'getPublicProfile')
+        .mockResolvedValue(profile as any);
 
-      await controller.getUser('user-123');
-      expect(usersService.getPublicProfile).toHaveBeenCalledWith('user-123');
+      const result = await controller.getUser('user-123', undefined);
+      expect(result).toEqual(profile);
+      expect(profilesService.getPublicProfile).toHaveBeenCalledWith(
+        'user-123',
+        undefined,
+      );
     });
   });
 });

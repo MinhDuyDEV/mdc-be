@@ -47,26 +47,4 @@ export class UsersService {
 
     return updated;
   }
-
-  async getPublicProfile(userId: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        id: true,
-        displayName: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
-    if (!user || user.status === 'DELETED' || user.status === 'DISABLED') {
-      throw new NotFoundException('User not found');
-    }
-
-    return {
-      id: user.id,
-      displayName: user.displayName,
-      createdAt: user.createdAt,
-    };
-  }
 }

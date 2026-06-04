@@ -80,58 +80,7 @@ describe('UsersService', () => {
   });
 
   describe('getPublicProfile', () => {
-    it('should return public fields for active user', async () => {
-      const userRecord = {
-        id: 'user-123',
-        displayName: 'Public Name',
-        status: 'ACTIVE' as const,
-        createdAt: new Date(),
-      };
-
-      jest
-        .spyOn(prisma.user, 'findUnique')
-        .mockResolvedValue(userRecord as any);
-
-      const result = await service.getPublicProfile('user-123');
-      expect(result).toEqual({
-        id: 'user-123',
-        displayName: 'Public Name',
-        createdAt: userRecord.createdAt,
-      });
-    });
-
-    it('should throw NotFoundException for deleted user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        displayName: 'Deleted',
-        status: 'DELETED' as const,
-        createdAt: new Date(),
-      } as any);
-
-      await expect(service.getPublicProfile('user-123')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should throw NotFoundException for disabled user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        displayName: 'Disabled',
-        status: 'DISABLED' as const,
-        createdAt: new Date(),
-      } as any);
-
-      await expect(service.getPublicProfile('user-123')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should throw NotFoundException for non-existent user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(null);
-
-      await expect(service.getPublicProfile('nonexistent')).rejects.toThrow(
-        NotFoundException,
-      );
-    });
+    // Public-profile lookup has been delegated to ProfilesService. See
+    // src/profiles/profiles.service.ts and the users.controller tests.
   });
 });
