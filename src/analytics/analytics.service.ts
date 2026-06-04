@@ -1,5 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
 import * as crypto from "crypto";
+import { Prisma } from "@prisma/client";
 import { PrismaService } from "../infra/prisma/prisma.service";
 import { readCount, type CountResult } from "../common/db/bigint";
 import {
@@ -14,6 +15,67 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 type EntityEventMetrics = Pick<EntityAnalyticsDto, "uniqueViewers" | "last7Days" | "last30Days">;
+
+type EventWriteArgs = {
+  targetId: string;
+  userId: string | null;
+  ipHash: string;
+  userAgent: string;
+  source?: string;
+};
+
+/**
+ * Per-entity-type persistence configuration.
+ *
+ * The `eventTable` and `entityIdColumn` strings are *hardcoded constants*
+ * (never user input) and are safe to pass through `Prisma.raw()` for
+ * identifier interpolation.
+ */
+interface EntityConfig {
+  readonly eventTable: string;
+  readonly entityIdColumn: string;
+  /**
+   * Insert one event row into the Prisma model that corresponds to this
+   * entity type.
+   */
+  readonly writeEvent: (tx: Prisma.TransactionClient, args: EventWriteArgs) => Promise<unknown>;
+}
+
+/**
+ * Typed map from `AnalyticsEventType` → its persistence configuration.
+ *
+ * Adding a new value to `AnalyticsEventType` causes a **compile-time** error
+ * because this `Record` literal will miss the new key. The old `switch`
+ * silently fell through to the `default: return zeros` branch on a typo
+ * (`'profile_views'` vs `'profile_view'`) — that class of bug is now
+ * structurally impossible.
+ */
+const ENTITY_CONFIGS: Record<AnalyticsEventType, EntityConfig> = {
+  [AnalyticsEventType.PROFILE_VIEW]: {
+    eventTable: "profile_views",
+    entityIdColumn: "profile_id",
+    writeEvent: (tx, { targetId, userId, ipHash, userAgent, source }) =>
+      tx.profileView.create({
+        data: { profileId: targetId, userId, ipHash, userAgent, source },
+      }),
+  },
+  [AnalyticsEventType.COMPANY_VIEW]: {
+    eventTable: "company_views",
+    entityIdColumn: "company_id",
+    writeEvent: (tx, { targetId, userId, ipHash, userAgent, source }) =>
+      tx.companyView.create({
+        data: { companyId: targetId, userId, ipHash, userAgent, source },
+      }),
+  },
+  [AnalyticsEventType.POST_IMPRESSION]: {
+    eventTable: "post_impressions",
+    entityIdColumn: "post_id",
+    writeEvent: (tx, { targetId, userId, ipHash, source }) =>
+      tx.postImpression.create({
+        data: { postId: targetId, userId, ipHash, source },
+      }),
+  },
+};
 
 @Injectable()
 export class AnalyticsService {
@@ -40,43 +102,18 @@ export class AnalyticsService {
     userAgent: string,
     slot: number,
   ): Promise<void> {
+    const config = ENTITY_CONFIGS[dto.eventType];
+    const writeArgs: EventWriteArgs = {
+      targetId: dto.targetId,
+      userId,
+      ipHash,
+      userAgent,
+      ...(dto.source !== undefined ? { source: dto.source } : {}),
+    };
+
     // Wrap event row insert + counter upsert in a transaction to prevent drift
     await this.prisma.$transaction(async (tx) => {
-      switch (dto.eventType) {
-        case AnalyticsEventType.PROFILE_VIEW:
-          await tx.profileView.create({
-            data: {
-              profileId: dto.targetId,
-              userId,
-              ipHash,
-              userAgent,
-              source: dto.source,
-            },
-          });
-          break;
-        case AnalyticsEventType.COMPANY_VIEW:
-          await tx.companyView.create({
-            data: {
-              companyId: dto.targetId,
-              userId,
-              ipHash,
-              userAgent,
-              source: dto.source,
-            },
-          });
-          break;
-        case AnalyticsEventType.POST_IMPRESSION:
-          await tx.postImpression.create({
-            data: {
-              postId: dto.targetId,
-              userId,
-              ipHash,
-              source: dto.source,
-            },
-          });
-          break;
-      }
-
+      await config.writeEvent(tx, writeArgs);
       await tx.$executeRaw`
         INSERT INTO slotted_counters (entity_type, entity_id, slot, count)
         VALUES (${dto.eventType}, ${dto.targetId}::uuid, ${slot}, 1)
@@ -86,7 +123,10 @@ export class AnalyticsService {
     });
   }
 
-  async getEntityAnalytics(entityType: string, entityId: string): Promise<EntityAnalyticsDto> {
+  async getEntityAnalytics(
+    entityType: AnalyticsEventType,
+    entityId: string,
+  ): Promise<EntityAnalyticsDto> {
     const [totalResult, eventMetrics] = await Promise.all([
       this.prisma.$queryRaw<{ total: bigint }[]>`
         SELECT SUM(count) as total
@@ -105,115 +145,42 @@ export class AnalyticsService {
     };
   }
 
+  /**
+   * Fetch the (uniqueViewers, last7Days, last30Days) triple for the given
+   * entity type. Replaces the three near-identical `get*Metrics` methods
+   * that previously existed for profile / company / post entities.
+   */
   private async getEntityEventMetrics(
-    entityType: string,
+    entityType: AnalyticsEventType,
     entityId: string,
   ): Promise<EntityEventMetrics> {
+    const config = ENTITY_CONFIGS[entityType];
     const now = Date.now();
     const since7Days = new Date(now - SEVEN_DAYS_MS);
     const since30Days = new Date(now - THIRTY_DAYS_MS);
 
-    switch (entityType) {
-      case "profile_view":
-        return this.getProfileViewMetrics(entityId, since7Days, since30Days);
-      case "company_view":
-        return this.getCompanyViewMetrics(entityId, since7Days, since30Days);
-      case "post_impression":
-        return this.getPostImpressionMetrics(entityId, since7Days, since30Days);
-      default:
-        this.logger.warn(`Unknown entity type: ${entityType}`);
-        return { uniqueViewers: 0, last7Days: 0, last30Days: 0 };
-    }
-  }
+    // Prisma.raw is safe here: both arguments are hardcoded constants from
+    // ENTITY_CONFIGS, never user input.
+    const table = Prisma.raw(config.eventTable);
+    const idCol = Prisma.raw(config.entityIdColumn);
 
-  private async getProfileViewMetrics(
-    profileId: string,
-    since7Days: Date,
-    since30Days: Date,
-  ): Promise<EntityEventMetrics> {
     const [uniqueViewers, last7Days, last30Days] = await Promise.all([
       this.prisma.$queryRaw<CountResult[]>`
         SELECT COUNT(DISTINCT user_id) AS count
-        FROM profile_views
-        WHERE profile_id = ${profileId}::uuid
+        FROM ${table}
+        WHERE ${idCol} = ${entityId}::uuid
           AND created_at >= ${since30Days}
       `,
       this.prisma.$queryRaw<CountResult[]>`
         SELECT COUNT(*) AS count
-        FROM profile_views
-        WHERE profile_id = ${profileId}::uuid
+        FROM ${table}
+        WHERE ${idCol} = ${entityId}::uuid
           AND created_at >= ${since7Days}
       `,
       this.prisma.$queryRaw<CountResult[]>`
         SELECT COUNT(*) AS count
-        FROM profile_views
-        WHERE profile_id = ${profileId}::uuid
-          AND created_at >= ${since30Days}
-      `,
-    ]);
-
-    return {
-      uniqueViewers: readCount(uniqueViewers),
-      last7Days: readCount(last7Days),
-      last30Days: readCount(last30Days),
-    };
-  }
-
-  private async getCompanyViewMetrics(
-    companyId: string,
-    since7Days: Date,
-    since30Days: Date,
-  ): Promise<EntityEventMetrics> {
-    const [uniqueViewers, last7Days, last30Days] = await Promise.all([
-      this.prisma.$queryRaw<CountResult[]>`
-        SELECT COUNT(DISTINCT user_id) AS count
-        FROM company_views
-        WHERE company_id = ${companyId}::uuid
-          AND created_at >= ${since30Days}
-      `,
-      this.prisma.$queryRaw<CountResult[]>`
-        SELECT COUNT(*) AS count
-        FROM company_views
-        WHERE company_id = ${companyId}::uuid
-          AND created_at >= ${since7Days}
-      `,
-      this.prisma.$queryRaw<CountResult[]>`
-        SELECT COUNT(*) AS count
-        FROM company_views
-        WHERE company_id = ${companyId}::uuid
-          AND created_at >= ${since30Days}
-      `,
-    ]);
-
-    return {
-      uniqueViewers: readCount(uniqueViewers),
-      last7Days: readCount(last7Days),
-      last30Days: readCount(last30Days),
-    };
-  }
-
-  private async getPostImpressionMetrics(
-    postId: string,
-    since7Days: Date,
-    since30Days: Date,
-  ): Promise<EntityEventMetrics> {
-    const [uniqueViewers, last7Days, last30Days] = await Promise.all([
-      this.prisma.$queryRaw<CountResult[]>`
-        SELECT COUNT(DISTINCT user_id) AS count
-        FROM post_impressions
-        WHERE post_id = ${postId}::uuid
-          AND created_at >= ${since30Days}
-      `,
-      this.prisma.$queryRaw<CountResult[]>`
-        SELECT COUNT(*) AS count
-        FROM post_impressions
-        WHERE post_id = ${postId}::uuid
-          AND created_at >= ${since7Days}
-      `,
-      this.prisma.$queryRaw<CountResult[]>`
-        SELECT COUNT(*) AS count
-        FROM post_impressions
-        WHERE post_id = ${postId}::uuid
+        FROM ${table}
+        WHERE ${idCol} = ${entityId}::uuid
           AND created_at >= ${since30Days}
       `,
     ]);
