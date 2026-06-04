@@ -1,101 +1,73 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-23T10:30:00Z | Updated: 2026-05-23T10:30:00Z -->
 
-# connections/
+# Connections Domain
 
 ## Purpose
 
-Professional network connections module managing connection requests, acceptances, and relationship status between users. Implements LinkedIn-style connection workflow with pending/accepted/blocked states.
+The Connections domain manages professional relationships between users: connection requests, follows, and blocks. It implements LinkedIn-style networking with bidirectional connections (mutual acceptance required), unidirectional follows (no acceptance needed), and blocking (prevents all interactions).
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `connections.module.ts` | NestJS module configuration with ConnectionsController, ConnectionsService, and ConnectionsPolicyService |
-| `connections.controller.ts` | HTTP endpoints for sending, accepting, rejecting connection requests |
-| `connections.controller.spec.ts` | Unit tests for ConnectionsController |
-| `connections.service.ts` | Business logic for connection lifecycle management |
-| `connections.service.spec.ts` | Unit tests for ConnectionsService |
-| `connections-policy.service.ts` | Authorization policies for connection operations |
-| `connections-policy.service.spec.ts` | Unit tests for policy service |
+- **connections.service.ts**: Core business logic for connections, follows, and blocks. Implements idempotent operations, block enforcement, and automatic cleanup (blocking removes connections/follows).
+- **connections-policy.service.ts**: Relationship query helpers (`areConnected`, `isBlocked`, `isFollowing`). Used by other domains to enforce visibility rules.
+- **connections.controller.ts**: REST endpoints for connection lifecycle (send/accept/decline/remove requests, follow/unfollow, block/unblock).
+- **connections.module.ts**: Module definition. Exports `ConnectionsService` and `ConnectionsPolicyService` for use by other domains.
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `dto/` | Data transfer objects for connection request/response payloads |
+- **dto/**: Request/response DTOs
+  - `send-connection-request.dto.ts`: Connection request payload
+  - `connection-response.dto.ts`: Connection response shape
 
 ## For AI Agents
 
-### Working In This Directory
+### Working Instructions
 
-- **Bidirectional relationships** — Connections are symmetric; if A connects to B, B is connected to A
-- **Duplicate prevention** — Prevent duplicate connection requests between the same users
-- **Privacy controls** — Users can block connection requests from specific users
-- **Notifications** — Trigger notifications on connection requests and acceptances
-- **Mutual connections** — Support queries for mutual connections between users
+1. **Connection requests are idempotent**: Sending a duplicate request throws `CONNECTION_ALREADY_EXISTS`. Accepting/declining requires `PENDING` status.
+2. **Blocks are bidirectional**: If A blocks B, both A and B cannot see each other's content. Check blocks before allowing any interaction.
+3. **Block side effects**: Creating a block automatically removes existing connections (both directions) and deactivates follows (both directions). This happens in a single transaction.
+4. **Follows are unidirectional**: A can follow B without B's approval. Follows are idempotent (reactivate if exists).
+5. **Cursor pagination**: All list endpoints use `(createdAt DESC, id DESC)` keyset pagination with base64-encoded cursors.
+6. **Outbox pattern**: Connection lifecycle events (`ConnectionRequested`, `ConnectionAccepted`, `UserBlocked`) are emitted via `OutboxService` for downstream processing.
 
 ### Testing Requirements
 
-```bash
-# Unit tests
-npm test -- connections.service.spec.ts
-npm test -- connections-policy.service.spec.ts
-
-# E2E tests
-npm run test:e2e -- connections.e2e-spec.ts
-```
+- Test block enforcement: blocked users cannot send connection requests or follows
+- Test idempotency: duplicate connection requests, duplicate follows, duplicate blocks
+- Test block side effects: verify connections and follows are removed when blocking
+- Test cursor pagination: verify `hasNextPage` and `nextCursor` correctness
+- Test bidirectional connection queries: both requester and addressee can list their connections
 
 ### Common Patterns
 
-**Connection Request:**
-```typescript
-@Post('request')
-async sendRequest(
-  @CurrentUser() user: User,
-  @Body() dto: SendConnectionRequestDto,
-) {
-  // Check if already connected or request pending
-  const existing = await this.connectionsService.findConnection(
-    user.id,
-    dto.targetUserId,
-  );
-  if (existing) {
-    throw new ConflictException('Connection already exists');
-  }
-
-  return this.connectionsService.sendRequest(user.id, dto.targetUserId);
-}
-```
-
-**Authorization Policy:**
-```typescript
-async canSendRequest(userId: string, targetUserId: string): Promise<boolean> {
-  // Cannot send request to self
-  if (userId === targetUserId) return false;
-
-  // Check if target has blocked sender
-  const blocked = await this.isBlocked(targetUserId, userId);
-  if (blocked) return false;
-
-  return true;
-}
-```
+- **Idempotency keys**: `Connection:sendRequest` and `Connection:blockUser` use `IdempotencyService` to prevent duplicate operations
+- **Block checks**: Always call `ConnectionsPolicyService.isBlocked()` before allowing interactions between users
+- **Transaction boundaries**: Block creation, connection acceptance, and connection requests all use `$transaction` to ensure atomicity
+- **Cursor encoding**: Use `encodeCursor(createdAt, id)` and `decodeCursor(cursor)` helpers for pagination
 
 ## Dependencies
 
-### Internal
+### Internal (Domain Imports)
 
-- `src/auth/` — Authentication and current user context
-- `src/users/` — User profile information
-- `src/notifications/` — Connection request notifications
-- `src/common/` — Response formatting, error handling, validation
-- `src/infra/prisma/` — Database access
+- **outbox**: Event emission for connection lifecycle events
 
-### External
+### External (Infrastructure)
 
-- `@nestjs/common` — Controller, Injectable decorators
-- `class-validator` — DTO validation
-- `@prisma/client` — Database models
+- **infra/prisma**: Database access via `PrismaService`
+- **@prisma/client**: `ConnectionStatus`, `FollowStatus` enums
 
-<!-- MANUAL: -->
+### Allowed Imports (per eslint.config.mjs)
+
+This domain can import from: `connections` (self), `outbox`
+
+## Database Schema
+
+- **Connection**: Tracks connection requests and their status (PENDING, ACCEPTED, DECLINED, REMOVED)
+- **Follow**: Tracks follow relationships with status (ACTIVE, INACTIVE)
+- **Block**: Tracks block relationships (no status, existence = blocked)
+
+## Events Emitted
+
+- `ConnectionRequested`: When a connection request is sent
+- `ConnectionAccepted`: When a connection request is accepted
+- `UserBlocked`: When a user blocks another user

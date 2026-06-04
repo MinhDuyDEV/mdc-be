@@ -1,83 +1,86 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-23T10:30:00Z | Updated: 2026-05-23T10:30:00Z -->
 
-# admin/
+# Admin Domain
 
 ## Purpose
 
-Administrative operations module providing privileged endpoints for platform management. Handles user management, content moderation actions, system configuration, and administrative reporting. Restricted to users with admin roles.
+Administrative operations for platform management. Provides privileged endpoints for managing users, companies, jobs, and outbox dead-letter queue operations. All routes require admin role and specific permissions.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `admin.module.ts` | NestJS module configuration with AdminController and AdminService |
-| `admin.controller.ts` | HTTP endpoints for admin operations (user management, moderation, reports) |
-| `admin.service.ts` | Business logic for administrative actions with authorization checks |
-| `admin.service.spec.ts` | Unit tests for AdminService |
-| `index.ts` | Barrel export for public API |
+- **admin.module.ts** - Module definition importing InfraModule, AuthModule, and OutboxCoreModule
+- **admin.controller.ts** - REST controller with role-based guards (`@Roles('admin')` + permission decorators)
+- **admin.service.ts** - Service layer for admin operations including user status updates, company verification, and dead-letter replay
+- **dto/** - Request/response DTOs for admin operations
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `dto/` | Data transfer objects for admin request/response payloads |
+- **dto/** - Data transfer objects for admin endpoints
 
 ## For AI Agents
 
-### Working In This Directory
+### Working Instructions
 
-- **Authorization required** — All admin endpoints must verify admin role via guards
-- **Audit logging** — Log all administrative actions to AuditLog table
-- **Dangerous operations** — User deletion, content removal, and account suspension require extra validation
-- **Rate limiting** — Apply stricter rate limits to admin endpoints to prevent abuse
-- **Response format** — Follow standard API envelope: `{ data: { ... } }`
+1. **Authorization Model**: All admin routes require:
+   - `@UseGuards(AuthGuard, RolesGuard)` at controller level
+   - `@Roles('admin')` at controller level
+   - `@Permissions(...)` at method level for granular access control
+   - Available permissions: `MANAGE_USERS`, `MANAGE_COMPANIES`, `MANAGE_JOBS`, `MANAGE_ADMINS`
+
+2. **Audit Logging**: Every admin action MUST create an audit log entry with:
+   - `actorUserId`: the admin performing the action
+   - `action`: descriptive action name (e.g., `admin.user.status_change`)
+   - `entityType` and `entityId`: the affected entity
+   - `metadata`: relevant context (reason, notes, etc.)
+
+3. **User Management**:
+   - List users with optional status filter and search (email/displayName)
+   - Update user status (ACTIVE, SUSPENDED, etc.)
+   - When suspending users, revoke all refresh tokens in the same transaction
+
+4. **Company Management**:
+   - List companies with optional search
+   - Verify companies via `CompanyVerification` upsert + `Company.verified` sync
+   - Keep `CompanyVerification` and `Company.verified/verifiedAt` in sync
+
+5. **Dead-Letter Queue**:
+   - List dead-letter events with optional eventType filter and cursor pagination
+   - Replay dead-letter events via `DeadLetterService.replay()`
+   - Always audit-log replay operations
 
 ### Testing Requirements
 
-```bash
-# Unit tests
-npm test -- admin.service.spec.ts
-
-# E2E tests (if applicable)
-npm run test:e2e -- admin.e2e-spec.ts
-```
+- Mock `PrismaService` for all database operations
+- Mock `DeadLetterService` for outbox replay operations
+- Test permission guards (verify 403 when permission missing)
+- Test role guards (verify 403 when not admin)
+- Test audit log creation for all mutating operations
+- Test token revocation when suspending users
+- Test company verification sync (both CompanyVerification and Company records)
 
 ### Common Patterns
 
-**Admin Guard:**
-```typescript
-@UseGuards(AuthGuard, AdminGuard)
-@Controller('admin')
-export class AdminController {
-  // All routes require admin role
-}
-```
-
-**Audit Logging:**
-```typescript
-await this.auditLogService.log({
-  actorUserId: currentUser.id,
-  action: 'USER_SUSPENDED',
-  entityType: 'User',
-  entityId: targetUserId,
-  metadata: { reason, duration },
-});
-```
+- **Pagination**: Use cursor-based pagination with `take: 51` pattern (return 50, check hasMore)
+- **Search**: Use `contains` with `mode: 'insensitive'` for case-insensitive search
+- **Transactions**: Wrap multi-table updates in `prisma.$transaction()`
+- **Idempotency**: Company verification uses upsert to handle repeated verification requests
 
 ## Dependencies
 
-### Internal
+### Internal (Allowed by eslint.config.mjs)
 
-- `src/auth/` — Authentication and authorization guards
-- `src/users/` — User management operations
-- `src/common/` — Response formatting, error handling, validation
-- `src/infra/prisma/` — Database access via PrismaService
+- **auth** - AuthGuard, role/permission decorators
+- **outbox** - DeadLetterService for replaying failed events
 
 ### External
 
-- `@nestjs/common` — Controller, Injectable, UseGuards decorators
-- `class-validator` — DTO validation
-- `@prisma/client` — Database models
+- **@nestjs/common** - Controller, service, guards, decorators
+- **@prisma/client** - UserStatus enum, Prisma types
+- **infra** - PrismaService for database access
 
-<!-- MANUAL: -->
+## Notes
+
+- Admin routes are prefixed with `/admin` except for dead-letter operations
+- All list operations return `{ data, meta }` structure with pagination metadata
+- User status changes that result in SUSPENDED status automatically revoke all active refresh tokens
+- Company verification creates/updates both `CompanyVerification` and `Company` records atomically

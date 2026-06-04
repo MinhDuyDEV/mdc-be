@@ -1,122 +1,207 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-23T10:30:00Z | Updated: 2026-05-23T10:30:00Z -->
 
-# notifications/
+# Notifications Module
 
 ## Purpose
 
-Notification system managing in-app notifications, push notifications, and user notification preferences. Handles notification creation, delivery, read status, and user settings.
+The Notifications module manages in-app notifications for users. It provides cursor-based pagination for notification lists, tracks read status, and supports notification preferences. Notifications are created by outbox event processors and consumed via REST API.
+
+**Key responsibilities:**
+- Store and retrieve user notifications with cursor pagination
+- Track read status (readAt timestamp) for each notification
+- Provide unread count queries (optimized with partial index)
+- Support bulk mark-as-read operations
+- Manage user notification preferences (email, push, in-app toggles)
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `notifications.module.ts` | NestJS module configuration with NotificationsController, NotificationsService, and NotificationPreferenceController |
-| `notifications.controller.ts` | HTTP endpoints for retrieving and managing notifications |
-| `notifications.controller.spec.ts` | Unit tests for NotificationsController |
-| `notifications.service.ts` | Business logic for notification creation and delivery |
-| `notifications.service.spec.ts` | Unit tests for NotificationsService |
-| `notification-preference.controller.ts` | HTTP endpoints for managing notification preferences |
-| `notification-preference.service.ts` | Business logic for user notification settings |
+### Core Services
+
+- **notifications.service.ts** - Main service for notification operations
+  - `list()` - Cursor-paginated notification list (ordered by createdAt DESC, id DESC)
+  - `unreadCount()` - Count unread notifications (leverages partial index)
+  - `markRead()` - Mark single notification as read (idempotent)
+  - `markAllRead()` - Bulk mark all unread notifications as read
+
+- **notification-preference.service.ts** - User notification preference management
+  - Manages email, push, and in-app notification toggles per notification type
+
+### Controllers
+
+- **notifications.controller.ts** - REST API for notifications
+  - `GET /notifications` - List notifications (cursor pagination)
+  - `GET /notifications/unread-count` - Get unread count
+  - `PATCH /notifications/:id/read` - Mark single notification as read
+  - `PATCH /notifications/read-all` - Mark all notifications as read
+
+- **notification-preference.controller.ts** - REST API for preferences
+  - `GET /notification-preferences` - Get user preferences
+  - `PATCH /notification-preferences` - Update preferences
+
+### Configuration
+
+- **notifications.module.ts** - Module definition
+  - Imports: InfraModule
+  - Exports: NotificationsService
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `dto/` | Data transfer objects for notification request/response payloads |
+### dto/
+
+Input validation and response DTOs:
+- **list-notifications-query.dto.ts** - Query params for list endpoint (cursor, limit)
+- **notification.response.dto.ts** - Notification response format with toNotificationResponse mapper
+- **update-notification-preference.dto.ts** - Preference update request
 
 ## For AI Agents
 
-### Working In This Directory
+### Working with Notifications
 
-- **Real-time delivery** — Integrate with WebSocket gateway for instant notification delivery
-- **Notification types** — Support various types: connection requests, messages, post reactions, job applications, etc.
-- **User preferences** — Respect user notification settings (email, push, in-app)
-- **Read status** — Track which notifications have been read
-- **Batching** — Group similar notifications to reduce noise
-- **Unread count** — Provide efficient queries for unread notification counts
+**List notifications flow:**
+1. Client calls `GET /notifications?cursor=...&limit=20`
+2. Service decodes cursor to (createdAt, id) pair
+3. Service builds WHERE clause: `createdAt < cursor.createdAt OR (createdAt = cursor.createdAt AND id < cursor.id)`
+4. Service fetches limit+1 rows to detect hasNextPage
+5. Service encodes nextCursor from last item: `base64url(createdAt:id)`
+
+**Mark read flow:**
+1. Client calls `PATCH /notifications/:id/read`
+2. Service validates notification belongs to user (404 if not found or wrong user)
+3. Service checks if already read (skip UPDATE if readAt is set)
+4. Service updates readAt to current timestamp
+5. Idempotent: multiple calls return same result without extra DB writes
+
+**Unread count:**
+1. Client calls `GET /notifications/unread-count`
+2. Service uses `COUNT(*) WHERE userId = ? AND readAt IS NULL`
+3. Query leverages partial index `notifications_unread_idx` for performance
 
 ### Testing Requirements
 
-```bash
-# Unit tests
-npm test -- notifications.service.spec.ts
+**Unit tests must cover:**
+- Cursor encoding/decoding (base64url format)
+- Pagination with valid/invalid cursors
+- hasNextPage detection (limit+1 fetch strategy)
+- Mark read idempotency (already-read notifications)
+- Unread count accuracy
+- Bulk mark-all-read operation
+- 404 for notifications belonging to other users
 
-# E2E tests
-npm run test:e2e -- notifications.e2e-spec.ts
-```
+**Integration tests must verify:**
+- Full pagination flow (first page → next page → last page)
+- Cursor stability (same cursor returns same results)
+- Read status updates (unread count decreases)
+- Notification ordering (createdAt DESC, id DESC)
+- Partial index usage for unread count queries
 
 ### Common Patterns
 
-**Create Notification:**
+**Cursor pagination:**
 ```typescript
-async createNotification(data: CreateNotificationData) {
-  // Check user preferences
-  const preferences = await this.getPreferences(data.userId);
-  if (!preferences.enabled[data.type]) {
-    return; // User has disabled this notification type
-  }
-  
-  const notification = await this.prisma.notification.create({
-    data: {
-      userId: data.userId,
-      type: data.type,
-      title: data.title,
-      body: data.body,
-      metadata: data.metadata,
-    },
-  });
-  
-  // Emit real-time event
-  this.realtimeGateway.emitToUser(data.userId, 'notification:new', notification);
-  
-  // Send push notification if enabled
-  if (preferences.push[data.type]) {
-    await this.pushService.send(data.userId, notification);
-  }
-  
-  return notification;
+// Encode cursor: base64url(createdAt:id)
+function encodeCursor(createdAt: Date, id: string): string {
+  return Buffer.from(`${createdAt.toISOString()}:${id}`).toString('base64url');
 }
+
+// Decode cursor
+function decodeCursor(cursor: string): { createdAt: Date; id: string } {
+  const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+  const lastColon = decoded.lastIndexOf(':');
+  const createdAtStr = decoded.substring(0, lastColon);
+  const id = decoded.substring(lastColon + 1);
+  return { createdAt: new Date(createdAtStr), id };
+}
+
+// Build WHERE clause
+const cursorWhere = cursor ? {
+  OR: [
+    { createdAt: { lt: cursorCreatedAt } },
+    { createdAt: cursorCreatedAt, id: { lt: cursorId } },
+  ],
+} : {};
 ```
 
-**Get Notifications:**
+**Idempotent mark read:**
 ```typescript
-@Get()
-async getNotifications(
-  @CurrentUser() user: User,
-  @Query() dto: PaginationDto,
-) {
-  const notifications = await this.notificationsService.getForUser(
-    user.id,
-    dto.cursor,
-    dto.limit,
-  );
-  
-  const unreadCount = await this.notificationsService.getUnreadCount(user.id);
-  
-  return {
-    data: notifications,
-    meta: {
-      nextCursor: notifications[notifications.length - 1]?.id,
-      unreadCount,
-    },
-  };
+const notification = await this.prisma.notification.findFirst({
+  where: { id: notificationId, userId },
+});
+
+if (!notification) {
+  throw new NotFoundException('NOTIFICATION_NOT_FOUND');
 }
+
+// Already read — return as-is without touching the DB
+if (notification.readAt !== null) {
+  return toNotificationResponse(notification);
+}
+
+const updated = await this.prisma.notification.update({
+  where: { id: notificationId },
+  data: { readAt: new Date() },
+});
 ```
+
+**Unread count with partial index:**
+```typescript
+// Leverages notifications_unread_idx (userId WHERE readAt IS NULL)
+return this.prisma.notification.count({
+  where: { userId, readAt: null },
+});
+```
+
+### Notification Types
+
+Notifications are created by outbox event processors for:
+- **Connection requests** - ConnectionRequested, ConnectionAccepted
+- **Application updates** - ApplicationSubmitted, ApplicationStatusChanged, ApplicationNoteAdded
+- **Post interactions** - CommentAdded, ReactionAdded, MentionCreated
+- **Messaging** - MessageSent (via MessagingProcessor)
+- **Recruiting** - RecruiterSeatAllocated
+- **Blocking** - UserBlocked
+
+### Cursor Format
+
+- **Encoding**: `base64url(createdAt.toISOString():id)`
+- **Example**: `MjAyNi0wNS0yN1QxMDozMDowMC4wMDBaOjEyMzQ1Njc4LTkwYWItY2RlZi0xMjM0LTU2Nzg5MGFiY2RlZg==`
+- **Decoding**: Split on last `:` to separate ISO date from UUID
+- **Error handling**: BadRequestException('INVALID_CURSOR') for malformed cursors
+
+### Pagination Limits
+
+- **Default limit**: 20 notifications per page
+- **Min limit**: 1
+- **Max limit**: 50 (clamped in service)
+- **hasNextPage**: Detected by fetching limit+1 rows
+
+### Error Handling
+
+- `NotFoundException('NOTIFICATION_NOT_FOUND')` - Notification doesn't exist or belongs to another user
+- `BadRequestException('INVALID_CURSOR')` - Malformed cursor string
 
 ## Dependencies
 
-### Internal
+### Internal Modules
+- **infra/prisma** - Database access (Notification table)
+- **common/auth** - Authentication (CurrentUser decorator)
+- **common/pagination** - Cursor pagination types (CursorPaginationMeta)
 
-- `src/auth/` — Authentication and current user context
-- `src/realtime/` — WebSocket integration for live notifications
-- `src/common/` — Response formatting, pagination, validation
-- `src/infra/prisma/` — Database access
+### External Dependencies
+- **@nestjs/common** - NestJS framework
+- **@prisma/client** - Database client
 
-### External
+### Database Schema
+- **notifications** - Stores notification records (userId, type, title, body, metadata, readAt, createdAt)
+- **notification_preferences** - User preferences for notification channels (email, push, in-app)
 
-- `@nestjs/common` — Controller, Injectable decorators
-- `class-validator` — DTO validation
-- `@prisma/client` — Database models
+### Indexes
+- **notifications_unread_idx** - Partial index on (userId) WHERE readAt IS NULL (optimizes unread count queries)
+- **notifications_user_created_idx** - Index on (userId, createdAt DESC, id DESC) for pagination
 
-<!-- MANUAL: -->
+### Outbox Events Emitted
+- None (notifications are a leaf domain)
+
+### Outbox Events Consumed
+- Notifications are created by outbox event processors:
+  - **NotificationProcessor** - Processes application, connection, post, and recruiting events
+  - **MessagingProcessor** - Processes MessageSent events

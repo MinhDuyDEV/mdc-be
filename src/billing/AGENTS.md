@@ -1,103 +1,126 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-23T10:30:00Z | Updated: 2026-05-23T10:30:00Z -->
 
-# billing/
+# Billing Domain
 
 ## Purpose
 
-Billing and subscription management module handling premium features, seat-based pricing, credit systems, and payment processing. Implements entitlement checks, usage tracking, and webhook handling for payment providers.
+Subscription and entitlement management for the platform. Handles billing plans, company subscriptions, invoices, entitlement grants, and webhook processing for payment provider integration.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `billing.module.ts` | NestJS module configuration with BillingController and BillingService |
-| `billing.controller.ts` | HTTP endpoints for subscription management and billing operations |
-| `billing.service.ts` | Business logic for subscriptions, credits, and entitlements |
-| `billing.service.spec.ts` | Unit tests for BillingService |
-| `billing.constants.ts` | Constants for plan limits, pricing, and feature flags |
+- **billing.module.ts** - Module definition importing InfraModule and OutboxCoreModule, exporting BillingService and EntitlementsService
+- **billing.controller.ts** - REST controller with public plan routes and company-scoped subscription/invoice routes
+- **billing.service.ts** - Core billing logic for plans, subscriptions, invoices, and entitlement grants
+- **billing.constants.ts** - Feature key to entitlement type mapping (`FEATURE_KEY_TO_ENTITLEMENT`)
+- **entitlements/** - Entitlement checking service and guard for feature access control
+- **webhooks/** - Webhook controller, service, and signature verification guard
+- **ports/** - Port interfaces for external payment provider integration
+- **dto/** - Request/response DTOs for billing operations
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `dto/` | Data transfer objects for billing request/response payloads |
-| `entitlements/` | Entitlement checking logic for feature access control |
-| `ports/` | Port interfaces for payment provider abstraction |
-| `webhooks/` | Webhook handlers for payment provider events |
+- **dto/** - Data transfer objects for plans, subscriptions, invoices
+- **entitlements/** - Entitlement service, guard, and decorator for feature access control
+- **webhooks/** - Webhook handling for payment provider events
+- **ports/** - Port interfaces for payment provider abstraction
 
 ## For AI Agents
 
-### Working In This Directory
+### Working Instructions
 
-- **Atomic operations** — Use database transactions for credit deductions and seat allocations
-- **Idempotency** — All billing operations must be idempotent (use idempotency keys)
-- **Entitlement checks** — Verify feature access before allowing operations
-- **Webhook security** — Validate webhook signatures from payment providers
-- **Audit trail** — Log all billing events for compliance and debugging
-- **Credit atomicity** — Ensure credit balance never goes negative
+1. **Billing Plans**:
+   - Plans define features as JSON object: `{ [featureKey: string]: number }`
+   - Feature values must be non-negative numbers (validated at runtime)
+   - Plans have `isPublic` and `isActive` flags
+   - Admin-only routes for creating/updating plans
+   - Public routes for listing/viewing plans (filtered for non-admins)
+
+2. **Subscription Creation**:
+   - Requires email verification (`user.emailVerifiedAt` must be set)
+   - One subscription per company (throw 409 if exists)
+   - Idempotency key: `${companyId}:${planId}`
+   - Initial status: `trialing` with 1-month period
+   - Automatically grants entitlements from plan features
+   - Emits `SubscriptionCreated` outbox event
+
+3. **Entitlement Grants**:
+   - Created from plan features during subscription creation
+   - Maps feature keys to `CompanyEntitlement` types via `FEATURE_KEY_TO_ENTITLEMENT`
+   - Each grant has `validFrom` and `validUntil` timestamps
+   - Upserts `CompanyEntitlement` records with `creditsTotal` and `creditsRemaining`
+   - Feature values must be non-negative finite numbers
+
+4. **Entitlement Checking** (`entitlements/`):
+   - `EntitlementsService.checkEntitlement()` verifies company has active entitlement with remaining credits
+   - `EntitlementsGuard` + `@RequireEntitlement()` decorator for route-level enforcement
+   - Returns 403 with specific error codes: `ENTITLEMENT_NOT_FOUND`, `ENTITLEMENT_EXPIRED`, `ENTITLEMENT_EXHAUSTED`
+   - Checks: entitlement exists, `validFrom <= now < validUntil`, `creditsRemaining > 0`
+
+5. **Subscription Management**:
+   - Get subscription: returns subscription + plan details
+   - Cancel subscription: sets `cancelAtPeriodEnd = true` and `canceledAt = now`
+   - Emits `SubscriptionCancelled` outbox event
+
+6. **Invoices**:
+   - List invoices with cursor-based pagination
+   - Get invoice with line items
+   - Scoped to company (verify `invoice.companyId === companyId`)
+
+7. **Webhooks** (`webhooks/`):
+   - `WebhookController` receives payment provider callbacks
+   - `WebhookSignatureGuard` verifies webhook signatures
+   - `WebhookService` processes events
+   - Webhook routes are public but signature-verified
+
+8. **Authorization**:
+   - Plan listing: optional auth (admins see all, others see public only)
+   - Plan viewing: public
+   - Plan creation/update: admin-only
+   - Subscription creation: company OWNER + email verified
+   - Subscription viewing: company OWNER, ADMIN, or BILLING_ADMIN
+   - Subscription cancellation: company OWNER only
+   - Invoice viewing: company OWNER, ADMIN, or BILLING_ADMIN
 
 ### Testing Requirements
 
-```bash
-# Unit tests
-npm test -- billing.service.spec.ts
-
-# E2E tests
-npm run test:e2e -- billing.e2e-spec.ts
-```
+- Mock `PrismaService`, `OutboxService`, `IdempotencyService`
+- Test plan CRUD
+- Test subscription creation (email verification check, duplicate prevention, entitlement grants)
+- Test entitlement grant creation (feature key mapping, credit initialization)
+- Test entitlement checking (not found, expired, exhausted)
+- Test subscription cancellation
+- Test invoice pagination
+- Test webhook signature verification
+- Test authorization guards
 
 ### Common Patterns
 
-**Entitlement Check:**
-```typescript
-@Get('features/:feature')
-async checkEntitlement(
-  @CurrentUser() user: User,
-  @Param('feature') feature: string,
-) {
-  const hasAccess = await this.billingService.hasEntitlement(
-    user.organizationId,
-    feature,
-  );
-  return { data: { hasAccess } };
-}
-```
-
-**Credit Deduction (Atomic):**
-```typescript
-async deductCredits(orgId: string, amount: number): Promise<void> {
-  await this.prisma.$transaction(async (tx) => {
-    const org = await tx.organization.findUnique({
-      where: { id: orgId },
-      select: { creditBalance: true },
-    });
-    
-    if (org.creditBalance < amount) {
-      throw new InsufficientCreditsException();
-    }
-    
-    await tx.organization.update({
-      where: { id: orgId },
-      data: { creditBalance: { decrement: amount } },
-    });
-  });
-}
-```
+- **Feature Validation**: Runtime validation of feature values (non-negative finite numbers)
+- **Entitlement Mapping**: Use `FEATURE_KEY_TO_ENTITLEMENT` to map plan features to entitlement types
+- **Idempotency**: Prevent duplicate subscriptions with idempotency keys
+- **Cursor Pagination**: Use `(createdAt, id)` composite cursor for invoices
+- **Outbox Events**: Emit events for subscription lifecycle
+- **Transactional Grants**: Create subscription + entitlement grants in single transaction
 
 ## Dependencies
 
-### Internal
+### Internal (Allowed by eslint.config.mjs)
 
-- `src/auth/` — Authentication and organization context
-- `src/common/` — Response formatting, error handling, validation
-- `src/infra/prisma/` — Database access with transactions
-- `src/outbox/` — Event publishing for billing events
+- **outbox** - OutboxService for event emission, IdempotencyService for duplicate prevention
 
 ### External
 
-- `@nestjs/common` — Controller, Injectable decorators
-- `class-validator` — DTO validation
-- `@prisma/client` — Database models
+- **@nestjs/common** - Controller, service, guards, decorators
+- **@prisma/client** - Prisma types for billing entities
+- **infra** - PrismaService for database access
 
-<!-- MANUAL: -->
+## Notes
+
+- One subscription per company (enforced by unique constraint)
+- Entitlements are automatically granted from plan features during subscription creation
+- Feature keys in plan.features must map to valid entitlement types
+- Subscription status starts as `trialing` with 1-month period
+- Cancellation sets `cancelAtPeriodEnd` flag (subscription remains active until period end)
+- Webhook signature verification is critical for security
+- Entitlement checks are time-aware (validFrom/validUntil) and credit-aware (creditsRemaining)
+- Invoice pagination uses cursor-based approach for efficient large-dataset handling

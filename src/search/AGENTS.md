@@ -4,36 +4,70 @@
 # search
 
 ## Purpose
-Search infrastructure module providing Postgres full-text search helpers and Elasticsearch indexing facade. Supports domain modules with parameterized query builders for tsquery/tsvector and graceful fallback when Elasticsearch is unavailable.
+Unified search infrastructure providing Elasticsearch-based full-text search with Postgres fallback. Handles search indexing, query building, and search execution across profiles, companies, jobs, and posts with zero-downtime reindex support.
 
 ## Key Files
 | File | Description |
 |------|-------------|
-| `search.module.ts` | Module configuration importing InfraModule |
-| `search.service.ts` | Postgres full-text search query helpers (toTsQuery, tsVectorExpression, tsQueryExpression) |
-| `search-index.service.ts` | Elasticsearch indexing facade for outbox processors |
+| `search.module.ts` | Module configuration importing InfraModule and ScheduleModule |
+| `search.service.ts` | Core search query builder with Postgres full-text helpers and Elasticsearch query construction |
+| `search-index.service.ts` | Elasticsearch indexing facade with zero-downtime reindex, alias management, and bulk operations |
+| `search-query.service.ts` | High-level search query processor coordinating ES and fallback strategies |
+| `search-fallback.service.ts` | Postgres full-text search fallback when Elasticsearch is unavailable |
+| `search.controller.ts` | REST API endpoints for unified search across entity types |
+
+## Subdirectories
+| Directory | Purpose |
+|-----------|---------|
+| `dto/` | Search request/response DTOs |
 
 ## For AI Agents
 
 ### Working In This Directory
-- SearchService provides Postgres full-text search helpers for domain modules to use with Prisma raw queries
-- Column names are validated against strict identifier pattern to prevent SQL injection
-- SearchIndexService wraps Elasticsearch operations with graceful degradation (logs warnings on failure)
-- Domain modules should use SearchService for immediate search needs and SearchIndexService for async indexing
-- Elasticsearch indexing is triggered by outbox processors, not directly by domain modules
+- **Search Query Construction**: Use `buildMultiMatchQuery()` for cross-entity searches with field boosting, `buildEntityQuery()` for single-entity searches with filters, `buildBoolQuery()` to combine clauses
+- **Indexing Operations**: Call `indexDocument()` for individual documents (graceful ES failure), `createSearchIndex()` for new versioned indices with read/write aliases, `reindexEntity()` for zero-downtime reindex
+- **Search Execution**: `SearchQueryService` coordinates ES primary + Postgres fallback, always return `SearchResult<T>` with items and total
+- **Entity-Specific Boosting**: profiles (displayName^3, headline^2, about^1), companies (name^3, industry^2, description^1), jobs (title^3, description^1, skills^1), posts (content^2, authorName^1, hashtags^0.5)
+- **Zero-Downtime Reindex**: Creates new versioned index, bulk-indexes from database, swaps write alias first, then atomically swaps read alias, deletes old index
+- **Alias Strategy**: Read alias (e.g. `jobs`) for queries, write alias (`jobs-write`) for indexing, enables zero-downtime reindex
+- **Column Validation**: All column names validated against `VALID_COLUMN_NAME` regex to prevent SQL injection
 
 ### Testing Requirements
-- Test toTsQuery sanitizes input and joins terms with &
-- Test tsVectorExpression validates column names and rejects invalid identifiers
-- Test tsQueryExpression wraps query with plainto_tsquery
-- Test SearchIndexService logs warnings on Elasticsearch failures (no exceptions thrown)
-- Verify column name validation prevents SQL injection
+- Test Postgres fallback when ES client throws
+- Test zero-downtime reindex with concurrent write traffic
+- Test multi-entity search with field boosting
+- Test column name validation prevents SQL injection
+- Test alias swap atomicity during reindex
+- Test concurrent reindex prevention via SearchReindexRun table
+- Test bulk reindex methods for all entity types (profiles, companies, jobs, posts)
+- Mock SearchEngineService for unit tests
 
 ### Common Patterns
-- Use SearchService.toTsQuery to sanitize user input for Postgres full-text search
-- Use SearchService.tsVectorExpression to build to_tsvector expressions for multiple columns
-- Use SearchIndexService.indexDocument for async Elasticsearch indexing (called by outbox processors)
-- Graceful degradation: Elasticsearch failures are logged but do not break the application
+```typescript
+// Multi-entity search with boosting
+const query = searchService.buildMultiMatchQuery(
+  'software engineer',
+  ['profiles', 'jobs'],
+  { fuzziness: 'AUTO', operator: 'and' }
+);
+
+// Entity-specific search with filters
+const jobQuery = searchService.buildEntityQuery(
+  'jobs',
+  'backend developer',
+  { status: 'PUBLISHED', workplaceType: 'REMOTE' }
+);
+
+// Zero-downtime reindex
+const runId = await searchIndexService.reindexEntity(
+  'jobs',
+  'admin-user-id'
+);
+
+// Postgres fallback query
+const tsVector = searchService.tsVectorExpression(['title', 'description']);
+const tsQuery = searchService.tsQueryExpression(searchTerm);
+```
 
 ## Dependencies
 

@@ -1,94 +1,109 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-23T10:30:00Z | Updated: 2026-05-23T10:30:00Z -->
 
-# feed/
+# Feed Domain
 
 ## Purpose
 
-Personalized content feed module aggregating posts, job recommendations, and network updates for users. Implements feed ranking algorithms, pagination, and real-time updates.
+The Feed domain aggregates posts from various sources into personalized and public feeds. It implements visibility filtering based on user relationships (connections, follows, blocks) and post visibility settings (PUBLIC, CONNECTIONS, PRIVATE). Feeds include home feed, profile feed, company feed, and hashtag feed.
 
 ## Key Files
 
-| File | Description |
-|------|-------------|
-| `feed.module.ts` | NestJS module configuration with FeedController and FeedService |
-| `feed.controller.ts` | HTTP endpoints for retrieving personalized feed content |
-| `feed.controller.spec.ts` | Unit tests for FeedController |
-| `feed.service.ts` | Business logic for feed generation, ranking, and filtering |
-| `feed.service.spec.ts` | Unit tests for FeedService |
+- **feed.service.ts**: Core feed aggregation logic. Implements relationship-aware visibility filtering, block enforcement, and cursor pagination for all feed types.
+- **feed.controller.ts**: REST endpoints for feed retrieval (home, profile, company, hashtag).
+- **feed.module.ts**: Module definition. Imports `ConnectionsModule` for relationship queries and `PostsModule` for post data.
 
 ## Subdirectories
 
-| Directory | Purpose |
-|-----------|---------|
-| `dto/` | Data transfer objects for feed request/response payloads |
+- **dto/**: Request/response DTOs
+  - `feed-query.dto.ts`: Feed query parameters (cursor, limit)
 
 ## For AI Agents
 
-### Working In This Directory
+### Working Instructions
 
-- **Performance critical** — Feed queries must be fast; use database indexes and caching
-- **Pagination** — Support cursor-based pagination for infinite scroll
-- **Ranking algorithm** — Consider recency, engagement, connection strength, and user preferences
-- **Content types** — Aggregate posts, job recommendations, connection updates, and company news
-- **Real-time updates** — Integrate with WebSocket gateway for live feed updates
-- **Privacy filtering** — Only show content the user is authorized to see
+1. **Home feed visibility rules**:
+   - Own posts: all visibility levels
+   - Connections' posts: PUBLIC + CONNECTIONS only
+   - Followed users' posts: PUBLIC only
+   - Blocked users: excluded entirely (bidirectional)
+   - Hidden posts: excluded via `HiddenPost` table
+   - Unauthenticated: PUBLIC posts only
+
+2. **Profile feed visibility rules**:
+   - Own profile: see all posts
+   - Connected user: PUBLIC + CONNECTIONS posts
+   - Non-connected user: PUBLIC posts only
+   - Blocked user: empty feed (bidirectional)
+
+3. **Company feed**: PUBLIC posts from active company members only
+
+4. **Hashtag feed**: PUBLIC posts tagged with the hashtag only
+
+5. **Block enforcement**: Always check `ConnectionsPolicyService.isBlocked()` before returning any content. Blocked relationships return empty feeds.
+
+6. **Cursor pagination**: All feeds use `(createdAt DESC, id DESC)` keyset pagination with base64-encoded cursors.
+
+7. **Performance optimization**: Batch relationship queries (connections, follows, blocks) at the start of feed generation to minimize database round-trips.
 
 ### Testing Requirements
 
-```bash
-# Unit tests
-npm test -- feed.service.spec.ts
-
-# E2E tests
-npm run test:e2e -- feed.e2e-spec.ts
-```
+- Test home feed visibility: verify own posts, connections' posts, follows' posts are included with correct visibility
+- Test block enforcement: verify blocked users' posts are excluded from all feeds
+- Test hidden posts: verify hidden posts are excluded from home feed
+- Test profile feed visibility: verify visibility rules based on viewer relationship
+- Test unauthenticated access: verify only PUBLIC posts are visible
+- Test cursor pagination: verify `hasNextPage` and `nextCursor` correctness
+- Test empty feeds: verify graceful handling of no posts, no hashtag, blocked users
 
 ### Common Patterns
 
-**Feed Query with Ranking:**
-```typescript
-@Get()
-async getFeed(
-  @CurrentUser() user: User,
-  @Query() dto: FeedQueryDto,
-) {
-  const posts = await this.feedService.getPersonalizedFeed(
-    user.id,
-    dto.cursor,
-    dto.limit,
-  );
-  return { data: posts, meta: { nextCursor: posts[posts.length - 1]?.id } };
-}
-```
-
-**Caching Strategy:**
-```typescript
-const cacheKey = `feed:${userId}:${cursor}`;
-const cached = await this.redis.get(cacheKey);
-if (cached) return JSON.parse(cached);
-
-const feed = await this.generateFeed(userId, cursor);
-await this.redis.setex(cacheKey, 300, JSON.stringify(feed)); // 5 min TTL
-return feed;
-```
+- **Relationship batching**: Load all connections, follows, and blocks in parallel at feed start
+- **Visibility filtering**: Build `Prisma.PostWhereInput` with OR clauses for different visibility levels
+- **Block filtering**: Filter blocked user IDs from connections and follows before building query
+- **Cursor encoding**: Use `encodeCursor(createdAt, id)` and `decodeCursor(cursor)` helpers
+- **Pagination helper**: Use `paginateRows()` helper to extract `hasMore`, `nextCursor`, and slice results
 
 ## Dependencies
 
-### Internal
+### Internal (Domain Imports)
 
-- `src/auth/` — Authentication and current user context
-- `src/posts/` — Post content and engagement data
-- `src/jobs/` — Job recommendations
-- `src/connections/` — Network graph for personalization
-- `src/common/` — Pagination, response formatting, validation
-- `src/infra/prisma/` — Database queries
-- `src/infra/redis/` — Caching layer
+- **connections**: `ConnectionsPolicyService` for relationship queries (`areConnected`, `isBlocked`)
+- **posts**: Post data and visibility enums
 
-### External
+### External (Infrastructure)
 
-- `@nestjs/common` — Controller, Injectable decorators
-- `class-validator` — DTO validation
-- `@prisma/client` — Database access
+- **infra/prisma**: Database access via `PrismaService`
+- **@prisma/client**: `ConnectionStatus`, `FollowStatus`, `PostStatus`, `PostVisibility` enums
 
-<!-- MANUAL: -->
+### Allowed Imports (per eslint.config.mjs)
+
+This domain can import from: `feed` (self), `connections`, `posts`
+
+## Database Schema
+
+- **Post**: Posts with authorId, visibility, status, createdAt
+- **Connection**: Connection relationships with status
+- **Follow**: Follow relationships with status
+- **Block**: Block relationships
+- **HiddenPost**: User-specific hidden posts
+- **PostHashtag**: Post-hashtag associations
+- **Hashtag**: Hashtag definitions
+
+## Events Emitted
+
+None. This domain is read-only and does not emit events.
+
+## Feed Types
+
+### Home Feed (`/feed`)
+Authenticated: own posts + connections' posts (PUBLIC/CONNECTIONS) + follows' posts (PUBLIC), minus blocks and hidden posts
+Unauthenticated: PUBLIC posts only
+
+### Profile Feed (`/feed/users/:userId`)
+Visibility based on viewer relationship (own/connected/public)
+
+### Company Feed (`/feed/companies/:companyId`)
+PUBLIC posts from active company members
+
+### Hashtag Feed (`/feed/hashtags/:tag`)
+PUBLIC posts tagged with the hashtag

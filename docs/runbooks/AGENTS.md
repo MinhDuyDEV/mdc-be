@@ -1,115 +1,218 @@
 <!-- Parent: ../AGENTS.md -->
-<!-- Generated: 2026-05-23T04:19:26Z | Updated: 2026-05-23T04:19:26Z -->
+<!-- Generated: 2026-05-27 -->
 
-# runbooks/
+# docs/runbooks/
 
 ## Purpose
 
-Operational runbooks for deployment, incident response, rollback procedures, and system maintenance. These documents guide operators through common operational tasks and emergency procedures.
+Operational procedures for deployment, incident response, system maintenance, and troubleshooting. These runbooks provide step-by-step instructions for operators and on-call engineers to safely execute critical operations.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `deploy.md` | Deployment process: prerequisites, CI pipeline, manual approval, and verification steps |
-| `rollback.md` | Rollback procedures: quick rollback, database migration rollback, and post-rollback verification |
-| `incident.md` | Incident response: triage steps, common incidents (outbox backlog, database/Redis failures), and escalation |
-| `outbox-backlog.md` | Outbox recovery procedures: stale lock recovery, dead-letter replay, backlog monitoring, and performance tuning |
+| `deploy.md` | Deployment process and verification steps |
+| `rollback.md` | Rollback procedures and recovery steps |
+| `incident.md` | Incident response and triage procedures |
+| `outbox-backlog.md` | Outbox recovery and performance tuning procedures |
+| `outbox-replay.md` | Dead-letter event replay procedures (1.2KB) |
 
 ## For AI Agents
 
-### Working In This Directory
+### When to Read These Docs
 
-- **Keep runbooks actionable** — focus on step-by-step procedures, not theory
-- **Test procedures regularly** — verify runbooks work in staging before production incidents
-- **Update after incidents** — capture lessons learned and improve procedures
-- **Link to monitoring** — reference specific metrics, dashboards, and alerts
-- **Include verification steps** — every procedure should have a "how to verify success" section
+- **Before deploying to production** — read deploy.md for the deployment process and verification
+- **When a deployment fails** — read rollback.md for recovery procedures
+- **During an incident** — read incident.md for triage and response steps
+- **When outbox is backing up** — read outbox-backlog.md for recovery and tuning
+- **When replaying dead-letter events** — read outbox-replay.md for the replay procedure
+- **When onboarding operators** — use runbooks as training material
 
-### Testing Requirements
+### How to Use Them
 
-No automated tests. Verification is manual:
+1. **Follow runbooks exactly** — they are tested procedures; deviations can cause issues
+2. **Test in staging first** — verify procedures work before using in production
+3. **Document deviations** — if you deviate from a runbook, document why and update the runbook
+4. **Keep runbooks current** — update runbooks when procedures change
+5. **Link to runbooks in alerts** — include runbook links in on-call alerts and dashboards
+6. **Review runbooks regularly** — quarterly review to ensure procedures are still accurate
 
-1. Follow the runbook in a staging environment
-2. Verify each step produces expected results
-3. Check that verification steps catch failures
-4. Ensure rollback procedures work
+### Runbook Template
 
-### Common Patterns
-
-**Runbook Structure:**
 ```markdown
 # Operation Name
 
 ## Prerequisites
+
 - Requirement 1
 - Requirement 2
+- Access to: service, tool, credentials
 
 ## Steps
-1. Step 1 with command
-2. Step 2 with expected output
-3. Step 3 with verification
+
+1. Step 1 with specific commands
+2. Step 2 with specific commands
+3. Step 3 with specific commands
 
 ## Verification
-- Check 1
-- Check 2
 
-## Rollback (if applicable)
-- Rollback step 1
-- Rollback step 2
-```
+- Check 1: How to verify step 1 worked
+- Check 2: How to verify step 2 worked
+- Check 3: How to verify step 3 worked
 
-**SQL Queries:**
-```sql
--- Include exact queries for common operations
-SELECT COUNT(*) FROM outbox_events WHERE status = 'PENDING';
-```
+## Rollback
 
-**Health Checks:**
-```bash
-# Include curl commands for health endpoints
-curl http://localhost:3000/health/ready
+- Rollback step 1 with specific commands
+- Rollback step 2 with specific commands
+
+## Troubleshooting
+
+### Issue: Problem description
+- Symptom: What to look for
+- Cause: Why it happens
+- Fix: How to resolve
+
+## References
+
+- Link to related docs
+- Link to related code
+- Link to related runbooks
 ```
 
 ## Dependencies
 
 ### Internal
 
-- `src/` — Application code referenced in runbooks
-- `prisma/` — Database schema and migrations referenced in rollback procedures
-- `.github/workflows/` — CI/CD pipelines referenced in deployment runbook
+- `src/outbox/` — Outbox pattern implementation (referenced in outbox-backlog.md and outbox-replay.md)
+- `src/jobs/` — Scheduled jobs (referenced in deploy.md)
+- `.github/workflows/` — CI/CD pipeline (referenced in deploy.md)
+- `docs/decisions/` — ADRs affecting operations (e.g., ADR-0006 cron leader election)
+- `docs/baseline/` — Baseline metrics for performance targets
 
 ### External
 
-- **Docker** — Container runtime for deployments
-- **PostgreSQL** — Database for outbox recovery queries
-- **Redis** — Cache for incident troubleshooting
+- Deployment infrastructure (AWS, GCP, etc.)
+- Monitoring and alerting system
+- On-call rotation and escalation procedures
 
-## Key Procedures
+## Key Concepts
 
-**Deployment (`deploy.md`):**
-1. Merge PR to main
-2. CI pipeline runs tests and builds container
-3. Deploy workflow triggers
-4. Manual approval for production
+### Deployment Process
 
-**Rollback (`rollback.md`):**
-1. Identify last known-good deployment
-2. Re-deploy previous container image
-3. Verify health checks pass
-4. For database rollback: use `prisma migrate resolve --rolled-back`
+From `deploy.md`:
 
-**Incident Response (`incident.md`):**
-1. Check health endpoints: `/health/live`, `/health/ready`
-2. Review error logs
-3. Check database and Redis connectivity
-4. Check outbox backlog
-5. Follow specific incident procedures
+1. Verify all tests passing
+2. Build Docker image
+3. Push to registry
+4. Update deployment manifest
+5. Apply to cluster
+6. Verify health checks
+7. Monitor for errors
 
-**Outbox Recovery (`outbox-backlog.md`):**
-- Stale lock recovery: Reset PROCESSING events older than 60 seconds
-- Dead-letter replay: Use DeadLetterService API
-- Backlog monitoring: Check pending event count
-- Performance tuning: Adjust `OUTBOX_BATCH_SIZE`
+### Rollback Procedure
 
-<!-- MANUAL: -->
+From `rollback.md`:
+
+1. Identify the bad deployment
+2. Revert to previous image
+3. Apply to cluster
+4. Verify health checks
+5. Monitor for recovery
+6. Post-incident review
+
+### Incident Response
+
+From `incident.md`:
+
+1. Assess severity and impact
+2. Notify stakeholders
+3. Triage the issue
+4. Execute fix or rollback
+5. Verify recovery
+6. Post-incident review
+
+### Outbox Recovery
+
+From `outbox-backlog.md`:
+
+1. Check outbox table size
+2. Identify stuck events
+3. Tune polling parameters
+4. Replay failed events
+5. Monitor recovery
+
+### Dead-Letter Replay
+
+From `outbox-replay.md`:
+
+1. Identify events in dead-letter queue
+2. Verify fix is deployed
+3. Execute replay procedure
+4. Monitor for success
+5. Archive replayed events
+
+## Common Patterns
+
+**Verification Checklist:**
+
+```markdown
+## Verification
+
+- [ ] Health check endpoint returns 200
+- [ ] Logs show no errors
+- [ ] Metrics show normal traffic
+- [ ] Database connections healthy
+- [ ] Realtime connections established
+- [ ] Background jobs running
+```
+
+**Rollback Checklist:**
+
+```markdown
+## Rollback
+
+- [ ] Identify previous stable version
+- [ ] Revert deployment manifest
+- [ ] Apply to cluster
+- [ ] Verify health checks
+- [ ] Monitor error rate
+- [ ] Notify stakeholders
+```
+
+**Troubleshooting Section:**
+
+```markdown
+## Troubleshooting
+
+### Issue: Health check failing
+- Symptom: GET /health/live returns 500
+- Cause: Database connection pool exhausted
+- Fix: Restart pod, check database connections
+
+### Issue: High error rate
+- Symptom: Error rate > 1%
+- Cause: Downstream service unavailable
+- Fix: Check downstream service status, rollback if needed
+```
+
+## Subdirectory Structure
+
+This is a leaf directory. No subdirectories.
+
+## On-Call Workflow
+
+1. **Alert received** — check alert dashboard for runbook link
+2. **Read runbook** — understand the procedure and prerequisites
+3. **Execute steps** — follow runbook exactly, document any deviations
+4. **Verify** — confirm each step worked before proceeding
+5. **Escalate if needed** — if runbook doesn't resolve, escalate to on-call lead
+6. **Post-incident** — update runbook if procedure changed or failed
+
+## Runbook Maintenance
+
+- **Monthly review** — check that procedures are still accurate
+- **After incidents** — update runbooks based on incident learnings
+- **Before major changes** — update runbooks to reflect new procedures
+- **Quarterly audit** — verify all runbooks are current and tested
+
+<!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->

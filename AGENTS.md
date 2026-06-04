@@ -1,149 +1,230 @@
-<!-- Generated: 2026-05-23T00:00:00.000Z | Updated: 2026-05-23T00:00:00.000Z -->
+<!-- Generated: 2026-05-27 | Updated: 2026-05-27 -->
 
 # mdc-be
 
 ## Purpose
 
-A NestJS 11 backend for a professional networking and job platform (LinkedIn-like). This modular monolith provides authentication, user profiles, company pages, job postings, applications, recruiting tools, social features (posts, comments, reactions, connections), messaging, notifications, real-time updates, search, analytics, billing, and moderation. Built for horizontal scalability with explicit domain boundaries, transactional outbox pattern, and support for runtime role separation (API/worker/realtime).
+Professional networking and jobs platform backend built as a NestJS 11 modular monolith. The application features 19 domain modules with strict architectural boundaries enforced via ESLint, a transactional outbox pattern for cross-domain events, and runtime role separation (api/worker/realtime/all) for horizontal scaling. The platform supports user profiles, connections, job postings, applications, messaging, real-time notifications, content moderation, and analytics.
 
 ## Key Files
 
 | File | Description |
 |------|-------------|
-| `package.json` | Project metadata, dependencies (NestJS 11, Prisma 6, Redis, S3, Elasticsearch), and npm scripts for build/test/dev |
-| `tsconfig.json` | TypeScript configuration with strict mode, decorators, ES2023 target, and nodenext module resolution |
-| `tsconfig.build.json` | Build-specific TypeScript config extending base tsconfig |
-| `nest-cli.json` | NestJS CLI configuration with source root and compiler options |
-| `.env.example` | Environment variable template for database, Redis, S3/MinIO, Elasticsearch, SMTP, JWT, rate limits, and billing |
-| `Dockerfile` | Multi-stage production container image with builder and runtime stages |
-| `docker-compose.yml` | Local development stack: Postgres 16, Redis 7, MinIO (S3), Elasticsearch 8.17 |
-| `eslint.config.mjs` | ESLint 9 flat config with TypeScript, Prettier integration |
-| `.prettierrc` | Code formatting rules |
-| `.gitignore` | Git exclusions for node_modules, dist, .env, coverage, logs |
-| `.dockerignore` | Docker build exclusions |
-| `PLAN_FULL.md` | Complete feature plan with must-haves, artifacts, key links, and architecture decisions |
-| `README.md` | Standard NestJS starter README with setup and deployment instructions |
+| `package.json` | Project dependencies, npm scripts, and Jest configuration |
+| `tsconfig.json` | Strict TypeScript configuration with ES2023 target and nodenext modules |
+| `nest-cli.json` | NestJS CLI configuration with sourceRoot pointing to src/ |
+| `.env.example` | Environment variable template with role-specific database pool limits |
+| `eslint.config.mjs` | Domain boundary enforcement via DOMAIN_IMPORT_ALLOWLIST (19 modules) |
+| `.prettierrc` | Code formatting rules (single quotes, trailing commas) |
+| `docker-compose.yml` | Local infrastructure (PostgreSQL 16, Redis 7, MinIO, Elasticsearch 8.17) |
+| `Dockerfile` | Multi-stage production build configuration |
+| `jest.setup.ts` | Test environment defaults and global test configuration |
+| `tsconfig.build.json` | Production build configuration excluding test files |
+| `README.md` | Quick start guide, development commands, and runtime roles |
+| `PLAN_FULL.md` | Complete feature plan with must-haves, artifacts, and architecture decisions |
 
 ## Subdirectories
 
 | Directory | Purpose |
 |-----------|---------|
-| `src/` | Application source code with domain modules, infrastructure, and common utilities (see `src/AGENTS.md`) |
-| `prisma/` | Database schema, migrations, and Prisma client configuration (see `prisma/AGENTS.md`) |
-| `test/` | End-to-end test suite with Jest configuration and test helpers (see `test/AGENTS.md`) |
-| `docs/` | Architecture documentation, decision records, and deployment guides |
-| `.github/` | CI/CD workflows for testing, security scanning, and deployment |
-| `.claude/` | Claude Code project configuration and instructions |
-| `.omc/` | Oh-my-claudecode state, plans, and session artifacts |
+| `src/` | Application source code with 19 domain modules, common utilities, and infrastructure (see `src/AGENTS.md`) |
+| `prisma/` | Database schema and migrations for PostgreSQL (see `prisma/AGENTS.md`) |
+| `test/` | E2E test suite with Testcontainers support (see `test/AGENTS.md`) |
+| `docs/` | Architecture documentation, ADRs, runbooks, and frontend specs (see `docs/AGENTS.md`) |
+| `.claude/` | Claude Code project instructions and configuration |
+| `.omc/` | oh-my-claudecode state, memory, and session data |
+| `.github/` | GitHub Actions CI/CD workflows (see `.github/AGENTS.md`) |
 | `.beads/` | Beads issue tracking database (git-tracked) |
-| `dist/` | Compiled JavaScript output (generated, not tracked) |
-| `node_modules/` | NPM dependencies (generated, not tracked) |
+| `coverage/` | Jest coverage reports (generated, not committed) |
+| `dist/` | Compiled TypeScript output (generated, not committed) |
 
 ## For AI Agents
 
 ### Working In This Directory
 
-- Run `npm run typecheck` and `npm run lint` before claiming completion
-- Use `npm run prisma:validate` after any schema changes
-- Test changes with `npm test` (unit) and `npm run test:e2e` (integration)
-- Follow the transactional outbox pattern for cross-domain side effects
-- Never commit `.env` files or secrets
-- Use `bd` commands for issue tracking (see Beads Workflow section below)
+**Before Starting Work:**
+- Read `README.md` for quick start and development setup
+- Read `docs/architecture.md` for outbox pattern, process roles, and ADRs
+- Check `eslint.config.mjs` DOMAIN_IMPORT_ALLOWLIST before adding cross-domain imports
+- Review domain-specific `src/{module}/AGENTS.md` files for area-specific rules
+- Use `bd ready` to find actionable issues (see Beads Workflow section below)
+
+**Domain Boundaries:**
+- 19 domain modules: admin, analytics, applications, auth, billing, companies, connections, email, feed, jobs, media, messaging, moderation, notifications, outbox, posts, profiles, realtime, recommendations, recruiting, search, users
+- Cross-domain imports require explicit allowlist entries in `eslint.config.mjs`
+- Violations fail lint with actionable error message
+- Test files are exempt from boundary checks
+
+**Outbox Pattern:**
+- Emit cross-domain events via `OutboxService.emit(tx, event)` inside transactions
+- Events written to `outbox_events` table with `status=PENDING`
+- Worker role processes events every 5s with `SELECT FOR UPDATE SKIP LOCKED`
+- Retry with exponential backoff, dead-letter after 5 attempts
+- Idempotency enforced via `IdempotencyService`
+
+**Runtime Roles:**
+- Set `APP_PROCESS_ROLE` environment variable to control which components load
+- `api`: HTTP routes only (no background jobs, no WebSockets)
+- `worker`: Background jobs, outbox processing, scheduled cleanup
+- `realtime`: WebSocket gateways with Redis adapter
+- `all`: Local development (everything enabled)
+
+**Testing:**
+- Unit tests: Colocate `*.spec.ts` files alongside source
+- Use `jest.setup.ts` for test environment defaults
+- E2E tests: Enable Testcontainers via `MDC_E2E_TESTCONTAINERS=true`
+- Coverage thresholds: branches 50%, functions 57%, lines 59%, statements 60%
+
+**Database:**
+- Run `npx prisma validate` after schema changes
+- Run `npx prisma generate` after model changes
+- Migrations are committed to `prisma/migrations/`
+
+**Code Quality:**
+- Never use `any` type (enforced by ESLint as error)
+- Never leave floating promises (enforced by ESLint as error)
+- Lint runs with `--max-warnings 0` (zero tolerance)
+- Match existing patterns in `src/common/` for decorators, filters, interceptors
+
+**Verification Before Completion:**
+- Run `npm run check` (typecheck + lint + test)
+- Run `npm run build` to verify production build
+- Run `npx prisma validate` if schema was modified
+- All checks must pass before claiming task complete
 
 ### Testing Requirements
 
+**Unit Tests:**
 ```bash
-# Type checking
-npm run typecheck
-
-# Linting (auto-fixes issues)
-npm run lint
-
-# Unit tests
-npm test
-
-# E2E tests (requires docker-compose services)
-npm run test:e2e
-
-# Test coverage
-npm run test:cov
-
-# Prisma schema validation
-npm run prisma:validate
+npm test              # Run all unit tests
+npm run test:watch    # Watch mode
+npm run test:cov      # Generate coverage report
 ```
+
+**E2E Tests:**
+```bash
+npm run test:e2e      # Run e2e tests with Testcontainers
+```
+
+**Pre-Merge Checks:**
+```bash
+npm run check         # Runs: typecheck + lint + test
+npm run build         # Verify production build
+npx prisma validate   # Validate schema integrity
+```
+
+**Coverage Targets:**
+- Branches: 50%
+- Functions: 57%
+- Lines: 59%
+- Statements: 60%
 
 ### Common Patterns
 
-- **API responses**: Success `{ data, meta? }`, Error `{ error: { code, message, details?, requestId? } }`
-- **DI tokens**: `REDIS_CLIENT`, `STORAGE_CLIENT`, `SEARCH_ENGINE_CLIENT`, `MAILER_TRANSPORTER`
-- **Runtime roles**: `APP_PROCESS_ROLE=api|worker|realtime|all` controls which features run
-- **Outbox pattern**: Domain events flow through `src/outbox/` with leasing, retry, and idempotency
-- **Module structure**: Each domain has `*.module.ts`, `*.controller.ts`, `*.service.ts`, `*.dto.ts`, `*.entity.ts`
-- **Validation**: Use `class-validator` decorators with `ValidationPipe` (whitelist + transform)
-- **Guards**: `@UseGuards(AuthGuard)` for authentication, custom guards for authorization
-- **OpenTelemetry**: Instrumentation loaded via `--require ./src/instrumentation.ts` before app bootstrap
+**NestJS Patterns:**
+- Global response envelope via `ApiResponseInterceptor`
+- Global error handling via `ApiExceptionFilter`
+- Authentication: `@CurrentUser()` decorator extracts user from JWT
+- Public routes: `@Public()` decorator bypasses auth guard
+- Validation: `createValidationPipe()` with class-validator
+- Pagination: `CursorPaginationQueryDto` for cursor-based pagination
+
+**Dependency Injection:**
+- Import classes directly (not `import type`) for injection tokens
+- Use constructor injection for all dependencies
+- Prefer interface-based tokens for testability
+
+**Custom Decorators:**
+- Param decorators: `createParamDecorator()` (example: `@CurrentUser()`)
+- Metadata decorators: `SetMetadata()` (example: `@Public()`)
+- See `src/common/AGENTS.md` for full decorator catalog
+
+**Error Handling:**
+- Throw NestJS HTTP exceptions (`BadRequestException`, `NotFoundException`, etc.)
+- `ApiExceptionFilter` normalizes all errors to consistent format
+- Include actionable error messages for client debugging
+
+**Async Operations:**
+- Always await promises (enforced by ESLint)
+- Use `Promise.all()` for parallel operations
+- Wrap database operations in transactions when needed
 
 ## Dependencies
 
+### Internal
+- `src/common/` - Shared utilities, decorators, filters, interceptors, pipes
+- `src/infra/` - Infrastructure services (database, cache, storage, search)
+- `src/outbox/` - Transactional outbox pattern implementation
+- `prisma/` - Database schema and migrations
+
 ### External
 
-**Core Framework**
-- `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express` ^11.0.1 — NestJS framework
-- `@nestjs/config` ^4.0.4 — Configuration management
-- `@nestjs/jwt` ^11.0.2 — JWT authentication
-- `@nestjs/passport` ^11.0.5 — Passport integration
-- `@nestjs/schedule` ^6.1.3 — Cron jobs and intervals
-- `@nestjs/throttler` ^6.5.0 — Rate limiting
-- `@nestjs/websockets`, `@nestjs/platform-socket.io` ^11.1.22 — WebSocket support
+**Core Framework:**
+- `@nestjs/core` 11.x - NestJS framework
+- `@nestjs/common` 11.x - Common utilities
+- `@nestjs/config` 11.x - Configuration management
+- `@nestjs/platform-express` 11.x - Express adapter
+- `@nestjs/platform-socket.io` 11.x - WebSocket support
+- `@nestjs/schedule` 6.x - Cron jobs and intervals
+- `@nestjs/throttler` 6.x - Rate limiting
 
-**Database & Storage**
-- `@prisma/client` ^6.19.3 — Prisma ORM client
-- `@prisma/instrumentation` ^6.19.3 — Prisma OpenTelemetry
-- `ioredis` ^5.10.1 — Redis client
-- `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner` ^3.1048.0 — S3 storage
-- `@elastic/elasticsearch` ~8.17 — Elasticsearch client
+**Database & ORM:**
+- `@prisma/client` 6.19.3 - Prisma ORM
+- `@prisma/instrumentation` 6.19.3 - OpenTelemetry integration
 
-**Real-time & Messaging**
-- `socket.io` ^4.8.3 — WebSocket server
-- `@socket.io/redis-adapter` ^8.3.0 — Redis-backed Socket.IO adapter
-- `@nest-lab/throttler-storage-redis` ^1.2.0 — Redis throttler storage
+**Caching & Queuing:**
+- `ioredis` 5.x - Redis client
+- `@socket.io/redis-adapter` 8.x - Socket.IO Redis adapter
+- `@nest-lab/throttler-storage-redis` 1.x - Rate limiting storage
 
-**Authentication & Security**
-- `passport` ^0.7.0, `passport-jwt` ^4.0.1 — JWT strategy
-- `bcryptjs` ^3.0.3 — Password hashing
-- `helmet` ^8.1.0 — Security headers
-- `cookie-parser` ^1.4.7 — Cookie parsing
+**Storage:**
+- `@aws-sdk/client-s3` 3.x - S3 client
+- `@aws-sdk/s3-request-presigner` 3.x - Presigned URL generation
 
-**Validation & Transformation**
-- `class-validator` ^0.15.1 — DTO validation
-- `class-transformer` ^0.5.1 — Object transformation
-- `zod` ^4.4.3 — Schema validation
+**Search:**
+- `@elastic/elasticsearch` ~8.17 - Elasticsearch client
 
-**Email & Templates**
-- `nodemailer` ^8.0.7 — Email delivery
-- `handlebars` ^4.7.9 — Email templates
+**Authentication:**
+- `@nestjs/jwt` 11.x - JWT utilities
+- `@nestjs/passport` 11.x - Passport integration
+- `passport` 0.7.x - Authentication middleware
+- `passport-jwt` 4.x - JWT strategy
+- `bcryptjs` 2.x - Password hashing
 
-**Observability**
-- `nestjs-pino` ^4.6.1, `pino` ^10.3.1, `pino-http` ^11.0.0 — Structured logging
-- `@opentelemetry/api` ^1.9.1 — OpenTelemetry API
-- `@opentelemetry/sdk-node` ^0.218.0 — OpenTelemetry SDK
-- `@opentelemetry/auto-instrumentations-node` ^0.76.0 — Auto-instrumentation
-- `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http` ^0.218.0 — OTLP exporters
+**Validation:**
+- `class-validator` 0.14.x - Decorator-based validation
+- `class-transformer` 0.5.x - Object transformation
+- `zod` 3.x - Schema validation
 
-**Utilities**
-- `rxjs` ^7.8.1 — Reactive extensions
-- `reflect-metadata` ^0.2.2 — Metadata reflection
+**Email:**
+- `nodemailer` 6.x - Email sending
+- `handlebars` 4.x - Email templates
 
-**Development**
-- `@nestjs/cli` ^11.0.0 — NestJS CLI
-- `@nestjs/testing` ^11.0.1 — Testing utilities
-- `jest` ^30.0.0, `ts-jest` ^29.2.5 — Test framework
-- `supertest` ^7.0.0 — HTTP testing
-- `testcontainers`, `@testcontainers/postgresql` ^12.0.0 — Integration test containers
-- `prisma` ^6.19.3 — Prisma CLI
-- `typescript` ^5.7.3, `typescript-eslint` ^8.20.0 — TypeScript tooling
-- `eslint` ^9.18.0, `prettier` ^3.4.2 — Code quality
-- `ts-node` ^10.9.2, `ts-loader` ^9.5.2 — TypeScript execution
+**Logging:**
+- `nestjs-pino` 4.x - Pino integration
+- `pino` 9.x - Fast JSON logger
+- `pino-http` 10.x - HTTP request logging
+
+**Observability:**
+- `@opentelemetry/api` 1.x - OpenTelemetry API
+- `@opentelemetry/auto-instrumentations-node` 0.x - Auto-instrumentation
+- `@opentelemetry/exporter-metrics-otlp-http` 0.x - Metrics exporter
+- `@opentelemetry/exporter-trace-otlp-http` 0.x - Trace exporter
+- `@opentelemetry/sdk-node` 0.x - Node SDK
+
+**Security:**
+- `helmet` 8.x - Security headers
+- `cookie-parser` 1.x - Cookie parsing
+
+**Development:**
+- `typescript` 5.7.3 - TypeScript compiler
+- `@typescript-eslint/eslint-plugin` 8.20.0 - TypeScript linting
+- `eslint` 9.18.0 - Linting
+- `prettier` 3.x - Code formatting
+- `jest` 30.x - Testing framework
+- `@nestjs/testing` 11.x - NestJS test utilities
+- `supertest` 7.x - HTTP assertions
+- `testcontainers` 11.x - Integration test containers
 
 <!-- MANUAL: Any manually added notes below this line are preserved on regeneration -->
 
