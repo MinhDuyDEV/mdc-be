@@ -1,11 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
-import { EmailStatus } from '@prisma/client';
-import {
-  MAILER_TRANSPORTER,
-  type MailerTransporter,
-} from '../infra/mailer/mailer.constants';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { EmailService } from './email.service';
+import { Inject, Injectable, Logger } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { EmailStatus } from "@prisma/client";
+import type { AppConfig } from "../infra/config";
+import { MAILER_TRANSPORTER, type MailerTransporter } from "../infra/mailer/mailer.constants";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { EmailService } from "./email.service";
 
 export interface EmailSendEvent {
   id?: string;
@@ -24,16 +23,16 @@ export class EmailProcessor {
     @Inject(MAILER_TRANSPORTER)
     private readonly mailerService: MailerTransporter,
     private readonly emailService: EmailService,
+    private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
   async process(event: EmailSendEvent): Promise<void> {
     try {
-      const html = this.emailService.renderTemplate(
-        event.template,
-        event.context,
-      );
+      const html = this.emailService.renderTemplate(event.template, event.context);
 
+      const from = this.configService.get("emailFrom", { infer: true });
       await this.mailerService.sendMail({
+        from,
         to: event.to,
         subject: event.subject,
         html,
@@ -52,10 +51,7 @@ export class EmailProcessor {
       this.logger.log(`Email sent: ${event.template} → ${event.to}`);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
-      this.logger.error(
-        `Email failed: ${event.template} → ${event.to}`,
-        err.stack,
-      );
+      this.logger.error(`Email failed: ${event.template} → ${event.to}`, err.stack);
       throw error;
     }
   }

@@ -15,9 +15,9 @@ function slugify(text: string): string {
   return text
     .toLowerCase()
     .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 }
 
 /**
@@ -26,10 +26,10 @@ function slugify(text: string): string {
  */
 function isUniqueConstraintError(error: unknown): boolean {
   return (
-    typeof error === "object" &&
+    typeof error === 'object' &&
     error !== null &&
-    "code" in error &&
-    (error as { code: string }).code === "P2002"
+    'code' in error &&
+    (error as { code: string }).code === 'P2002'
   );
 }
 
@@ -61,8 +61,8 @@ async function withUniqueSlug<T>(
 
   // Dynamically import here to keep this module tree-shakeable and avoid
   // a hard dependency on NestJS for callers that don't need HTTP semantics.
-  const { ConflictException } = await import("@nestjs/common");
-  throw new ConflictException("Unable to generate unique slug");
+  const { ConflictException } = await import('@nestjs/common');
+  throw new ConflictException('Unable to generate unique slug');
 }
 
 export { slugify, withUniqueSlug, isUniqueConstraintError, MAX_SLUG_ATTEMPTS };

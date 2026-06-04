@@ -1,30 +1,20 @@
-import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { validateEnv } from './config';
-import { HealthController, HealthService } from './health';
-import { LoggerModule } from './logger';
-import {
-  MAILER_TRANSPORTER,
-  MailerHealthService,
-  MailerService,
-  mailerTransporterProvider,
-} from './mailer';
-import { OtelShutdownService } from './observability';
-import { PrismaService } from './prisma';
-import { REDIS_CLIENT, RedisHealthService, redisProvider } from './redis';
-import { LeaderLockService } from './scheduling';
+import { Module } from "@nestjs/common";
+import { ConfigModule } from "@nestjs/config";
+import { validateEnv } from "./config";
+import { HealthController, HealthService } from "./health";
+import { LoggerModule } from "./logger";
+import { MAILER_TRANSPORTER, MailerHealthService, mailerTransporterProvider } from "./mailer";
+import { OtelShutdownService } from "./observability";
+import { PrismaService } from "./prisma";
+import { REDIS_CLIENT, RedisHealthService, redisProvider } from "./redis";
+import { LeaderLockService } from "./scheduling";
 import {
   SEARCH_ENGINE_CLIENT,
   SearchEngineHealthService,
   SearchEngineService,
   searchEngineProvider,
-} from './search-engine';
-import {
-  STORAGE_CLIENT,
-  StorageHealthService,
-  StorageService,
-  storageProvider,
-} from './storage';
+} from "./search-engine";
+import { STORAGE_CLIENT, StorageHealthService, StorageService, storageProvider } from "./storage";
 
 @Module({
   imports: [
@@ -46,7 +36,6 @@ import {
     SearchEngineService,
     SearchEngineHealthService,
     mailerTransporterProvider,
-    MailerService,
     MailerHealthService,
     LeaderLockService,
     HealthService,
@@ -64,7 +53,6 @@ import {
     SearchEngineService,
     SearchEngineHealthService,
     MAILER_TRANSPORTER,
-    MailerService,
     MailerHealthService,
     LeaderLockService,
     HealthService,
