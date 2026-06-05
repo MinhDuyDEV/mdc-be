@@ -23,7 +23,8 @@ import { MediaModule } from './media/media.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ModerationModule } from './moderation';
 import { NotificationsModule } from './notifications/notifications.module';
-import { OutboxProcessorModule } from './outbox';
+// Direct import (not via './outbox' barrel) — see src/outbox/index.ts
+import { OutboxProcessorModule } from './outbox/outbox-processor.module';
 import { PostsModule } from './posts/posts.module';
 import { ProfilesModule } from './profiles/profiles.module';
 import { RealtimeModule } from './realtime/realtime.module';
