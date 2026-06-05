@@ -15,6 +15,11 @@ import type { CreateJobDto } from './dto/create-job.dto';
 import { toJobResponseDto } from './dto/job.response.dto';
 import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
 import type { UpdateJobDto } from './dto/update-job.dto';
+import {
+  buildCursorWhere,
+  decodeCursor,
+  paginateRows,
+} from '../common/pagination/cursor';
 
 /**
  * Validates the mutual exclusivity rule between Job.applyMode and Job.applyUrl.
@@ -40,33 +45,10 @@ function validateApplyMode(
 
 const JOB_INCLUDES = { skills: true } as const;
 
-interface CursorPayload {
-  createdAt: string;
-  id: string;
-}
-
 interface FtsCursorPayload {
   rank: number;
   publishedAt: string;
   id: string;
-}
-
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
-  ).toString('base64');
-}
-
-function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as CursorPayload;
-    if (!decoded?.createdAt || !decoded?.id) return null;
-    return decoded;
-  } catch {
-    return null;
-  }
 }
 
 function encodeFtsCursor(rank: number, publishedAt: Date, id: string): string {
@@ -358,15 +340,7 @@ export class JobsService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        const cursorDate = new Date(decoded.createdAt);
-        cursorWhere = {
-          OR: [
-            { createdAt: { lt: cursorDate } },
-            {
-              AND: [{ createdAt: cursorDate }, { id: { lt: decoded.id } }],
-            },
-          ],
-        };
+        cursorWhere = buildCursorWhere(decoded);
       }
     }
 
@@ -378,15 +352,11 @@ export class JobsService {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
     return {
       data: items.map(toJobResponseDto),
-      meta: { nextCursor, hasMore },
+      meta: { nextCursor, hasMore: hasNextPage },
     };
   }
 
@@ -634,15 +604,7 @@ export class JobsService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        const cursorDate = new Date(decoded.createdAt);
-        cursorWhere = {
-          OR: [
-            { createdAt: { lt: cursorDate } },
-            {
-              AND: [{ createdAt: cursorDate }, { id: { lt: decoded.id } }],
-            },
-          ],
-        };
+        cursorWhere = buildCursorWhere(decoded);
       }
     }
 
@@ -654,11 +616,7 @@ export class JobsService {
       take: limit + 1,
     });
 
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items.at(-1);
-    const nextCursor =
-      hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
     return {
       data: items.map((row) => ({
@@ -666,7 +624,7 @@ export class JobsService {
         savedAt: row.createdAt,
         job: toJobResponseDto(row.job),
       })),
-      meta: { nextCursor, hasMore },
+      meta: { nextCursor, hasMore: hasNextPage },
     };
   }
 

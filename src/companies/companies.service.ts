@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { CompanyRole, type Prisma } from '@prisma/client';
+import { withUniqueSlug } from '../common/strings/slug';
 import { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
@@ -56,47 +57,6 @@ function assertCanModifyTarget(
   }
 }
 
-function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, '')
-    .replace(/[\s_-]+/g, '-')
-    .replace(/^-+|-+$/g, '');
-}
-
-const MAX_COMPANY_SLUG_ATTEMPTS = 10;
-
-function isUniqueConstraintError(error: unknown): boolean {
-  return (
-    typeof error === 'object' &&
-    error !== null &&
-    'code' in error &&
-    error.code === 'P2002'
-  );
-}
-
-async function withUniqueCompanySlug<T>(
-  name: string,
-  operation: (slug: string) => Promise<T>,
-): Promise<T> {
-  const baseSlug = slugify(name);
-
-  for (let attempt = 0; attempt < MAX_COMPANY_SLUG_ATTEMPTS; attempt++) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-    try {
-      return await operation(slug);
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        continue;
-      }
-      throw error;
-    }
-  }
-
-  throw new ConflictException('Unable to generate unique slug');
-}
-
 /**
  * Try a company slug mutation, retrying with a numeric suffix on slug
  * P2002 (unique-constraint) conflicts. Closes the TOCTOU window between
@@ -110,7 +70,7 @@ async function createCompanyWithUniqueSlug<T>(
   buildData: (slug: string) => Prisma.CompanyCreateInput,
   create: (data: Prisma.CompanyCreateInput) => Promise<T>,
 ): Promise<T> {
-  return withUniqueCompanySlug(baseName, (slug) => create(buildData(slug)));
+  return withUniqueSlug(baseName, (slug) => create(buildData(slug)));
 }
 
 const COMPANY_INCLUDES = {
@@ -352,7 +312,7 @@ export class CompaniesService {
 
       const updated =
         data.name && data.name !== company.name
-          ? await withUniqueCompanySlug(data.name, (slug) =>
+          ? await withUniqueSlug(data.name, (slug) =>
               tx.company.update({
                 where: { id: companyId },
                 data: { ...updateData, slug },

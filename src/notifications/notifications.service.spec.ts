@@ -21,7 +21,9 @@ function makeNotification(overrides: Record<string, unknown> = {}) {
 }
 
 function makeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(`${createdAt.toISOString()}:${id}`).toString('base64url');
+  return Buffer.from(
+    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
+  ).toString('base64');
 }
 
 function createService() {

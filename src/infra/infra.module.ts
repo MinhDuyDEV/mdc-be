@@ -6,7 +6,6 @@ import { LoggerModule } from './logger';
 import {
   MAILER_TRANSPORTER,
   MailerHealthService,
-  MailerService,
   mailerTransporterProvider,
 } from './mailer';
 import { OtelShutdownService } from './observability';
@@ -46,7 +45,6 @@ import {
     SearchEngineService,
     SearchEngineHealthService,
     mailerTransporterProvider,
-    MailerService,
     MailerHealthService,
     LeaderLockService,
     HealthService,
@@ -64,7 +62,6 @@ import {
     SearchEngineService,
     SearchEngineHealthService,
     MAILER_TRANSPORTER,
-    MailerService,
     MailerHealthService,
     LeaderLockService,
     HealthService,

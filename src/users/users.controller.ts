@@ -9,12 +9,16 @@ import {
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
+import { ProfilesService } from '../profiles/profiles.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
 export class UsersController {
-  constructor(private readonly usersService: UsersService) {}
+  constructor(
+    private readonly usersService: UsersService,
+    private readonly profilesService: ProfilesService,
+  ) {}
 
   @Get('me')
   @HttpCode(HttpStatus.OK)
@@ -31,9 +35,18 @@ export class UsersController {
     return this.usersService.updateOwnProfile(user, dto);
   }
 
+  /**
+   * Public user lookup — delegates to ProfilesService for the canonical
+   * public-profile response (with visibility filtering). Users without a
+   * profile will 404 here, which is the expected behavior for a profile-aware
+   * public endpoint.
+   */
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  async getUser(@Param('id') id: string) {
-    return this.usersService.getPublicProfile(id);
+  async getUser(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: AuthenticatedUser | undefined,
+  ) {
+    return this.profilesService.getPublicProfile(id, currentUser);
   }
 }

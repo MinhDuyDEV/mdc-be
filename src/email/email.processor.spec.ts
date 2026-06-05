@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConfigService } from '@nestjs/config';
 import { EmailProcessor } from './email.processor';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
@@ -33,6 +34,17 @@ describe('EmailProcessor', () => {
             renderTemplate: jest.fn().mockReturnValue('<html>Hello</html>'),
           },
         },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest.fn().mockImplementation((key: string) => {
+              const config: Record<string, unknown> = {
+                emailFrom: 'test@example.com',
+              };
+              return config[key];
+            }),
+          },
+        },
       ],
     }).compile();
 
@@ -61,6 +73,7 @@ describe('EmailProcessor', () => {
 
       expect(mailerService.sendMail).toHaveBeenCalledWith(
         expect.objectContaining({
+          from: 'test@example.com',
           to: event.to,
           subject: event.subject,
         }),

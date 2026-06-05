@@ -6,52 +6,14 @@ import {
 import type { CursorPaginationMeta } from '../common/pagination/cursor-pagination.dto';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import {
+  decodeCursor,
+  buildCursorWhere,
+  paginateRows,
+} from '../common/pagination/cursor';
+import {
   type NotificationResponseDto,
   toNotificationResponse,
 } from './dto/notification.response.dto';
-
-// ---------------------------------------------------------------------------
-// Cursor helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Encode a (createdAt, id) pair as a base64url cursor string.
- * Format: base64url(`${createdAt.toISOString()}:${id}`)
- */
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(`${createdAt.toISOString()}:${id}`).toString('base64url');
-}
-
-/**
- * Decode a base64url cursor string back to (createdAt, id).
- * Throws BadRequestException on any malformed input.
- *
- * Split strategy: ISO dates always end with 'Z', so the separator ':' between
- * the date and the UUID is the last ':' in the decoded string.
- */
-function decodeCursor(cursor: string): { createdAt: Date; id: string } {
-  let decoded: string;
-  try {
-    decoded = Buffer.from(cursor, 'base64url').toString('utf8');
-  } catch {
-    throw new BadRequestException('INVALID_CURSOR');
-  }
-
-  const lastColon = decoded.lastIndexOf(':');
-  if (lastColon === -1) {
-    throw new BadRequestException('INVALID_CURSOR');
-  }
-
-  const createdAtStr = decoded.substring(0, lastColon);
-  const id = decoded.substring(lastColon + 1);
-  const createdAt = new Date(createdAtStr);
-
-  if (isNaN(createdAt.getTime()) || !id) {
-    throw new BadRequestException('INVALID_CURSOR');
-  }
-
-  return { createdAt, id };
-}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -84,14 +46,9 @@ export class NotificationsService {
     // Build cursor WHERE clause only when a cursor is provided.
     const cursorWhere = cursor
       ? (() => {
-          const { createdAt: cursorCreatedAt, id: cursorId } =
-            decodeCursor(cursor);
-          return {
-            OR: [
-              { createdAt: { lt: cursorCreatedAt } },
-              { createdAt: cursorCreatedAt, id: { lt: cursorId } },
-            ],
-          };
+          const decoded = decodeCursor(cursor);
+          if (!decoded) throw new BadRequestException('INVALID_CURSOR');
+          return buildCursorWhere(decoded);
         })()
       : {};
 
@@ -101,13 +58,7 @@ export class NotificationsService {
       take: clampedLimit + 1,
     });
 
-    const hasNextPage = rows.length > clampedLimit;
-    const items = hasNextPage ? rows.slice(0, clampedLimit) : rows;
-    const lastItem = items[items.length - 1];
-    const nextCursor =
-      hasNextPage && lastItem
-        ? encodeCursor(lastItem.createdAt, lastItem.id)
-        : undefined;
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, clampedLimit);
 
     return {
       items: items.map(toNotificationResponse),

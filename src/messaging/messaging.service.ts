@@ -16,29 +16,12 @@ import type { CreateConversationDto } from './dto/create-conversation.dto';
 import type { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
 import type { SendMessageDto } from './dto/send-message.dto';
 import { MessagingPolicyService } from './messaging-policy.service';
-
-interface CursorPayload {
-  createdAt: string;
-  id: string;
-}
-
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
-  ).toString('base64');
-}
-
-function decodeCursor(cursor: string): CursorPayload | null {
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as CursorPayload;
-    if (!decoded?.createdAt || !decoded?.id) return null;
-    return decoded;
-  } catch {
-    return null;
-  }
-}
+import {
+  decodeCursor,
+  encodeCursor,
+  buildCursorWhere,
+  paginateRows,
+} from '../common/pagination/cursor';
 
 @Injectable()
 export class MessagingService {
@@ -403,13 +386,7 @@ export class MessagingService {
     if (query.cursor) {
       const decoded = decodeCursor(query.cursor);
       if (decoded) {
-        where.OR = [
-          { createdAt: { lt: new Date(decoded.createdAt) } },
-          {
-            createdAt: new Date(decoded.createdAt),
-            id: { lt: decoded.id },
-          },
-        ];
+        where.OR = buildCursorWhere(decoded).OR;
       }
     }
 
@@ -428,24 +405,11 @@ export class MessagingService {
       },
     });
 
-    const hasNextPage = messages.length > limit;
-    const items = hasNextPage ? messages.slice(0, limit) : messages;
-
-    const nextCursor =
-      items.length > 0
-        ? encodeCursor(
-            items[items.length - 1].createdAt,
-            items[items.length - 1].id,
-          )
-        : undefined;
+    const { items, nextCursor, hasNextPage } = paginateRows(messages, limit);
 
     return {
       data: items,
-      meta: {
-        nextCursor,
-        hasNextPage,
-        limit,
-      },
+      meta: { nextCursor, hasNextPage, limit },
     };
   }
 

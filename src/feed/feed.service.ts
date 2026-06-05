@@ -9,24 +9,11 @@ import {
 import { ConnectionsPolicyService } from '../connections/connections-policy.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import type { FeedQueryDto } from './dto/feed-query.dto';
-
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
-  ).toString('base64');
-}
-
-function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as { createdAt?: string; id?: string };
-    if (!decoded?.createdAt || !decoded?.id) return null;
-    return { createdAt: new Date(decoded.createdAt), id: decoded.id };
-  } catch {
-    return null;
-  }
-}
+import {
+  buildCursorWhere,
+  decodeCursor,
+  paginateRows,
+} from '../common/pagination/cursor';
 
 const POST_INCLUDE = {
   author: {
@@ -55,7 +42,8 @@ export class FeedService {
   async getHomeFeed(userId: string | undefined, query: FeedQueryDto) {
     const limit = query.limit ?? 20;
 
-    const cursorWhere = buildCursorWhere(query.cursor);
+    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
+    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
 
     let where: Prisma.PostWhereInput;
 
@@ -172,7 +160,8 @@ export class FeedService {
       include: POST_INCLUDE,
     });
 
-    return paginateRows(rows, limit);
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   /**
@@ -184,7 +173,8 @@ export class FeedService {
     query: FeedQueryDto,
   ) {
     const limit = query.limit ?? 20;
-    const cursorWhere = buildCursorWhere(query.cursor);
+    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
+    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
 
     // Block check: if either party has blocked the other, return empty feed
     if (viewerId && viewerId !== userId) {
@@ -232,7 +222,8 @@ export class FeedService {
       include: POST_INCLUDE,
     });
 
-    return paginateRows(rows, limit);
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   /**
@@ -240,7 +231,8 @@ export class FeedService {
    */
   async getCompanyFeed(companyId: string, query: FeedQueryDto) {
     const limit = query.limit ?? 20;
-    const cursorWhere = buildCursorWhere(query.cursor);
+    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
+    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
 
     const members = await this.prisma.companyMember.findMany({
       where: { companyId, status: 'active' },
@@ -267,7 +259,8 @@ export class FeedService {
       include: POST_INCLUDE,
     });
 
-    return paginateRows(rows, limit);
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   /**
@@ -275,7 +268,8 @@ export class FeedService {
    */
   async getHashtagFeed(tag: string, query: FeedQueryDto) {
     const limit = query.limit ?? 20;
-    const cursorWhere = buildCursorWhere(query.cursor);
+    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
+    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
 
     const hashtag = await this.prisma.hashtag.findUnique({
       where: { name: tag.toLowerCase() },
@@ -307,36 +301,7 @@ export class FeedService {
       include: POST_INCLUDE,
     });
 
-    return paginateRows(rows, limit);
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function buildCursorWhere(cursor?: string): Prisma.PostWhereInput {
-  if (!cursor) return {};
-  const decoded = decodeCursor(cursor);
-  if (!decoded) return {};
-  return {
-    OR: [
-      { createdAt: { lt: decoded.createdAt } },
-      {
-        AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }],
-      },
-    ],
-  };
-}
-
-function paginateRows<T extends { createdAt: Date; id: string }>(
-  rows: T[],
-  limit: number,
-) {
-  const hasMore = rows.length > limit;
-  const items = hasMore ? rows.slice(0, limit) : rows;
-  const last = items.at(-1);
-  const nextCursor =
-    hasMore && last ? encodeCursor(last.createdAt, last.id) : undefined;
-  return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
 }

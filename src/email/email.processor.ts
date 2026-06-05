@@ -1,5 +1,7 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { EmailStatus } from '@prisma/client';
+import type { AppConfig } from '../infra/config';
 import {
   MAILER_TRANSPORTER,
   type MailerTransporter,
@@ -24,6 +26,7 @@ export class EmailProcessor {
     @Inject(MAILER_TRANSPORTER)
     private readonly mailerService: MailerTransporter,
     private readonly emailService: EmailService,
+    private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
   async process(event: EmailSendEvent): Promise<void> {
@@ -33,7 +36,9 @@ export class EmailProcessor {
         event.context,
       );
 
+      const from = this.configService.get('emailFrom', { infer: true });
       await this.mailerService.sendMail({
+        from,
         to: event.to,
         subject: event.subject,
         html,

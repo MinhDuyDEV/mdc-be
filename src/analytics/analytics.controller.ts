@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseEnumPipe,
   ParseUUIDPipe,
   Post,
   Req,
@@ -19,7 +20,7 @@ import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { AnalyticsService } from './analytics.service';
-import { RecordEventDto } from './dto';
+import { AnalyticsEventType, RecordEventDto } from './dto';
 
 @Controller('analytics')
 export class AnalyticsController {
@@ -58,7 +59,8 @@ export class AnalyticsController {
   @Roles('admin')
   @Permissions('VIEW_ANALYTICS')
   async getEntityAnalytics(
-    @Param('type') type: string,
+    @Param('type', new ParseEnumPipe(AnalyticsEventType))
+    type: AnalyticsEventType,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     const analytics = await this.service.getEntityAnalytics(type, id);

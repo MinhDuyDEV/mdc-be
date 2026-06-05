@@ -15,6 +15,11 @@ import type { UpdateCommentDto } from './dto/update-comment.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import { extractHashtags, extractMentions } from './mention-hashtag.util';
 import { PostsPolicyService } from './posts-policy.service';
+import {
+  buildCursorWhere,
+  decodeCursor,
+  paginateRows,
+} from '../common/pagination/cursor';
 
 const POST_INCLUDE = {
   author: {
@@ -33,24 +38,6 @@ const POST_INCLUDE = {
     },
   },
 } as const;
-
-function encodeCursor(createdAt: Date, id: string): string {
-  return Buffer.from(
-    JSON.stringify({ createdAt: createdAt.toISOString(), id }),
-  ).toString('base64');
-}
-
-function decodeCursor(cursor: string): { createdAt: Date; id: string } | null {
-  try {
-    const decoded = JSON.parse(
-      Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as { createdAt?: string; id?: string };
-    if (!decoded?.createdAt || !decoded?.id) return null;
-    return { createdAt: new Date(decoded.createdAt), id: decoded.id };
-  } catch {
-    return null;
-  }
-}
 
 @Injectable()
 export class PostsService {
@@ -306,12 +293,7 @@ export class PostsService {
     if (cursor) {
       const decoded = decodeCursor(cursor);
       if (decoded) {
-        where.OR = [
-          { createdAt: { lt: decoded.createdAt } },
-          {
-            AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }],
-          },
-        ];
+        where.OR = buildCursorWhere(decoded).OR;
       }
     }
 
@@ -335,15 +317,9 @@ export class PostsService {
       },
     });
 
-    const hasMore = rows.length > limit;
-    const items = hasMore ? rows.slice(0, limit) : rows;
-    const last = items.at(-1);
-    let nextCursor: string | undefined;
-    if (hasMore && last) {
-      nextCursor = encodeCursor(last.createdAt, last.id);
-    }
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasNextPage: hasMore, limit } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   async createComment(userId: string, postId: string, dto: CreateCommentDto) {

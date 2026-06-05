@@ -89,7 +89,10 @@ describe('AnalyticsService', () => {
         .mockResolvedValueOnce([{ count: 4n }])
         .mockResolvedValueOnce([{ count: 8n }]);
 
-      const result = await service.getEntityAnalytics('profile_view', 'p1');
+      const result = await service.getEntityAnalytics(
+        AnalyticsEventType.PROFILE_VIEW,
+        'p1',
+      );
 
       expect(result).toEqual({
         totalViews: 10,
@@ -103,6 +106,7 @@ describe('AnalyticsService', () => {
       >;
       const queries = queryCalls.map(([strings]) => String.raw(strings));
       expect(queries[1]).toContain('COUNT(DISTINCT user_id)');
+      expect(queries[1]).toContain('created_at >=');
       expect(queries[2]).toContain('created_at >=');
       expect(queries[3]).toContain('created_at >=');
     });
