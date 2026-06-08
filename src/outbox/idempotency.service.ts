@@ -39,6 +39,8 @@ export class IdempotencyService {
           scope,
           key,
           requestHash: '',
+          responseStatus: 200,
+          responseBody: { status: 'ok' },
           expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
         },
       });
