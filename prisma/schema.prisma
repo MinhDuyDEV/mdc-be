@@ -1065,6 +1065,7 @@ model Job {
   applyUrl        String?                  @map("apply_url") @db.VarChar(2048)
   status          JobStatus                @default(DRAFT)
   contentStatus   String?                  @map("content_status") @db.VarChar(50)
+  externalClickCount Int                  @default(0) @map("external_click_count")
   employmentType  EmploymentType           @map("employment_type")
   workplaceType   WorkplaceType            @map("workplace_type")
   location        String?                  @db.VarChar(255)
