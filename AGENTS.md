@@ -95,10 +95,23 @@ Professional networking and jobs platform backend built as a NestJS 11 modular m
 
 **Verification Before Completion:**
 
-- Run `npm run check` (typecheck + lint + test)
+- Run `npm run check` (typecheck + lint + test + fallow audit on changed files)
+- Run `npm run check:strict` (same as check + full fallow audit, fails on any pre-existing issue)
 - Run `npm run build` to verify production build
 - Run `npx prisma validate` if schema was modified
 - All checks must pass before claiming task complete
+
+**Fallow Audit Gate:**
+
+Fallow runs as part of `npm run check` via the `--changed-since origin/main` diff mode. This means:
+
+- The local pre-merge gate catches **new** fallow issues introduced by your branch
+- Pre-existing issues (saved in `.fallow/baseline.json`) do **not** block your merge
+- To address pre-existing issues, use `npm run fallow:audit` (full repo) or `npm run fallow:audit:human` (readable)
+- To install the optional pre-commit hook (no new deps): `git config core.hooksPath .githooks`
+- To skip fallow in a one-off commit: `MDC_SKIP_FALLOW=1 git commit ...`
+
+Available scripts: `npm run fallow:audit`, `fallow:audit:diff`, `fallow:audit:changed`, `fallow:dead`, `fallow:health`, `fallow:dupes`, `fallow:fix`, `fallow:trace`, `fallow:baseline:save`, `fallow:baseline:check`. See `.opencode/context/fallow.md` for the full reference.
 
 ### Testing Requirements
 
@@ -119,7 +132,8 @@ npm run test:e2e      # Run e2e tests with Testcontainers
 **Pre-Merge Checks:**
 
 ```bash
-npm run check         # Runs: typecheck + lint + test
+npm run check         # Runs: typecheck + lint + test + fallow audit (changed files)
+npm run check:strict  # Same + full fallow audit (catches pre-existing issues)
 npm run build         # Verify production build
 npx prisma validate   # Validate schema integrity
 ```

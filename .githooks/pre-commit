@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Pre-commit hook — blocks commits that introduce new fallow issues.
+# Install (one-time, no new deps): git config core.hooksPath .githooks
+set -euo pipefail
+
+# Skip if user explicitly disabled
+if [ "${MDC_SKIP_FALLOW:-0}" = "1" ]; then
+  echo "fallow pre-commit skipped (MDC_SKIP_FALLOW=1)"
+  exit 0
+fi
+
+# Run audit on staged/HEAD changes
+npx --yes fallow audit --changed-since HEAD --format human 2>/dev/null
+status=$?
+
+# fallow exit codes:
+#   0 = clean
+#   1 = issues found (informational)
+#   2 = configuration/parse error
+if [ $status -eq 2 ]; then
+  echo "fallow pre-commit: configuration error — see above" >&2
+  exit 1
+fi
+
+if [ $status -eq 1 ]; then
+  echo "" >&2
+  echo "fallow pre-commit: issues detected in staged/HEAD changes." >&2
+  echo "  Run 'npm run fallow:audit' for full JSON output." >&2
+  echo "  Bypass with: MDC_SKIP_FALLOW=1 git commit ..." >&2
+  exit 1
+fi
+
+exit 0
