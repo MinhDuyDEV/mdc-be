@@ -93,8 +93,8 @@ export class PostsService {
 
       const mentions = extractMentions(dto.content);
       for (const username of mentions) {
-        const mentionedUser = await tx.user.findFirst({
-          where: { displayName: { equals: username, mode: 'insensitive' } },
+        const mentionedUser = await tx.user.findUnique({
+          where: { handle: username },
           select: { id: true },
         });
         if (mentionedUser) {
@@ -208,8 +208,8 @@ export class PostsService {
         await tx.mention.deleteMany({ where: { postId } });
         const mentions = extractMentions(dto.content);
         for (const username of mentions) {
-          const mentionedUser = await tx.user.findFirst({
-            where: { displayName: { equals: username, mode: 'insensitive' } },
+          const mentionedUser = await tx.user.findUnique({
+            where: { handle: username },
             select: { id: true },
           });
           if (mentionedUser) {

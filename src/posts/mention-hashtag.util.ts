@@ -6,7 +6,7 @@
  */
 export function extractMentions(text: string): string[] {
   if (!text) return [];
-  const regex = /(?<!\w)@(\w{1,50})/g;
+  const regex = /(?<!\w)@([\w-]{1,50})/g;
   const matches = Array.from(text.matchAll(regex));
   const usernames = matches.map((m) => m[1]);
   return Array.from(new Set(usernames)); // dedupe
