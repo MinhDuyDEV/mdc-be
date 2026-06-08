@@ -560,6 +560,7 @@ model EmailDelivery {
   template     String
   context      Json
   status       EmailStatus @default(PENDING)
+  attempts     Int         @default(0)
   sentAt       DateTime?   @map("sent_at")
   failedAt     DateTime?   @map("failed_at")
   errorMessage String?     @map("error_message")
