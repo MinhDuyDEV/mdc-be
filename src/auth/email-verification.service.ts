@@ -5,14 +5,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import type { AppConfig } from '../infra/config';
 import {
   MAILER_TRANSPORTER,
   type MailerTransporter,
 } from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
-import { PasswordService } from './password.service';
 
 const VERIFICATION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -22,7 +21,6 @@ export class EmailVerificationService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly passwordService: PasswordService,
     private readonly configService: ConfigService<AppConfig, true>,
     @Inject(MAILER_TRANSPORTER)
     private readonly mailerService: MailerTransporter,
@@ -40,7 +38,7 @@ export class EmailVerificationService {
     });
 
     const rawToken = randomBytes(32).toString('hex');
-    const tokenHash = await this.passwordService.hash(rawToken);
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
     await this.prisma.verificationToken.create({
       data: {
@@ -77,11 +75,9 @@ export class EmailVerificationService {
     });
 
     for (const token of tokens) {
-      const isValid = await this.passwordService.compare(
-        rawToken,
-        token.tokenHash,
-      );
-      if (isValid) {
+      if (
+        createHash('sha256').update(rawToken).digest('hex') === token.tokenHash
+      ) {
         // Double-check userId if provided
         if (userId && token.userId !== userId) {
           throw new BadRequestException('Token does not belong to this user');

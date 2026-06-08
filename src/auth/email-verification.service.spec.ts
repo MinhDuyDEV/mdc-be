@@ -1,14 +1,13 @@
+import { createHash } from 'crypto';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { EmailVerificationService } from './email-verification.service';
-import { PasswordService } from './password.service';
 
 describe('EmailVerificationService', () => {
   let service: EmailVerificationService;
   let prisma: PrismaService;
-  let passwordService: PasswordService;
 
   const mockMailerService = {
     sendMail: jest.fn(),
@@ -34,13 +33,6 @@ describe('EmailVerificationService', () => {
           },
         },
         {
-          provide: PasswordService,
-          useValue: {
-            hash: jest.fn(),
-            compare: jest.fn(),
-          },
-        },
-        {
           provide: ConfigService,
           useValue: {
             get: jest.fn((key: string) => {
@@ -60,7 +52,6 @@ describe('EmailVerificationService', () => {
 
     service = module.get<EmailVerificationService>(EmailVerificationService);
     prisma = module.get<PrismaService>(PrismaService);
-    passwordService = module.get<PasswordService>(PasswordService);
   });
 
   it('should be defined', () => {
@@ -70,9 +61,7 @@ describe('EmailVerificationService', () => {
   describe('generate', () => {
     it('should generate a 64-char hex verification token and store it', async () => {
       const userId = 'user-123';
-      const tokenHash = 'hashed-token';
 
-      jest.spyOn(passwordService, 'hash').mockResolvedValue(tokenHash);
       jest
         .spyOn(prisma.verificationToken, 'create')
         .mockResolvedValue({ id: 'vt-1' } as any);
@@ -93,7 +82,7 @@ describe('EmailVerificationService', () => {
         id: 'vt-1',
         userId,
         type: 'EMAIL_VERIFICATION' as const,
-        tokenHash: 'hashed-token',
+        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
         expiresAt: new Date(Date.now() + 86400000),
         usedAt: null,
         createdAt: new Date(),
@@ -102,7 +91,6 @@ describe('EmailVerificationService', () => {
       jest
         .spyOn(prisma.verificationToken, 'findMany')
         .mockResolvedValue([storedToken]);
-      jest.spyOn(passwordService, 'compare').mockResolvedValue(true);
       jest
         .spyOn(prisma.verificationToken, 'update')
         .mockResolvedValue({} as any);

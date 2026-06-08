@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import { BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -92,13 +93,11 @@ describe('PasswordResetService', () => {
     it('should create a reset token for existing user', async () => {
       const userId = 'user-123';
       const email = 'test@example.com';
-      const tokenHash = 'hashed-token';
 
       jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
         id: userId,
         email,
       } as any);
-      jest.spyOn(passwordService, 'hash').mockResolvedValue(tokenHash);
       jest
         .spyOn(prisma.verificationToken, 'create')
         .mockResolvedValue({ id: 'vt-1' } as any);
@@ -153,6 +152,7 @@ describe('PasswordResetService', () => {
 
     it('should update password and revoke sessions on valid token', async () => {
       const userId = 'user-123';
+      const rawToken = 'valid-token';
       const newPassword = 'newPassword123';
       const newHash = 'new-password-hash';
 
@@ -160,7 +160,7 @@ describe('PasswordResetService', () => {
         id: 'vt-1',
         userId,
         type: 'PASSWORD_RESET' as const,
-        tokenHash: 'hashed-token',
+        tokenHash: createHash('sha256').update(rawToken).digest('hex'),
         expiresAt: new Date(Date.now() + 3600000),
         usedAt: null,
         createdAt: new Date(),
@@ -169,7 +169,6 @@ describe('PasswordResetService', () => {
       jest
         .spyOn(prisma.verificationToken, 'findFirst')
         .mockResolvedValue(storedToken);
-      jest.spyOn(passwordService, 'compare').mockResolvedValue(true);
       jest.spyOn(passwordService, 'hash').mockResolvedValue(newHash);
       jest
         .spyOn(prisma.verificationToken, 'update')
@@ -179,7 +178,7 @@ describe('PasswordResetService', () => {
         .spyOn(prisma.refreshToken, 'updateMany')
         .mockResolvedValue({ count: 1 });
 
-      const result = await service.confirmReset('valid-token', newPassword);
+      const result = await service.confirmReset(rawToken, newPassword);
 
       expect(result).toEqual({ message: expect.any(String) });
       expect(passwordService.hash).toHaveBeenCalledWith(newPassword);
