@@ -12,7 +12,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
           node-version: '20'
@@ -26,7 +26,7 @@ jobs:
   #   runs-on: ubuntu-latest
   #   if: github.event_name == 'pull_request'
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #     - uses: actions/dependency-review-action@v4
   #       with:
   #         fail-on-severity: high
@@ -38,7 +38,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
@@ -50,7 +50,7 @@ jobs:
       TRIVY_IMAGE: aquasec/trivy@sha256:be1190afcb28352bfddc4ddeb71470835d16462af68d310f9f4bca710961a41e
       TARGET_IMAGE: mdc-be:security-scan
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build image for scanning
         run: docker build -t "$TARGET_IMAGE" .
       - name: Scan Dockerfile misconfigurations
