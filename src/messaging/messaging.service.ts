@@ -70,7 +70,11 @@ export class MessagingService {
         return existing;
       }
 
-      await this.idempotencyService.claim('Conversation:create', canonicalKey);
+      await this.idempotencyService.claim(
+        tx,
+        'Conversation:create',
+        canonicalKey,
+      );
 
       const conversation = await tx.conversation.create({
         data: {
@@ -140,6 +144,7 @@ export class MessagingService {
       }
 
       await this.idempotencyService.claim(
+        tx,
         'Conversation:recruiting',
         canonicalKey,
       );

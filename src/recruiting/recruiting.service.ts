@@ -92,21 +92,22 @@ export class RecruitingService {
       throw new ForbiddenException('CANDIDATE_NOT_OPTED_IN_TO_RECRUITING');
     }
 
-    await this.idempotencyService.claim(
-      'SavedCandidate:save',
-      `${companyId}:${dto.candidateUserId}`,
-    );
-
-    const existing = await this.prisma.savedCandidate.findFirst({
-      where: {
-        companyId,
-        candidateUserId: dto.candidateUserId,
-        deletedAt: null,
-      },
-    });
-    if (existing) return existing;
-
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'SavedCandidate:save',
+        `${companyId}:${dto.candidateUserId}`,
+      );
+
+      const existing = await tx.savedCandidate.findFirst({
+        where: {
+          companyId,
+          candidateUserId: dto.candidateUserId,
+          deletedAt: null,
+        },
+      });
+      if (existing) return existing;
+
       const saved = await tx.savedCandidate.create({
         data: {
           companyId,
@@ -283,21 +284,22 @@ export class RecruitingService {
     });
     if (!pool) throw new NotFoundException('TALENT_POOL_NOT_FOUND');
 
-    await this.idempotencyService.claim(
-      'TalentPoolCandidate:add',
-      `${poolId}:${dto.candidateUserId}`,
-    );
-
-    const existing = await this.prisma.talentPoolCandidate.findFirst({
-      where: {
-        talentPoolId: poolId,
-        candidateUserId: dto.candidateUserId,
-        deletedAt: null,
-      },
-    });
-    if (existing) return existing;
-
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'TalentPoolCandidate:add',
+        `${poolId}:${dto.candidateUserId}`,
+      );
+
+      const existing = await tx.talentPoolCandidate.findFirst({
+        where: {
+          talentPoolId: poolId,
+          candidateUserId: dto.candidateUserId,
+          deletedAt: null,
+        },
+      });
+      if (existing) return existing;
+
       const created = await tx.talentPoolCandidate.create({
         data: {
           talentPoolId: poolId,

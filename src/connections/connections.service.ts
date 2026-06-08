@@ -62,12 +62,13 @@ export class ConnectionsService {
       throw new BadRequestException('BLOCKED_USER');
     }
 
-    await this.idempotencyService.claim(
-      'Connection:sendRequest',
-      `${userId}:${dto.toUserId}`,
-    );
-
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'Connection:sendRequest',
+        `${userId}:${dto.toUserId}`,
+      );
+
       // Check for existing connection (inside transaction to prevent race)
       const existing = await tx.connection.findFirst({
         where: {
@@ -337,12 +338,13 @@ export class ConnectionsService {
       throw new BadRequestException('CANNOT_BLOCK_SELF');
     }
 
-    await this.idempotencyService.claim(
-      'Connection:blockUser',
-      `${userId}:${blockedUserId}`,
-    );
-
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'Connection:blockUser',
+        `${userId}:${blockedUserId}`,
+      );
+
       // Check for existing block (inside transaction to prevent race)
       const existing = await tx.block.findFirst({
         where: { blockerId: userId, blockedId: blockedUserId },

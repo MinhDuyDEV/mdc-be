@@ -53,12 +53,13 @@ export class PostsService {
    * Idempotency key derived from userId + content hash + visibility.
    */
   async createPost(userId: string, dto: CreatePostDto) {
-    await this.idempotencyService.claim(
-      'Post:create',
-      `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? 'PUBLIC'}`,
-    );
-
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'Post:create',
+        `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? 'PUBLIC'}`,
+      );
+
       const post = await tx.post.create({
         data: {
           authorId: userId,
