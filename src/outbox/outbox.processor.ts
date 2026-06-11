@@ -427,7 +427,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'UserStatusChanged':
-        await this.notification.processUserStatusChanged(
+        this.notification.processUserStatusChanged(
           payload as {
             userId: string;
             previousStatus: string;
@@ -528,20 +528,19 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'MentionRemoved':
-        await this.postInteraction.processMentionRemoved(
+        this.postInteraction.processMentionRemoved(
           payload as {
             postId: string;
             mentionedUserId: string;
             mentionerUserId: string;
+            mentionId: string;
           },
         );
         return;
       // Moderation domain — Phase B (T4)
-      // Consumers deferred; events are written to the outbox for future use
-      // (search re-index eviction, analytics, GDPR reconciliation).
       case 'ProfileRemoved':
-        this.logger.debug(
-          `ProfileRemoved: profile ${(payload as { profileId: string }).profileId} removed (no consumer — deferred)`,
+        await this.profileSearchIndex.processProfileRemoved(
+          payload as { profileId: string },
         );
         return;
       case 'CompanyRemoved':

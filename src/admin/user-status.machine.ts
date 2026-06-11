@@ -11,6 +11,7 @@ import { UserStatus } from '@prisma/client';
  *   - ACTIVE → DISABLED (administrative disable).
  *   - SUSPENDED → DISABLED (disable from suspended state).
  *   - DISABLED → ACTIVE (re-enable a disabled account).
+ *   - DISABLED → SUSPENDED (escalate to suspension).
  *
  * Same-status is a no-op (callers short-circuit before calling the assertion).
  * Any other transition is rejected with BadRequestException.
@@ -28,6 +29,7 @@ const ALLOWED_TRANSITIONS: Record<UserStatus, ReadonlySet<UserStatus>> = {
   ]),
   [UserStatus.DISABLED]: new Set<UserStatus>([
     UserStatus.ACTIVE,
+    UserStatus.SUSPENDED,
     UserStatus.DELETED,
   ]),
   [UserStatus.DELETED]: new Set<UserStatus>(),

@@ -30,6 +30,7 @@ export class RecommendationsService {
     return mediaId ? `/api/v1/media/${mediaId}` : null;
   }
 
+  // fallow-ignore-next-line complexity
   async getPeopleRecommendations(
     userId: string,
     cursor: string | undefined,
@@ -91,6 +92,7 @@ export class RecommendationsService {
         id: true,
         displayName: true,
         profile: {
+          where: { deletedAt: null },
           select: {
             headline: true,
             location: true,
@@ -166,6 +168,7 @@ export class RecommendationsService {
     return result;
   }
 
+  // fallow-ignore-next-line code-duplication
   async getJobRecommendations(
     userId: string,
     cursor: string | undefined,
@@ -300,6 +303,7 @@ export class RecommendationsService {
     return result;
   }
 
+  // fallow-ignore-next-line code-duplication
   async getCompanyRecommendations(
     userId: string,
     cursor: string | undefined,

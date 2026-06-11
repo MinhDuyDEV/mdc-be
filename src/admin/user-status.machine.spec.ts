@@ -15,6 +15,7 @@ describe('user-status.machine', () => {
       [UserStatus.SUSPENDED, UserStatus.DISABLED],
       [UserStatus.SUSPENDED, UserStatus.DELETED],
       [UserStatus.DISABLED, UserStatus.ACTIVE],
+      [UserStatus.DISABLED, UserStatus.SUSPENDED],
       [UserStatus.DISABLED, UserStatus.DELETED],
     ])('allows %s → %s', (from, to) => {
       expect(isAllowedUserStatusTransition(from, to)).toBe(true);
@@ -24,9 +25,9 @@ describe('user-status.machine', () => {
       [UserStatus.DELETED, UserStatus.ACTIVE],
       [UserStatus.DELETED, UserStatus.SUSPENDED],
       [UserStatus.DELETED, UserStatus.DISABLED],
-      [UserStatus.DISABLED, UserStatus.SUSPENDED],
-      [UserStatus.SUSPENDED, UserStatus.SUSPENDED], // self-loop is not a transition
-      [UserStatus.ACTIVE, UserStatus.ACTIVE],
+      [UserStatus.SUSPENDED, UserStatus.SUSPENDED], // self-loop
+      [UserStatus.DISABLED, UserStatus.DISABLED], // self-loop
+      [UserStatus.ACTIVE, UserStatus.ACTIVE], // self-loop
     ])('rejects %s → %s', (from, to) => {
       expect(isAllowedUserStatusTransition(from, to)).toBe(false);
     });
@@ -41,6 +42,7 @@ describe('user-status.machine', () => {
       [UserStatus.SUSPENDED, UserStatus.DISABLED],
       [UserStatus.SUSPENDED, UserStatus.DELETED],
       [UserStatus.DISABLED, UserStatus.ACTIVE],
+      [UserStatus.DISABLED, UserStatus.SUSPENDED],
       [UserStatus.DISABLED, UserStatus.DELETED],
     ])('does not throw for allowed %s → %s', (from, to) => {
       expect(() => assertValidUserStatusTransition(from, to)).not.toThrow();
@@ -50,7 +52,6 @@ describe('user-status.machine', () => {
       [UserStatus.DELETED, UserStatus.ACTIVE],
       [UserStatus.DELETED, UserStatus.SUSPENDED],
       [UserStatus.DELETED, UserStatus.DISABLED],
-      [UserStatus.DISABLED, UserStatus.SUSPENDED],
     ])('throws BadRequestException for %s → %s', (from, to) => {
       expect(() => assertValidUserStatusTransition(from, to)).toThrow(
         BadRequestException,

@@ -78,7 +78,7 @@ export class AdminService {
           metadata: {
             previousStatus: current.status,
             newStatus: dto.status,
-            reason: dto.reason,
+            reason: dto.reason ?? null,
           },
         },
       });

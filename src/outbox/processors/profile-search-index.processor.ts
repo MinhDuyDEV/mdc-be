@@ -7,6 +7,10 @@ interface ProfileUpdatedPayload {
   userId: string;
 }
 
+interface ProfileRemovedPayload {
+  profileId: string;
+}
+
 @Injectable()
 export class ProfileSearchIndexProcessor {
   private readonly logger = new Logger(ProfileSearchIndexProcessor.name);
@@ -61,5 +65,22 @@ export class ProfileSearchIndexProcessor {
       });
       this.logger.log(`Removed non-public profile ${profile.id} from ES`);
     }
+  }
+
+  /**
+   * Remove a soft-deleted profile from the Elasticsearch index.
+   *
+   * Called when a ProfileRemoved outbox event is dispatched (moderation
+   * REMOVE_CONTENT on a PROFILE target). Unlike processProfileUpdated,
+   * this method does NOT filter by deletedAt because the profile row
+   * already has deletedAt set.
+   */
+  async processProfileRemoved(payload: ProfileRemovedPayload): Promise<void> {
+    await this.searchIndex.deleteByQuery('profiles', {
+      term: { id: payload.profileId },
+    });
+    this.logger.log(
+      `Removed soft-deleted profile ${payload.profileId} from ES index`,
+    );
   }
 }

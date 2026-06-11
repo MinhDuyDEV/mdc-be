@@ -156,6 +156,21 @@ describe('ModerationService', () => {
           }),
         }),
       );
+      expect(prisma.moderationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actionType: 'REMOVE_CONTENT',
+          }),
+        }),
+      );
+      expect(prisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'report-1' },
+          data: expect.objectContaining({
+            status: 'RESOLVED_ACTIONED',
+          }),
+        }),
+      );
     });
 
     it('soft-deletes COMPANY and emits CompanyRemoved', async () => {
@@ -191,6 +206,21 @@ describe('ModerationService', () => {
         expect.objectContaining({
           eventType: 'CompanyRemoved',
           payload: expect.objectContaining({ companyId: 'company-1' }),
+        }),
+      );
+      expect(prisma.moderationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actionType: 'REMOVE_CONTENT',
+          }),
+        }),
+      );
+      expect(prisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'report-2' },
+          data: expect.objectContaining({
+            status: 'RESOLVED_ACTIONED',
+          }),
         }),
       );
     });
@@ -231,6 +261,21 @@ describe('ModerationService', () => {
           payload: expect.objectContaining({
             messageId: 'message-1',
             conversationId: 'conv-1',
+          }),
+        }),
+      );
+      expect(prisma.moderationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actionType: 'REMOVE_CONTENT',
+          }),
+        }),
+      );
+      expect(prisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'report-3' },
+          data: expect.objectContaining({
+            status: 'RESOLVED_ACTIONED',
           }),
         }),
       );

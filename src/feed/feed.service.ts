@@ -1,15 +1,19 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable } from '@nestjs/common';
 import {
   ConnectionStatus,
   FollowStatus,
   PostStatus,
   PostVisibility,
   type Prisma,
-} from "@prisma/client";
-import { ConnectionsPolicyService } from "../connections/connections-policy.service";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import type { FeedQueryDto } from "./dto/feed-query.dto";
-import { buildCursorWhere, decodeCursor, paginateRows } from "../common/pagination/cursor";
+} from '@prisma/client';
+import { ConnectionsPolicyService } from '../connections/connections-policy.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import type { FeedQueryDto } from './dto/feed-query.dto';
+import {
+  buildCursorWhere,
+  decodeCursor,
+  paginateRows,
+} from '../common/pagination/cursor';
 
 const POST_INCLUDE = {
   author: {
@@ -71,18 +75,24 @@ export class FeedService {
 
       const connectedIds = new Set<string>();
       for (const conn of connections) {
-        connectedIds.add(conn.requesterId === userId ? conn.addresseeId : conn.requesterId);
+        connectedIds.add(
+          conn.requesterId === userId ? conn.addresseeId : conn.requesterId,
+        );
       }
 
       const followedIds = follows.map((f) => f.followeeId);
 
       const blockedIds = new Set<string>();
       for (const block of blocks) {
-        blockedIds.add(block.blockerId === userId ? block.blockedId : block.blockerId);
+        blockedIds.add(
+          block.blockerId === userId ? block.blockedId : block.blockerId,
+        );
       }
 
       // Filter out blocked users from connections and follows
-      const visibleConnectedIds = Array.from(connectedIds).filter((id) => !blockedIds.has(id));
+      const visibleConnectedIds = Array.from(connectedIds).filter(
+        (id) => !blockedIds.has(id),
+      );
       const visibleFollowedIds = followedIds.filter(
         (id) => !blockedIds.has(id) && !connectedIds.has(id),
       );
@@ -149,7 +159,7 @@ export class FeedService {
 
     const rows = await this.prisma.post.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include: POST_INCLUDE,
     });
@@ -161,7 +171,11 @@ export class FeedService {
   /**
    * Profile feed: posts by a specific user, visibility-gated by viewer relationship.
    */
-  async getProfileFeed(viewerId: string | undefined, userId: string, query: FeedQueryDto) {
+  async getProfileFeed(
+    viewerId: string | undefined,
+    userId: string,
+    query: FeedQueryDto,
+  ) {
     const limit = query.limit ?? 20;
     const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
     const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
@@ -207,7 +221,7 @@ export class FeedService {
 
     const rows = await this.prisma.post.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include: POST_INCLUDE,
     });
@@ -225,7 +239,7 @@ export class FeedService {
     const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
 
     const members = await this.prisma.companyMember.findMany({
-      where: { companyId, status: "active" },
+      where: { companyId, status: 'active' },
       select: { userId: true },
     });
     const memberIds = members.map((m) => m.userId);
@@ -244,7 +258,7 @@ export class FeedService {
 
     const rows = await this.prisma.post.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include: POST_INCLUDE,
     });
@@ -286,7 +300,7 @@ export class FeedService {
 
     const rows = await this.prisma.post.findMany({
       where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: limit + 1,
       include: POST_INCLUDE,
     });

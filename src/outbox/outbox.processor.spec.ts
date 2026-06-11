@@ -74,6 +74,7 @@ describe('OutboxProcessor', () => {
 
     const mockProfileSearchIndex = {
       processProfileUpdated: jest.fn(),
+      processProfileRemoved: jest.fn(),
     };
     const mockProfileCreation = {
       processUserRegistered: jest.fn().mockResolvedValue(undefined),
@@ -695,6 +696,7 @@ describe('OutboxProcessor', () => {
           postId: 'post-1',
           mentionedUserId: 'user-2',
           mentionerUserId: 'user-1',
+          mentionId: 'mention-1',
         },
         attempts: 0,
       };

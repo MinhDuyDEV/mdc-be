@@ -160,6 +160,7 @@ export const outboxEventSchemas = {
   }),
   MentionRemoved: payload.extend({
     postId: z.string(),
+    mentionId: z.string(),
     mentionedUserId: z.string(),
     mentionerUserId: z.string(),
   }),

@@ -408,14 +408,13 @@ export class NotificationProcessor {
     newStatus: string;
     changedBy: string;
     reason?: string | null;
-  }): Promise<void> {
+  }): void {
     // No notification is sent to the user themselves when their status
     // changes (the action is administrative, not user-facing). The event
     // itself is consumed by analytics and audit consumers.
     this.logger.debug(
       `UserStatusChanged: user=${payload.userId} ${payload.previousStatus}→${payload.newStatus} by ${payload.changedBy} (no-op)`,
     );
-    return Promise.resolve();
   }
 
   private async insertNotification(opts: {

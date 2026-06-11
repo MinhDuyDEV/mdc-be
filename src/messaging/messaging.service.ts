@@ -219,6 +219,7 @@ export class MessagingService {
               select: {
                 id: true,
                 profile: {
+                  where: { deletedAt: null },
                   select: { headline: true },
                 },
               },
@@ -268,6 +269,7 @@ export class MessagingService {
               select: {
                 id: true,
                 profile: {
+                  where: { deletedAt: null },
                   select: { headline: true },
                 },
               },
