@@ -5,6 +5,9 @@ describe('OutboxProcessor', () => {
     const mockPrisma = {
       $transaction: jest.fn(),
       $executeRaw: jest.fn().mockResolvedValue(0),
+      job: {
+        update: jest.fn().mockResolvedValue({}),
+      },
       outboxEvent: {
         count: jest.fn(),
         findMany: jest.fn(),
@@ -495,16 +498,7 @@ describe('OutboxProcessor', () => {
   });
 
   describe('Phase 4 event types', () => {
-    const PHASE_4_STUB_EVENTS = [
-      {
-        eventType: 'ExternalApplyClicked',
-        payload: {
-          jobId: 'job-1',
-          companyId: 'company-1',
-          userId: null,
-          occurredAt: new Date().toISOString(),
-        },
-      },
+    const DEFERRED_EVENTS = [
       {
         eventType: 'CandidateSaved',
         payload: {
@@ -525,8 +519,8 @@ describe('OutboxProcessor', () => {
       },
     ] as const;
 
-    it.each(PHASE_4_STUB_EVENTS)(
-      'logs a debug stub for $eventType and does not warn (no-handler)',
+    it.each(DEFERRED_EVENTS)(
+      'logs deferred handler for $eventType and does not warn (no-handler)',
       async ({ eventType, payload }) => {
         const { processor, mockLogger } = createProcessor();
         const event = { id: 'evt-id', eventType, payload, attempts: 0 };
@@ -540,11 +534,9 @@ describe('OutboxProcessor', () => {
         const debugCalls = mockLogger.debug.mock.calls.map((c: unknown[]) =>
           String(c[0]),
         );
-        expect(
-          debugCalls.some((m) =>
-            m.includes(`Phase 4 stub handler for event type ${eventType}`),
-          ),
-        ).toBe(true);
+        expect(debugCalls.some((m) => m.includes('Deferred handler'))).toBe(
+          true,
+        );
 
         const warnCalls = mockLogger.warn.mock.calls.map((c: unknown[]) =>
           String(c[0]),
@@ -554,6 +546,36 @@ describe('OutboxProcessor', () => {
         ).toBe(false);
       },
     );
+
+    it('handles ExternalApplyClicked by incrementing job click count', async () => {
+      const { processor, mockPrisma, mockLogger } = createProcessor();
+      const event = {
+        id: 'evt-eac',
+        eventType: 'ExternalApplyClicked',
+        payload: {
+          jobId: 'job-1',
+          companyId: 'company-1',
+          userId: null,
+          occurredAt: new Date().toISOString(),
+        },
+        attempts: 0,
+      };
+
+      await (
+        processor as unknown as {
+          dispatch: (e: typeof event) => Promise<void>;
+        }
+      ).dispatch(event);
+
+      expect(mockPrisma.job.update).toHaveBeenCalledWith({
+        where: { id: 'job-1' },
+        data: { externalClickCount: { increment: 1 } },
+      });
+
+      expect(mockLogger.debug).toHaveBeenCalledWith(
+        expect.stringContaining('ExternalApplyClicked'),
+      );
+    });
 
     it('rejects malformed payload before dispatching handlers', async () => {
       const { processor, mockCompanySearchIndex } = createProcessor();

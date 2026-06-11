@@ -422,12 +422,25 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      // Phase 4 stub remainder — real handlers deferred to later phases.
-      case 'ExternalApplyClicked':
+      case 'ExternalApplyClicked': {
+        const { jobId, companyId } = payload as {
+          jobId: string;
+          companyId: string;
+        };
+        await this.prisma.job.update({
+          where: { id: jobId },
+          data: { externalClickCount: { increment: 1 } },
+        });
+        this.logger.debug(
+          `ExternalApplyClicked: tracked click for job ${jobId} (company=${companyId})`,
+        );
+        return;
+      }
       case 'CandidateSaved':
       case 'CandidateAddedToTalentPool':
+        // Deferred to Phase 4: notify candidate via email + in-app notification
         this.logger.debug(
-          `Phase 4 stub handler for event type ${event.eventType} (id=${event.id})`,
+          `Deferred handler for ${event.eventType} (id=${event.id}) — candidate notification in Phase 4`,
         );
         return;
       // Posts domain — Phase 6
@@ -492,12 +505,17 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case 'ConversationCreated':
+      case 'ConversationCreated': {
+        const convPayload = payload as {
+          conversationId: string;
+          participantIds: string[];
+        };
         // Softer side-effect — just log for now; future: realtime fan-out
         this.logger.debug(
-          `ConversationCreated: conv=${(payload as { conversationId: string }).conversationId}`,
+          `ConversationCreated: conv=${convPayload.conversationId} participants=${convPayload.participantIds.length}`,
         );
         return;
+      }
       case 'PaymentProviderEventReceived':
         await this.billingProcessor.processPaymentProviderEvent(
           (payload as { eventId: string }).eventId,

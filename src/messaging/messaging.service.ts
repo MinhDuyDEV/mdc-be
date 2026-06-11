@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
 } from '@nestjs/common';
+import * as crypto from 'node:crypto';
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
@@ -69,7 +70,11 @@ export class MessagingService {
         return existing;
       }
 
-      await this.idempotencyService.claim('Conversation:create', canonicalKey);
+      await this.idempotencyService.claim(
+        tx,
+        'Conversation:create',
+        canonicalKey,
+      );
 
       const conversation = await tx.conversation.create({
         data: {
@@ -139,6 +144,7 @@ export class MessagingService {
       }
 
       await this.idempotencyService.claim(
+        tx,
         'Conversation:recruiting',
         canonicalKey,
       );
@@ -318,7 +324,16 @@ export class MessagingService {
       .map((p: { userId: string }) => p.userId)
       .filter((id: string) => id !== userId);
 
+    // Compute idempotency key to prevent duplicate messages on client retry
+    const contentHash = crypto
+      .createHash('sha256')
+      .update(dto.content)
+      .digest('hex');
+    const idempotencyKey = `${conversationId}:${userId}:${contentHash}`;
+
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(tx, 'Message:send', idempotencyKey);
+
       const message = await tx.message.create({
         data: {
           conversationId,

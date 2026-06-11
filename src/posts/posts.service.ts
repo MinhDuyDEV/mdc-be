@@ -53,12 +53,13 @@ export class PostsService {
    * Idempotency key derived from userId + content hash + visibility.
    */
   async createPost(userId: string, dto: CreatePostDto) {
-    await this.idempotencyService.claim(
-      'Post:create',
-      `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? 'PUBLIC'}`,
-    );
-
     return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'Post:create',
+        `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? 'PUBLIC'}`,
+      );
+
       const post = await tx.post.create({
         data: {
           authorId: userId,
@@ -92,8 +93,8 @@ export class PostsService {
 
       const mentions = extractMentions(dto.content);
       for (const username of mentions) {
-        const mentionedUser = await tx.user.findFirst({
-          where: { displayName: { equals: username, mode: 'insensitive' } },
+        const mentionedUser = await tx.user.findUnique({
+          where: { handle: username },
           select: { id: true },
         });
         if (mentionedUser) {
@@ -207,8 +208,8 @@ export class PostsService {
         await tx.mention.deleteMany({ where: { postId } });
         const mentions = extractMentions(dto.content);
         for (const username of mentions) {
-          const mentionedUser = await tx.user.findFirst({
-            where: { displayName: { equals: username, mode: 'insensitive' } },
+          const mentionedUser = await tx.user.findUnique({
+            where: { handle: username },
             select: { id: true },
           });
           if (mentionedUser) {

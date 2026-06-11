@@ -100,7 +100,7 @@ describe('PostsService', () => {
         visibility: dto.visibility,
         status: PostStatus.PUBLISHED,
       });
-      prisma.user.findFirst.mockResolvedValue({ id: 'alice-id' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'alice-id' });
 
       await service.createPost('user1', dto);
 

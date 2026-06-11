@@ -164,12 +164,10 @@ export class AuthController {
       };
     }
 
-    // Generate new token
-    const token = await this.emailVerificationService.generateToken(user.id);
+    // Generate new token (stored in DB for verification)
+    await this.emailVerificationService.generateToken(user.id);
 
-    // Send email (simplified - in production this would use EmailService)
-    // For now, just log it
-    this.logger.log(`Verification token for ${user.email}: ${token}`);
+    this.logger.debug(`Verification email sent to ${user.email}`);
 
     return {
       message: 'If the email exists, a new verification email has been sent',

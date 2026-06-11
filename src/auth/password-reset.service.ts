@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomBytes } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import type { AppConfig } from '../infra/config/app-config';
 import {
   MAILER_TRANSPORTER,
@@ -50,7 +50,7 @@ export class PasswordResetService {
     });
 
     const rawToken = randomBytes(32).toString('hex');
-    const tokenHash = await this.passwordService.hash(rawToken);
+    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
 
     await this.prisma.verificationToken.create({
       data: {
@@ -86,11 +86,9 @@ export class PasswordResetService {
       throw new BadRequestException('Invalid or expired password reset token');
     }
 
-    const isValid = await this.passwordService.compare(
-      rawToken,
-      token.tokenHash,
-    );
-    if (!isValid) {
+    if (
+      createHash('sha256').update(rawToken).digest('hex') !== token.tokenHash
+    ) {
       throw new BadRequestException('Invalid or expired password reset token');
     }
 

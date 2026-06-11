@@ -236,8 +236,9 @@ export class ModerationService {
       case 'PROFILE':
       case 'COMPANY':
       case 'MESSAGE':
-        // These entities don't have contentStatus — log for future implementation
-        break;
+        throw new NotImplementedException(
+          `Content removal not supported for entity type ${targetEntity}`,
+        );
       default:
         throw new NotImplementedException(
           `Content removal not supported for entity type ${targetEntity}`,

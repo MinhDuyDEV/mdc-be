@@ -4,8 +4,10 @@ import {
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import * as crypto from 'node:crypto';
 
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { slugify } from '../common/strings/slug';
 
 import { OutboxService } from '../outbox/outbox.service';
 
@@ -18,6 +20,7 @@ import { TokenService } from './token.service';
 interface RegisterDto {
   email: string;
   password: string;
+  handle?: string;
   displayName?: string;
 }
 
@@ -47,6 +50,29 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    // Generate unique handle
+    let handle: string;
+    if (dto.handle) {
+      handle = dto.handle;
+    } else {
+      const baseHandle = slugify(
+        dto.displayName || dto.email.split('@')[0],
+      ).slice(0, 30);
+      handle = baseHandle || `user-${crypto.randomUUID().slice(0, 8)}`;
+    }
+    // Ensure handle uniqueness
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate =
+        attempt === 0 ? handle : `${handle.slice(0, 25)}-${attempt}`;
+      const existingHandle = await this.prisma.user.findUnique({
+        where: { handle: candidate },
+      });
+      if (!existingHandle) {
+        handle = candidate;
+        break;
+      }
+    }
+
     const passwordHash = await this.passwordService.hash(dto.password);
 
     // Use transaction to ensure atomicity of user creation, audit log, and outbox event
@@ -55,6 +81,7 @@ export class AuthService {
         data: {
           email: dto.email,
           passwordHash,
+          handle,
           displayName: dto.displayName,
         },
       });

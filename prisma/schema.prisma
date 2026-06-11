@@ -288,6 +288,7 @@ model User {
   email                       String                   @unique
   passwordHash                String?                  @map("password_hash")
   emailVerifiedAt             DateTime?                @map("email_verified_at")
+  handle                      String                   @unique
   displayName                 String?                  @map("display_name")
   status                      UserStatus               @default(ACTIVE)
   createdAt                   DateTime                 @default(now()) @map("created_at")
@@ -559,6 +560,7 @@ model EmailDelivery {
   template     String
   context      Json
   status       EmailStatus @default(PENDING)
+  attempts     Int         @default(0)
   sentAt       DateTime?   @map("sent_at")
   failedAt     DateTime?   @map("failed_at")
   errorMessage String?     @map("error_message")
@@ -1065,6 +1067,7 @@ model Job {
   applyUrl        String?                  @map("apply_url") @db.VarChar(2048)
   status          JobStatus                @default(DRAFT)
   contentStatus   String?                  @map("content_status") @db.VarChar(50)
+  externalClickCount Int                  @default(0) @map("external_click_count")
   employmentType  EmploymentType           @map("employment_type")
   workplaceType   WorkplaceType            @map("workplace_type")
   location        String?                  @db.VarChar(255)
