@@ -5,12 +5,13 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AppConfig } from '../infra/config';
 import {
   MAILER_TRANSPORTER,
   type MailerTransporter,
 } from '../infra/mailer/mailer.constants';
+import { PasswordService } from './password.service';
 import { PrismaService } from '../infra/prisma/prisma.service';
 
 const VERIFICATION_EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -21,6 +22,7 @@ export class EmailVerificationService {
 
   constructor(
     private readonly prisma: PrismaService,
+    private readonly passwordService: PasswordService,
     private readonly configService: ConfigService<AppConfig, true>,
     @Inject(MAILER_TRANSPORTER)
     private readonly mailerService: MailerTransporter,
@@ -75,9 +77,22 @@ export class EmailVerificationService {
     });
 
     for (const token of tokens) {
-      if (
-        createHash('sha256').update(rawToken).digest('hex') === token.tokenHash
-      ) {
+      const isBcrypt = token.tokenHash.startsWith('$');
+      let isValid = false;
+
+      if (isBcrypt) {
+        // Legacy bcrypt hash — backward compat with pre-SHA-256 tokens
+        isValid = await this.passwordService.compare(rawToken, token.tokenHash);
+      } else {
+        // SHA-256 hash — constant-time comparison
+        const computedHash = createHash('sha256').update(rawToken).digest();
+        const storedHash = Buffer.from(token.tokenHash, 'hex');
+        isValid =
+          computedHash.length === storedHash.length &&
+          timingSafeEqual(computedHash, storedHash);
+      }
+
+      if (isValid) {
         // Double-check userId if provided
         if (userId && token.userId !== userId) {
           throw new BadRequestException('Token does not belong to this user');

@@ -76,7 +76,7 @@ describe('PostsService', () => {
         id: 'hashtag1',
         name: 'world',
       });
-      prisma.user.findFirst.mockResolvedValue({ id: 'user2' });
+      prisma.user.findUnique.mockResolvedValue({ id: 'user2' });
 
       await service.createPost('user1', dto);
 

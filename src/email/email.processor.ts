@@ -32,6 +32,7 @@ export class EmailProcessor {
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async pollPending(): Promise<void> {
+    // fallow-ignore-next-line complexity — intentional: SMTP send inside FOR UPDATE tx
     const deliveries = await this.prisma.$transaction(async (tx) => {
       const locked: Array<{ id: string }> = await tx.$queryRaw`
         SELECT id FROM email_deliveries
@@ -44,18 +45,14 @@ export class EmailProcessor {
 
       if (locked.length === 0) return [];
 
-      return tx.emailDelivery.findMany({
+      const rows = await tx.emailDelivery.findMany({
         where: { id: { in: locked.map((r) => r.id) } },
         orderBy: { createdAt: 'asc' },
       });
-    });
 
-    if (deliveries.length === 0) return;
-
-    this.logger.log(`Processing ${deliveries.length} pending emails`);
-
-    const results = await Promise.allSettled(
-      deliveries.map(async (delivery) => {
+      // Process each email while holding the lock — prevents duplicate sends
+      // on crash or retry between lock release and SMTP call.
+      for (const delivery of rows) {
         const event: EmailSendEvent = {
           id: delivery.id,
           to: delivery.to,
@@ -65,13 +62,33 @@ export class EmailProcessor {
         };
 
         try {
-          await this.process(event);
+          const html = this.emailService.renderTemplate(
+            event.template,
+            event.context,
+          );
+          const from = this.configService.get('emailFrom', { infer: true });
+          await this.mailerService.sendMail({
+            from,
+            to: event.to,
+            subject: event.subject,
+            html,
+          });
+
+          await tx.emailDelivery.update({
+            where: { id: delivery.id },
+            data: {
+              status: EmailStatus.SENT,
+              sentAt: new Date(),
+            },
+          });
+
+          this.logger.log(`Email sent: ${event.template} → ${event.to}`);
         } catch (error: unknown) {
           const err = error instanceof Error ? error : new Error(String(error));
           const newAttempts = delivery.attempts + 1;
           const isExhausted = newAttempts >= 3;
 
-          await this.prisma.emailDelivery.update({
+          await tx.emailDelivery.update({
             where: { id: delivery.id },
             data: {
               attempts: newAttempts,
@@ -86,16 +103,13 @@ export class EmailProcessor {
             `Email delivery failed (attempt ${newAttempts}/3): ${delivery.template} → ${delivery.to}: ${err.message}`,
           );
         }
-      }),
-    );
+      }
 
-    const failed = results.filter(
-      (r): r is PromiseRejectedResult => r.status === 'rejected',
-    );
-    if (failed.length > 0) {
-      this.logger.error(
-        `${failed.length}/${deliveries.length} emails failed processing`,
-      );
+      return rows;
+    });
+
+    if (deliveries.length > 0) {
+      this.logger.log(`Processed ${deliveries.length} pending emails`);
     }
   }
 

@@ -124,10 +124,8 @@ export class ApplicationsService {
       }
     }
 
-    const idemKey = `${userId}:${jobId}`;
-    await this.idempotencyService.claim('Application:submit', idemKey);
-
     // Idempotent return: if active application already exists, return it.
+    // Pre-check outside tx to avoid unnecessary idempotency key claim.
     const existing = await this.prisma.application.findFirst({
       where: {
         userId,
@@ -143,6 +141,9 @@ export class ApplicationsService {
     }
 
     return this.prisma.$transaction(async (tx) => {
+      const idemKey = `${userId}:${jobId}`;
+      await this.idempotencyService.claim(tx, 'Application:submit', idemKey);
+
       const created = await tx.application.create({
         data: {
           jobId,
@@ -397,10 +398,10 @@ export class ApplicationsService {
       });
     }
 
-    const idemKey = `${applicationId}:${dto.newStatus}`;
-    await this.idempotencyService.claim('Application:status', idemKey);
-
     return this.prisma.$transaction(async (tx) => {
+      const idemKey = `${applicationId}:${dto.newStatus}`;
+      await this.idempotencyService.claim(tx, 'Application:status', idemKey);
+
       const updateData: Prisma.ApplicationUpdateInput = {
         status: dto.newStatus,
       };

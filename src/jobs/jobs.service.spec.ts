@@ -356,6 +356,7 @@ describe('JobsService', () => {
       const result = await service.saveJob('user-1', 'job-1');
       expect(result).toBe(existing);
       expect(idempotency.claim).toHaveBeenCalledWith(
+        prisma,
         'SavedJob:save',
         'user-1:job-1',
       );

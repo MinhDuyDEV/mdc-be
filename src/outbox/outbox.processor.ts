@@ -6,6 +6,8 @@ import { randomUUID } from 'crypto';
 import { PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma';
+import { NotificationEventDto } from '../realtime/dto/notification-event.dto';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { DeadLetterService } from './dead-letter.service';
 import { validateOutboxPayload } from './events';
 import { OutboxMetrics } from './outbox.metrics';
@@ -69,6 +71,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     @Inject(SubscriptionProcessor)
     private readonly subscriptionProcessor: SubscriptionProcessor,
     @Inject(OutboxMetrics) private readonly metrics: OutboxMetrics,
+    @Inject(RealtimeGateway)
+    private readonly realtimeGateway: RealtimeGateway,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(OutboxProcessor.name);
@@ -510,7 +514,21 @@ export class OutboxProcessor implements OnApplicationShutdown {
           conversationId: string;
           participantIds: string[];
         };
-        // Softer side-effect — just log for now; future: realtime fan-out
+        // Realtime fan-out: push notification to each participant
+        for (const participantId of convPayload.participantIds) {
+          const notificationEvent: NotificationEventDto = {
+            id: convPayload.conversationId,
+            type: 'ConversationCreated',
+            title: 'New conversation',
+            body: 'A new conversation has been created',
+            actionUrl: `/conversations/${convPayload.conversationId}`,
+            createdAt: new Date(),
+          };
+          this.realtimeGateway.pushNotification(
+            participantId,
+            notificationEvent,
+          );
+        }
         this.logger.debug(
           `ConversationCreated: conv=${convPayload.conversationId} participants=${convPayload.participantIds.length}`,
         );

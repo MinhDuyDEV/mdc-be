@@ -7,7 +7,7 @@ import {
 import * as crypto from 'node:crypto';
 
 import { PrismaService } from '../infra/prisma/prisma.service';
-import { slugify } from '../common/strings/slug';
+import { isUniqueConstraintError, slugify } from '../common/strings/slug';
 
 import { OutboxService } from '../outbox/outbox.service';
 
@@ -41,6 +41,7 @@ export class AuthService {
     private readonly outboxService: OutboxService,
   ) {}
 
+  // fallow-ignore-next-line complexity — intentional retry loop for handle uniqueness
   async register(dto: RegisterDto, ip?: string, userAgent?: string) {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -50,41 +51,41 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
-    // Generate unique handle
-    let handle: string;
-    if (dto.handle) {
-      handle = dto.handle;
-    } else {
-      const baseHandle = slugify(
-        dto.displayName || dto.email.split('@')[0],
-      ).slice(0, 30);
-      handle = baseHandle || `user-${crypto.randomUUID().slice(0, 8)}`;
-    }
-    // Ensure handle uniqueness
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const candidate =
-        attempt === 0 ? handle : `${handle.slice(0, 25)}-${attempt}`;
-      const existingHandle = await this.prisma.user.findUnique({
-        where: { handle: candidate },
-      });
-      if (!existingHandle) {
-        handle = candidate;
-        break;
-      }
-    }
+    // Pre-compute base handle (atomically checked for uniqueness inside transaction)
+    const baseHandle: string = dto.handle
+      ? dto.handle
+      : slugify(dto.displayName || dto.email.split('@')[0]).slice(0, 30) ||
+        `user-${crypto.randomUUID().slice(0, 8)}`;
 
     const passwordHash = await this.passwordService.hash(dto.password);
 
-    // Use transaction to ensure atomicity of user creation, audit log, and outbox event
+    // fallow-ignore-next-line complexity — intentional: TOCTOU-safe handle retry inside tx
     const result = await this.prisma.$transaction(async (tx) => {
-      const user = await tx.user.create({
-        data: {
-          email: dto.email,
-          passwordHash,
-          handle,
-          displayName: dto.displayName,
-        },
-      });
+      // Generate unique handle inside transaction (TOCTOU-safe)
+      let user: Awaited<ReturnType<typeof tx.user.create>> | null = null;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const candidate =
+          attempt === 0 ? baseHandle : `${baseHandle.slice(0, 25)}-${attempt}`;
+        try {
+          user = await tx.user.create({
+            data: {
+              email: dto.email,
+              passwordHash,
+              handle: candidate,
+              displayName: dto.displayName,
+            },
+          });
+          break;
+        } catch (error: unknown) {
+          if (!isUniqueConstraintError(error)) throw error;
+          if (attempt >= 9) {
+            throw new ConflictException('Unable to generate unique handle');
+          }
+        }
+      }
+      if (!user) {
+        throw new ConflictException('Unable to generate unique handle');
+      }
 
       // Create audit log
       await tx.auditLog.create({

@@ -81,6 +81,9 @@ describe('OutboxProcessor', () => {
     const mockSubscriptionProcessor = {
       createFreeSubscription: jest.fn().mockResolvedValue(undefined),
     };
+    const mockRealtimeGateway = {
+      pushNotification: jest.fn(),
+    };
     const mockMetrics = {
       recordProcessed: jest.fn(),
       recordFailed: jest.fn(),
@@ -112,6 +115,7 @@ describe('OutboxProcessor', () => {
       mockBillingProcessor as any,
       mockSubscriptionProcessor as any,
       mockMetrics as any,
+      mockRealtimeGateway as any,
       mockLogger as any,
     );
     return {

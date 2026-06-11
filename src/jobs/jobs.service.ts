@@ -572,30 +572,39 @@ export class JobsService {
       throw new NotFoundException('JOB_NOT_FOUND');
     }
 
-    await this.idempotencyService.claim('SavedJob:save', `${userId}:${jobId}`);
+    return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'SavedJob:save',
+        `${userId}:${jobId}`,
+      );
 
-    const existing = await this.prisma.savedJob.findFirst({
-      where: { userId, jobId, deletedAt: null },
+      const existing = await tx.savedJob.findFirst({
+        where: { userId, jobId, deletedAt: null },
+      });
+      if (existing) return existing;
+
+      return tx.savedJob.create({ data: { userId, jobId } });
     });
-    if (existing) return existing;
-
-    return this.prisma.savedJob.create({ data: { userId, jobId } });
   }
 
   async unsaveJob(userId: string, jobId: string) {
-    await this.idempotencyService.claim(
-      'SavedJob:unsave',
-      `${userId}:${jobId}`,
-    );
+    return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(
+        tx,
+        'SavedJob:unsave',
+        `${userId}:${jobId}`,
+      );
 
-    const existing = await this.prisma.savedJob.findFirst({
-      where: { userId, jobId, deletedAt: null },
-    });
-    if (!existing) return;
+      const existing = await tx.savedJob.findFirst({
+        where: { userId, jobId, deletedAt: null },
+      });
+      if (!existing) return;
 
-    await this.prisma.savedJob.update({
-      where: { id: existing.id },
-      data: { deletedAt: new Date() },
+      await tx.savedJob.update({
+        where: { id: existing.id },
+        data: { deletedAt: new Date() },
+      });
     });
   }
 

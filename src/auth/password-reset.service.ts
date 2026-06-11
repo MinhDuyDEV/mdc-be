@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AppConfig } from '../infra/config/app-config';
 import {
   MAILER_TRANSPORTER,
@@ -69,6 +69,7 @@ export class PasswordResetService {
     };
   }
 
+  // fallow-ignore-next-line complexity — intentional: bcrypt backward compat + timingSafeEqual
   async confirmReset(
     rawToken: string,
     newPassword: string,
@@ -86,9 +87,21 @@ export class PasswordResetService {
       throw new BadRequestException('Invalid or expired password reset token');
     }
 
-    if (
-      createHash('sha256').update(rawToken).digest('hex') !== token.tokenHash
-    ) {
+    // Backward compat: bcrypt ($2*) and SHA-256 hashes
+    const isBcrypt = token.tokenHash.startsWith('$');
+    let isValid = false;
+
+    if (isBcrypt) {
+      isValid = await this.passwordService.compare(rawToken, token.tokenHash);
+    } else {
+      const computedHash = createHash('sha256').update(rawToken).digest();
+      const storedHash = Buffer.from(token.tokenHash, 'hex');
+      isValid =
+        computedHash.length === storedHash.length &&
+        timingSafeEqual(computedHash, storedHash);
+    }
+
+    if (!isValid) {
       throw new BadRequestException('Invalid or expired password reset token');
     }
 

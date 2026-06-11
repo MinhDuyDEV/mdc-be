@@ -193,6 +193,7 @@ describe('ApplicationsService', () => {
 
       expect(result.id).toBe('app-1');
       expect(idempotency.claim).toHaveBeenCalledWith(
+        prisma,
         'Application:submit',
         'candidate-1:job-1',
       );

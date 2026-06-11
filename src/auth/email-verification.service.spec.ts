@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { PasswordService } from './password.service';
 import { EmailVerificationService } from './email-verification.service';
 
 describe('EmailVerificationService', () => {
@@ -46,6 +47,10 @@ describe('EmailVerificationService', () => {
         {
           provide: MAILER_TRANSPORTER,
           useValue: mockMailerService,
+        },
+        {
+          provide: PasswordService,
+          useValue: { compare: jest.fn() },
         },
       ],
     }).compile();
