@@ -3,19 +3,19 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { Prisma, ProfileVisibility } from '@prisma/client';
-import type { AuthenticatedUser } from '../common/auth/current-user.interface';
+} from "@nestjs/common";
+import { Prisma, ProfileVisibility } from "@prisma/client";
+import type { AuthenticatedUser } from "../common/auth/current-user.interface";
 
-import { PrismaService } from '../infra/prisma/prisma.service';
+import { PrismaService } from "../infra/prisma/prisma.service";
 
-import { OutboxService } from '../outbox/outbox.service';
-import type { CertificationDto } from './dto/certification.dto';
-import type { EducationDto } from './dto/education.dto';
-import type { ExperienceDto } from './dto/experience.dto';
-import type { LanguageDto } from './dto/language.dto';
-import type { SkillDto } from './dto/skill.dto';
-import type { UpdateProfileDto } from './dto/update-profile.dto';
+import { OutboxService } from "../outbox/outbox.service";
+import type { CertificationDto } from "./dto/certification.dto";
+import type { EducationDto } from "./dto/education.dto";
+import type { ExperienceDto } from "./dto/experience.dto";
+import type { LanguageDto } from "./dto/language.dto";
+import type { SkillDto } from "./dto/skill.dto";
+import type { UpdateProfileDto } from "./dto/update-profile.dto";
 
 const PROFILE_INCLUDES = {
   skills: true,
@@ -26,13 +26,8 @@ const PROFILE_INCLUDES = {
   endorsements: true,
 } as const;
 
-function isPrismaUniqueViolation(
-  error: unknown,
-): error is Prisma.PrismaClientKnownRequestError {
-  return (
-    error instanceof Prisma.PrismaClientKnownRequestError &&
-    error.code === 'P2002'
-  );
+function isPrismaUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 @Injectable()
@@ -43,8 +38,11 @@ export class ProfilesService {
   ) {}
 
   async getOwnProfile(user: AuthenticatedUser) {
-    let profile = await this.prisma.profile.findUnique({
-      where: { userId: user.id },
+    // Filter out soft-deleted profiles (e.g. removed by moderation). A
+    // soft-deleted row is treated as "not present" and triggers the
+    // auto-create path below so the user gets a fresh profile.
+    let profile = await this.prisma.profile.findFirst({
+      where: { userId: user.id, deletedAt: null },
       include: PROFILE_INCLUDES,
     });
 
@@ -59,18 +57,11 @@ export class ProfilesService {
   }
 
   async updateOwnProfile(user: AuthenticatedUser, data: UpdateProfileDto) {
-    const {
-      skills,
-      experiences,
-      educations,
-      certifications,
-      languages,
-      ...profileData
-    } = data;
+    const { skills, experiences, educations, certifications, languages, ...profileData } = data;
 
     await this.prisma.$transaction(async (tx) => {
-      let profile = await tx.profile.findUnique({
-        where: { userId: user.id },
+      let profile = await tx.profile.findFirst({
+        where: { userId: user.id, deletedAt: null },
       });
 
       if (!profile) {
@@ -86,19 +77,16 @@ export class ProfilesService {
 
       // Replace sub-entities inside transaction (each creates a savepoint)
       if (skills !== undefined) await this.replaceSkills(profile.id, skills);
-      if (experiences !== undefined)
-        await this.replaceExperiences(profile.id, experiences);
-      if (educations !== undefined)
-        await this.replaceEducations(profile.id, educations);
+      if (experiences !== undefined) await this.replaceExperiences(profile.id, experiences);
+      if (educations !== undefined) await this.replaceEducations(profile.id, educations);
       if (certifications !== undefined)
         await this.replaceCertifications(profile.id, certifications);
-      if (languages !== undefined)
-        await this.replaceLanguages(profile.id, languages);
+      if (languages !== undefined) await this.replaceLanguages(profile.id, languages);
 
       // Emit ProfileUpdated event
       await this.outboxService.emit(tx, {
-        eventType: 'ProfileUpdated',
-        aggregateType: 'Profile',
+        eventType: "ProfileUpdated",
+        aggregateType: "Profile",
         aggregateId: profile.id,
         payload: { profileId: profile.id, userId: user.id },
       });
@@ -106,35 +94,31 @@ export class ProfilesService {
       return profile.id;
     });
 
-    return this.prisma.profile.findUnique({
-      where: { userId: user.id },
+    return this.prisma.profile.findFirst({
+      where: { userId: user.id, deletedAt: null },
       include: PROFILE_INCLUDES,
     });
   }
 
-  async getPublicProfile(
-    targetUserId: string,
-    currentUser?: AuthenticatedUser,
-  ) {
+  async getPublicProfile(targetUserId: string, currentUser?: AuthenticatedUser) {
     const userRecord = await this.prisma.user.findUnique({
       where: { id: targetUserId },
     });
 
-    if (
-      !userRecord ||
-      userRecord.status === 'DELETED' ||
-      userRecord.status === 'DISABLED'
-    ) {
-      throw new NotFoundException('User not found');
+    if (!userRecord || userRecord.status === "DELETED" || userRecord.status === "DISABLED") {
+      throw new NotFoundException("User not found");
     }
 
-    const profile = await this.prisma.profile.findUnique({
-      where: { userId: targetUserId },
+    // Soft-deleted profiles (e.g. removed by moderation) are hidden from
+    // public reads. We use findFirst instead of findUnique so the
+    // deletedAt filter is applied to the same query.
+    const profile = await this.prisma.profile.findFirst({
+      where: { userId: targetUserId, deletedAt: null },
       include: PROFILE_INCLUDES,
     });
 
     if (!profile) {
-      throw new NotFoundException('Profile not found');
+      throw new NotFoundException("Profile not found");
     }
 
     // Owner always gets full profile
@@ -194,14 +178,12 @@ export class ProfilesService {
       if (e.endDate) {
         const end = new Date(e.endDate);
         if (start >= end) {
-          throw new BadRequestException(
-            'Experience startDate must be before endDate',
-          );
+          throw new BadRequestException("Experience startDate must be before endDate");
         }
       }
       if (e.isCurrent && e.endDate !== undefined && e.endDate !== null) {
         throw new BadRequestException(
-          'Experience with isCurrent=true must have endDate set to null',
+          "Experience with isCurrent=true must have endDate set to null",
         );
       }
     }
@@ -213,11 +195,7 @@ export class ProfilesService {
       if (skills.length > 0) {
         // Normalize and upsert Skill records first, then create ProfileSkill with resolved skillId
         const normalizedNames = skills.map((s) => s.name.trim().toLowerCase());
-        const skillIdMap = await this.resolveSkillIds(
-          tx,
-          skills,
-          normalizedNames,
-        );
+        const skillIdMap = await this.resolveSkillIds(tx, skills, normalizedNames);
 
         try {
           await tx.profileSkill.createMany({
@@ -231,9 +209,7 @@ export class ProfilesService {
           });
         } catch (error) {
           if (isPrismaUniqueViolation(error)) {
-            throw new ConflictException(
-              'Duplicate skill name for this profile',
-            );
+            throw new ConflictException("Duplicate skill name for this profile");
           }
           throw error;
         }
@@ -329,10 +305,7 @@ export class ProfilesService {
     });
   }
 
-  async replaceCertifications(
-    profileId: string,
-    certifications: CertificationDto[],
-  ) {
+  async replaceCertifications(profileId: string, certifications: CertificationDto[]) {
     return this.prisma.$transaction(async (tx) => {
       await tx.certification.deleteMany({ where: { profileId } });
       if (certifications.length > 0) {
@@ -342,9 +315,7 @@ export class ProfilesService {
             name: c.name,
             issuingOrganization: c.issuingOrganization,
             issueDate: new Date(c.issueDate),
-            expirationDate: c.expirationDate
-              ? new Date(c.expirationDate)
-              : null,
+            expirationDate: c.expirationDate ? new Date(c.expirationDate) : null,
             credentialId: c.credentialId,
             credentialUrl: c.credentialUrl,
           })),
@@ -364,7 +335,7 @@ export class ProfilesService {
           });
         } catch (error) {
           if (isPrismaUniqueViolation(error)) {
-            throw new ConflictException('Duplicate language for this profile');
+            throw new ConflictException("Duplicate language for this profile");
           }
           throw error;
         }
@@ -375,7 +346,7 @@ export class ProfilesService {
 
   async searchProfiles(query: string, limit = 20, offset = 0) {
     // Sanitize query — allow only word chars, spaces, hyphens
-    const sanitized = query.replace(/[^\w\s-]/g, '').trim();
+    const sanitized = query.replace(/[^\w\s-]/g, "").trim();
     if (!sanitized) return { data: [], meta: { total: 0, limit, offset } };
 
     interface ProfileSearchResult {
@@ -451,12 +422,12 @@ export class ProfilesService {
     });
 
     if (!skill) {
-      throw new NotFoundException('Skill not found');
+      throw new NotFoundException("Skill not found");
     }
 
     // Prevent self-endorsement
     if (skill.profile.userId === endorser.id) {
-      throw new BadRequestException('You cannot endorse your own skills');
+      throw new BadRequestException("You cannot endorse your own skills");
     }
 
     // Create endorsement (unique constraint prevents duplicates)
@@ -470,11 +441,8 @@ export class ProfilesService {
       });
       return endorsement;
     } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new ConflictException('You have already endorsed this skill');
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        throw new ConflictException("You have already endorsed this skill");
       }
       throw error;
     }
@@ -491,7 +459,7 @@ export class ProfilesService {
     });
 
     if (!endorsement) {
-      throw new NotFoundException('Endorsement not found');
+      throw new NotFoundException("Endorsement not found");
     }
 
     await this.prisma.endorsement.delete({

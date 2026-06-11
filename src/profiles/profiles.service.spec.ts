@@ -1,22 +1,18 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
-import { Test, type TestingModule } from '@nestjs/testing';
-import { Prisma, ProfileVisibility } from '@prisma/client';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { OutboxService } from '../outbox/outbox.service';
-import { ProfilesService } from './profiles.service';
+import { BadRequestException, ConflictException, NotFoundException } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
+import { Prisma, ProfileVisibility } from "@prisma/client";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { OutboxService } from "../outbox/outbox.service";
+import { ProfilesService } from "./profiles.service";
 
 function createPrismaUniqueViolationError() {
-  return new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-    code: 'P2002',
+  return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+    code: "P2002",
     clientVersion: Prisma.prismaVersion.client,
   });
 }
 
-describe('ProfilesService', () => {
+describe("ProfilesService", () => {
   let service: ProfilesService;
   let prisma: PrismaService;
 
@@ -26,6 +22,7 @@ describe('ProfilesService', () => {
     mockPrismaValue = {
       profile: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -91,20 +88,20 @@ describe('ProfilesService', () => {
     prisma = module.get<PrismaService>(PrismaService);
   });
 
-  it('should be defined', () => {
+  it("should be defined", () => {
     expect(service).toBeDefined();
   });
 
-  describe('getOwnProfile', () => {
-    it('should return existing profile with all includes', async () => {
-      const user = { id: 'user-123', email: 'test@example.com' };
+  describe("getOwnProfile", () => {
+    it("should return existing profile with all includes", async () => {
+      const user = { id: "user-123", email: "test@example.com" };
       const profile = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
-        about: 'About me',
-        location: 'NY',
-        website: 'https://example.com',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
+        about: "About me",
+        location: "NY",
+        website: "https://example.com",
         openToWork: false,
         recruitingEligible: false,
         visibility: ProfileVisibility.PUBLIC,
@@ -118,20 +115,25 @@ describe('ProfilesService', () => {
         endorsements: [],
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(profile as never);
 
       const result = await service.getOwnProfile(user);
       expect(result).toEqual(profile);
-      expect(prisma.profile.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: 'user-123' } }),
+      expect(prisma.profile.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: "user-123",
+            deletedAt: null,
+          }),
+        }),
       );
     });
 
-    it('should auto-create profile shell when none exists', async () => {
-      const user = { id: 'user-123', email: 'test@example.com' };
+    it("should auto-create profile shell when none exists", async () => {
+      const user = { id: "user-123", email: "test@example.com" };
       const created = {
-        id: 'prof-new',
-        userId: 'user-123',
+        id: "prof-new",
+        userId: "user-123",
         headline: null,
         about: null,
         location: null,
@@ -150,26 +152,26 @@ describe('ProfilesService', () => {
       };
 
       jest
-        .spyOn(prisma.profile, 'findUnique')
+        .spyOn(prisma.profile, "findFirst")
         .mockResolvedValueOnce(null)
-        .mockResolvedValue(created);
-      jest.spyOn(prisma.profile, 'create').mockResolvedValue(created);
+        .mockResolvedValue(created as never);
+      jest.spyOn(prisma.profile, "create").mockResolvedValue(created as never);
 
       const result = await service.getOwnProfile(user);
       expect(result).toEqual(created);
       expect(prisma.profile.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { userId: 'user-123' } }),
+        expect.objectContaining({ data: { userId: "user-123" } }),
       );
     });
   });
 
-  describe('updateOwnProfile', () => {
-    it('should update an existing profile', async () => {
-      const user = { id: 'user-123', email: 'test@example.com' };
+  describe("updateOwnProfile", () => {
+    it("should update an existing profile", async () => {
+      const user = { id: "user-123", email: "test@example.com" };
       const existing = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Old',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Old",
         about: null,
         location: null,
         website: null,
@@ -181,7 +183,7 @@ describe('ProfilesService', () => {
       };
       const updated = {
         ...existing,
-        headline: 'New Headline',
+        headline: "New Headline",
       };
       const final = {
         ...updated,
@@ -193,28 +195,28 @@ describe('ProfilesService', () => {
         endorsements: [],
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(existing);
-      jest.spyOn(prisma.profile, 'update').mockResolvedValue(updated);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(final);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profile, "update").mockResolvedValue(updated as never);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(final as never);
 
       const result = await service.updateOwnProfile(user, {
-        headline: 'New Headline',
+        headline: "New Headline",
       });
-      expect(result!.headline).toBe('New Headline');
+      expect(result!.headline).toBe("New Headline");
       expect(prisma.profile.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { userId: 'user-123' },
-          data: { headline: 'New Headline' },
+          where: { userId: "user-123" },
+          data: { headline: "New Headline" },
         }),
       );
     });
 
-    it('should auto-create profile when updating non-existent one', async () => {
-      const user = { id: 'user-123', email: 'test@example.com' };
+    it("should auto-create profile when updating non-existent one", async () => {
+      const user = { id: "user-123", email: "test@example.com" };
       const created = {
-        id: 'prof-new',
-        userId: 'user-123',
-        headline: 'Headline',
+        id: "prof-new",
+        userId: "user-123",
+        headline: "Headline",
         about: null,
         location: null,
         website: null,
@@ -232,28 +234,28 @@ describe('ProfilesService', () => {
       };
 
       jest
-        .spyOn(prisma.profile, 'findUnique')
+        .spyOn(prisma.profile, "findFirst")
         .mockResolvedValueOnce(null)
-        .mockResolvedValue(created);
-      jest.spyOn(prisma.profile, 'create').mockResolvedValue(created);
+        .mockResolvedValue(created as never);
+      jest.spyOn(prisma.profile, "create").mockResolvedValue(created as never);
 
       const result = await service.updateOwnProfile(user, {
-        headline: 'Headline',
+        headline: "Headline",
       });
-      expect(result!.headline).toBe('Headline');
+      expect(result!.headline).toBe("Headline");
       expect(prisma.profile.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { userId: 'user-123', headline: 'Headline' },
+          data: { userId: "user-123", headline: "Headline" },
         }),
       );
     });
 
-    it('should replace skills when provided', async () => {
-      const user = { id: 'user-123', email: 'test@example.com' };
+    it("should replace skills when provided", async () => {
+      const user = { id: "user-123", email: "test@example.com" };
       const existing = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
         about: null,
         location: null,
         website: null,
@@ -264,55 +266,49 @@ describe('ProfilesService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(existing);
-      jest.spyOn(prisma.profile, 'update').mockResolvedValue(existing);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profile, "update").mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profileSkill, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.profileSkill, "createMany").mockResolvedValue({ count: 1 });
       jest
-        .spyOn(prisma.profileSkill, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.profileSkill, 'createMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.profileSkill, 'findMany')
-        .mockResolvedValue([{ id: 's1', name: 'TypeScript' }] as any);
+        .spyOn(prisma.profileSkill, "findMany")
+        .mockResolvedValue([{ id: "s1", name: "TypeScript" }] as any);
       // Mock skill resolution for replaceSkills
-      jest.spyOn(prisma.skill, 'findMany').mockResolvedValue([]);
-      jest.spyOn(prisma.skill, 'createMany').mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.skill, "findMany").mockResolvedValue([]);
+      jest.spyOn(prisma.skill, "createMany").mockResolvedValue({ count: 1 });
       // Mock second findMany (re-fetch after createMany)
       jest
-        .spyOn(prisma.skill, 'findMany')
+        .spyOn(prisma.skill, "findMany")
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          { id: 'skill-uuid-ts', name: 'typescript' },
-        ] as any);
+        .mockResolvedValueOnce([{ id: "skill-uuid-ts", name: "typescript" }] as any);
 
       await service.updateOwnProfile(user, {
-        skills: [{ name: 'TypeScript', proficiency: 'ADVANCED' }],
+        skills: [{ name: "TypeScript", proficiency: "ADVANCED" }],
       });
 
       expect(prisma.profileSkill.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.profileSkill.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: [
             {
-              profileId: 'prof-1',
-              skillId: 'skill-uuid-ts',
-              name: 'TypeScript',
-              proficiency: 'ADVANCED',
+              profileId: "prof-1",
+              skillId: "skill-uuid-ts",
+              name: "TypeScript",
+              proficiency: "ADVANCED",
             },
           ],
         }),
       );
     });
 
-    it('should replace experiences when provided', async () => {
-      const user = { id: 'user-123', email: 'test@example.com' };
+    it("should replace experiences when provided", async () => {
+      const user = { id: "user-123", email: "test@example.com" };
       const existing = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
         about: null,
         location: null,
         website: null,
@@ -323,38 +319,34 @@ describe('ProfilesService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(existing);
-      jest.spyOn(prisma.profile, 'update').mockResolvedValue(existing);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profile, "update").mockResolvedValue(existing as never);
+      jest.spyOn(prisma.experience, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.experience, "createMany").mockResolvedValue({ count: 1 });
       jest
-        .spyOn(prisma.experience, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.experience, 'createMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.experience, 'findMany')
-        .mockResolvedValue([{ id: 'e1', title: 'Dev' }] as any);
+        .spyOn(prisma.experience, "findMany")
+        .mockResolvedValue([{ id: "e1", title: "Dev" }] as any);
 
       await service.updateOwnProfile(user, {
         experiences: [
           {
-            title: 'Dev',
-            company: 'Acme',
-            startDate: '2020-01-01',
-            endDate: '2023-01-01',
+            title: "Dev",
+            company: "Acme",
+            startDate: "2020-01-01",
+            endDate: "2023-01-01",
           },
         ],
       });
 
       expect(prisma.experience.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.experience.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: [
             expect.objectContaining({
-              title: 'Dev',
-              company: 'Acme',
+              title: "Dev",
+              company: "Acme",
               startDate: expect.any(Date),
               endDate: expect.any(Date),
               isCurrent: false,
@@ -365,100 +357,100 @@ describe('ProfilesService', () => {
     });
   });
 
-  describe('getPublicProfile', () => {
-    it('should return full profile for PUBLIC visibility', async () => {
+  describe("getPublicProfile", () => {
+    it("should return full profile for PUBLIC visibility", async () => {
       const profile = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
-        about: 'About',
-        location: 'NY',
-        website: 'https://example.com',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
+        about: "About",
+        location: "NY",
+        website: "https://example.com",
         openToWork: false,
         recruitingEligible: false,
         visibility: ProfileVisibility.PUBLIC,
         createdAt: new Date(),
         updatedAt: new Date(),
-        skills: [{ id: 's1', name: 'TS' }],
-        experiences: [{ id: 'e1', title: 'Dev' }],
-        educations: [{ id: 'ed1', school: 'MIT' }],
+        skills: [{ id: "s1", name: "TS" }],
+        experiences: [{ id: "e1", title: "Dev" }],
+        educations: [{ id: "ed1", school: "MIT" }],
         certifications: [],
         languages: [],
         endorsements: [],
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'ACTIVE',
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "ACTIVE",
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(profile as never);
 
-      const result = await service.getPublicProfile('user-123');
+      const result = await service.getPublicProfile("user-123");
       expect(result).toEqual(
         expect.objectContaining({
-          id: 'prof-1',
-          headline: 'Engineer',
-          about: 'About',
-          location: 'NY',
-          skills: [{ id: 's1', name: 'TS' }],
-          experiences: [{ id: 'e1', title: 'Dev' }],
-          educations: [{ id: 'ed1', school: 'MIT' }],
+          id: "prof-1",
+          headline: "Engineer",
+          about: "About",
+          location: "NY",
+          skills: [{ id: "s1", name: "TS" }],
+          experiences: [{ id: "e1", title: "Dev" }],
+          educations: [{ id: "ed1", school: "MIT" }],
         }),
       );
     });
 
-    it('should return limited profile for CONNECTIONS_ONLY visibility', async () => {
+    it("should return limited profile for CONNECTIONS_ONLY visibility", async () => {
       const profile = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
-        about: 'About',
-        location: 'NY',
-        website: 'https://example.com',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
+        about: "About",
+        location: "NY",
+        website: "https://example.com",
         openToWork: false,
         recruitingEligible: false,
         visibility: ProfileVisibility.CONNECTIONS_ONLY,
         createdAt: new Date(),
         updatedAt: new Date(),
-        skills: [{ id: 's1', name: 'TS' }],
-        experiences: [{ id: 'e1', title: 'Dev' }],
-        educations: [{ id: 'ed1', school: 'MIT' }],
+        skills: [{ id: "s1", name: "TS" }],
+        experiences: [{ id: "e1", title: "Dev" }],
+        educations: [{ id: "ed1", school: "MIT" }],
         certifications: [],
         languages: [],
         endorsements: [],
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'ACTIVE',
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "ACTIVE",
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(profile as never);
 
-      const result = await service.getPublicProfile('user-123');
+      const result = await service.getPublicProfile("user-123");
       expect(result).toEqual(
         expect.objectContaining({
-          id: 'prof-1',
-          headline: 'Engineer',
-          location: 'NY',
-          skills: [{ id: 's1', name: 'TS' }],
+          id: "prof-1",
+          headline: "Engineer",
+          location: "NY",
+          skills: [{ id: "s1", name: "TS" }],
         }),
       );
-      expect(result).not.toHaveProperty('about');
-      expect(result).not.toHaveProperty('experiences');
-      expect(result).not.toHaveProperty('educations');
-      expect(result).not.toHaveProperty('certifications');
-      expect(result).not.toHaveProperty('languages');
-      expect(result).not.toHaveProperty('endorsements');
+      expect(result).not.toHaveProperty("about");
+      expect(result).not.toHaveProperty("experiences");
+      expect(result).not.toHaveProperty("educations");
+      expect(result).not.toHaveProperty("certifications");
+      expect(result).not.toHaveProperty("languages");
+      expect(result).not.toHaveProperty("endorsements");
     });
 
-    it('should return minimal profile for PRIVATE visibility', async () => {
+    it("should return minimal profile for PRIVATE visibility", async () => {
       const profile = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
-        about: 'About',
-        location: 'NY',
-        website: 'https://example.com',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
+        about: "About",
+        location: "NY",
+        website: "https://example.com",
         openToWork: false,
         recruitingEligible: false,
         visibility: ProfileVisibility.PRIVATE,
@@ -472,38 +464,38 @@ describe('ProfilesService', () => {
         endorsements: [],
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'ACTIVE',
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "ACTIVE",
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(profile as never);
 
-      const result = await service.getPublicProfile('user-123');
+      const result = await service.getPublicProfile("user-123");
       expect(result).toEqual(
         expect.objectContaining({
-          id: 'prof-1',
-          headline: 'Engineer',
+          id: "prof-1",
+          headline: "Engineer",
         }),
       );
-      expect(result).not.toHaveProperty('about');
-      expect(result).not.toHaveProperty('location');
-      expect(result).not.toHaveProperty('skills');
+      expect(result).not.toHaveProperty("about");
+      expect(result).not.toHaveProperty("location");
+      expect(result).not.toHaveProperty("skills");
     });
 
-    it('should return full profile when owner views own profile', async () => {
+    it("should return full profile when owner views own profile", async () => {
       const profile = {
-        id: 'prof-1',
-        userId: 'user-123',
-        headline: 'Engineer',
-        about: 'About',
-        location: 'NY',
-        website: 'https://example.com',
+        id: "prof-1",
+        userId: "user-123",
+        headline: "Engineer",
+        about: "About",
+        location: "NY",
+        website: "https://example.com",
         openToWork: false,
         recruitingEligible: false,
         visibility: ProfileVisibility.PRIVATE,
         createdAt: new Date(),
         updatedAt: new Date(),
-        skills: [{ id: 's1', name: 'TS' }],
+        skills: [{ id: "s1", name: "TS" }],
         experiences: [],
         educations: [],
         certifications: [],
@@ -511,167 +503,139 @@ describe('ProfilesService', () => {
         endorsements: [],
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'ACTIVE',
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "ACTIVE",
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(profile as never);
 
-      const currentUser = { id: 'user-123', email: 'test@example.com' };
-      const result = await service.getPublicProfile('user-123', currentUser);
+      const currentUser = { id: "user-123", email: "test@example.com" };
+      const result = await service.getPublicProfile("user-123", currentUser);
       expect(result).toEqual(profile);
     });
 
-    it('should throw NotFoundException for deleted user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'DELETED',
+    it("should throw NotFoundException for deleted user", async () => {
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "DELETED",
       } as any);
 
-      await expect(service.getPublicProfile('user-123')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getPublicProfile("user-123")).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw NotFoundException for disabled user', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'DISABLED',
+    it("should throw NotFoundException for disabled user", async () => {
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "DISABLED",
       } as any);
 
-      await expect(service.getPublicProfile('user-123')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getPublicProfile("user-123")).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw NotFoundException when profile does not exist', async () => {
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue({
-        id: 'user-123',
-        status: 'ACTIVE',
+    it("should throw NotFoundException when profile does not exist", async () => {
+      jest.spyOn(prisma.user, "findUnique").mockResolvedValue({
+        id: "user-123",
+        status: "ACTIVE",
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(prisma.profile, "findFirst").mockResolvedValue(null);
 
-      await expect(service.getPublicProfile('user-123')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getPublicProfile("user-123")).rejects.toThrow(NotFoundException);
     });
   });
 
-  describe('replaceSkills', () => {
-    it('should delete existing skills and create new ones', async () => {
-      jest
-        .spyOn(prisma.profileSkill, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
+  describe("replaceSkills", () => {
+    it("should delete existing skills and create new ones", async () => {
+      jest.spyOn(prisma.profileSkill, "deleteMany").mockResolvedValue({ count: 1 });
       // Mock skill lookups: resolveSkillIds normalizes names (lowercased)
       // Batch: findMany returns one existing, then after createMany we re-fetch
       jest
-        .spyOn(prisma.skill, 'findMany')
-        .mockResolvedValueOnce([
-          { id: 'skill-uuid-ts', name: 'typescript' },
-        ] as any)
-        .mockResolvedValueOnce([
-          { id: 'skill-uuid-js', name: 'javascript' },
-        ] as any);
-      jest.spyOn(prisma.skill, 'createMany').mockResolvedValue({ count: 1 });
+        .spyOn(prisma.skill, "findMany")
+        .mockResolvedValueOnce([{ id: "skill-uuid-ts", name: "typescript" }] as any)
+        .mockResolvedValueOnce([{ id: "skill-uuid-js", name: "javascript" }] as any);
+      jest.spyOn(prisma.skill, "createMany").mockResolvedValue({ count: 1 });
 
-      jest
-        .spyOn(prisma.profileSkill, 'createMany')
-        .mockResolvedValue({ count: 2 });
-      jest.spyOn(prisma.profileSkill, 'findMany').mockResolvedValue([
-        { id: 's1', name: 'TS' },
-        { id: 's2', name: 'JS' },
+      jest.spyOn(prisma.profileSkill, "createMany").mockResolvedValue({ count: 2 });
+      jest.spyOn(prisma.profileSkill, "findMany").mockResolvedValue([
+        { id: "s1", name: "TS" },
+        { id: "s2", name: "JS" },
       ] as any);
 
-      const result = await service.replaceSkills('prof-1', [
-        { name: 'TypeScript', proficiency: 'ADVANCED' },
-        { name: 'JavaScript', proficiency: 'INTERMEDIATE' },
+      const result = await service.replaceSkills("prof-1", [
+        { name: "TypeScript", proficiency: "ADVANCED" },
+        { name: "JavaScript", proficiency: "INTERMEDIATE" },
       ]);
 
       expect(prisma.profileSkill.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.profileSkill.createMany).toHaveBeenCalledWith({
         data: [
           {
-            profileId: 'prof-1',
-            skillId: 'skill-uuid-ts',
-            name: 'TypeScript',
-            proficiency: 'ADVANCED',
+            profileId: "prof-1",
+            skillId: "skill-uuid-ts",
+            name: "TypeScript",
+            proficiency: "ADVANCED",
           },
           {
-            profileId: 'prof-1',
-            skillId: 'skill-uuid-js',
-            name: 'JavaScript',
-            proficiency: 'INTERMEDIATE',
+            profileId: "prof-1",
+            skillId: "skill-uuid-js",
+            name: "JavaScript",
+            proficiency: "INTERMEDIATE",
           },
         ],
       });
       expect(result).toHaveLength(2);
     });
 
-    it('should throw ConflictException on duplicate skill P2002', async () => {
-      jest
-        .spyOn(prisma.profileSkill, 'deleteMany')
-        .mockResolvedValue({ count: 0 });
+    it("should throw ConflictException on duplicate skill P2002", async () => {
+      jest.spyOn(prisma.profileSkill, "deleteMany").mockResolvedValue({ count: 0 });
       // Mock skill resolution before createMany fails (batched)
-      jest.spyOn(prisma.skill, 'findMany').mockResolvedValue([]);
-      jest.spyOn(prisma.skill, 'createMany').mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.skill, "findMany").mockResolvedValue([]);
+      jest.spyOn(prisma.skill, "createMany").mockResolvedValue({ count: 1 });
       jest
-        .spyOn(prisma.skill, 'findMany')
+        .spyOn(prisma.skill, "findMany")
         .mockResolvedValueOnce([])
-        .mockResolvedValueOnce([
-          { id: 'skill-uuid-1', name: 'typescript' },
-        ] as any);
+        .mockResolvedValueOnce([{ id: "skill-uuid-1", name: "typescript" }] as any);
       jest
-        .spyOn(prisma.profileSkill, 'createMany')
+        .spyOn(prisma.profileSkill, "createMany")
         .mockRejectedValue(createPrismaUniqueViolationError());
 
-      await expect(
-        service.replaceSkills('prof-1', [{ name: 'TypeScript' }]),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.replaceSkills("prof-1", [{ name: "TypeScript" }])).rejects.toThrow(
+        ConflictException,
+      );
     });
 
-    it('should skip createMany when skills array is empty', async () => {
-      jest
-        .spyOn(prisma.profileSkill, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.profileSkill, 'createMany')
-        .mockResolvedValue({ count: 0 });
-      jest.spyOn(prisma.profileSkill, 'findMany').mockResolvedValue([]);
+    it("should skip createMany when skills array is empty", async () => {
+      jest.spyOn(prisma.profileSkill, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.profileSkill, "createMany").mockResolvedValue({ count: 0 });
+      jest.spyOn(prisma.profileSkill, "findMany").mockResolvedValue([]);
 
-      await service.replaceSkills('prof-1', []);
+      await service.replaceSkills("prof-1", []);
 
       expect(prisma.profileSkill.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.profileSkill.createMany).not.toHaveBeenCalled();
     });
   });
 
-  describe('replaceExperiences', () => {
-    it('should delete existing experiences and create new ones with date conversion', async () => {
-      jest
-        .spyOn(prisma.experience, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.experience, 'createMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.experience, 'findMany')
-        .mockResolvedValue([{ id: 'e1' }] as any);
+  describe("replaceExperiences", () => {
+    it("should delete existing experiences and create new ones with date conversion", async () => {
+      jest.spyOn(prisma.experience, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.experience, "createMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.experience, "findMany").mockResolvedValue([{ id: "e1" }] as any);
 
-      const result = await service.replaceExperiences('prof-1', [
+      const result = await service.replaceExperiences("prof-1", [
         {
-          title: 'Dev',
-          company: 'Acme',
-          startDate: '2020-01-01',
-          endDate: '2023-01-01',
+          title: "Dev",
+          company: "Acme",
+          startDate: "2020-01-01",
+          endDate: "2023-01-01",
         },
       ]);
 
       expect(prisma.experience.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.experience.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -686,27 +650,27 @@ describe('ProfilesService', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('should throw BadRequestException when startDate >= endDate', async () => {
+    it("should throw BadRequestException when startDate >= endDate", async () => {
       await expect(
-        service.replaceExperiences('prof-1', [
+        service.replaceExperiences("prof-1", [
           {
-            title: 'Dev',
-            company: 'Acme',
-            startDate: '2023-01-01',
-            endDate: '2020-01-01',
+            title: "Dev",
+            company: "Acme",
+            startDate: "2023-01-01",
+            endDate: "2020-01-01",
           },
         ]),
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when isCurrent=true and endDate is set', async () => {
+    it("should throw BadRequestException when isCurrent=true and endDate is set", async () => {
       await expect(
-        service.replaceExperiences('prof-1', [
+        service.replaceExperiences("prof-1", [
           {
-            title: 'Dev',
-            company: 'Acme',
-            startDate: '2020-01-01',
-            endDate: '2023-01-01',
+            title: "Dev",
+            company: "Acme",
+            startDate: "2020-01-01",
+            endDate: "2023-01-01",
             isCurrent: true,
           },
         ]),
@@ -714,29 +678,23 @@ describe('ProfilesService', () => {
     });
   });
 
-  describe('replaceEducations', () => {
-    it('should delete existing educations and create new ones with date conversion', async () => {
-      jest
-        .spyOn(prisma.education, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.education, 'createMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.education, 'findMany')
-        .mockResolvedValue([{ id: 'ed1' }] as any);
+  describe("replaceEducations", () => {
+    it("should delete existing educations and create new ones with date conversion", async () => {
+      jest.spyOn(prisma.education, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.education, "createMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.education, "findMany").mockResolvedValue([{ id: "ed1" }] as any);
 
-      const result = await service.replaceEducations('prof-1', [
+      const result = await service.replaceEducations("prof-1", [
         {
-          school: 'MIT',
-          degree: 'BS',
-          startDate: '2015-09-01',
-          endDate: '2019-06-01',
+          school: "MIT",
+          degree: "BS",
+          startDate: "2015-09-01",
+          endDate: "2019-06-01",
         },
       ]);
 
       expect(prisma.education.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.education.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -751,47 +709,37 @@ describe('ProfilesService', () => {
       expect(result).toHaveLength(1);
     });
 
-    it('should skip createMany when educations array is empty', async () => {
-      jest
-        .spyOn(prisma.education, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.education, 'createMany')
-        .mockResolvedValue({ count: 0 });
-      jest.spyOn(prisma.education, 'findMany').mockResolvedValue([]);
+    it("should skip createMany when educations array is empty", async () => {
+      jest.spyOn(prisma.education, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.education, "createMany").mockResolvedValue({ count: 0 });
+      jest.spyOn(prisma.education, "findMany").mockResolvedValue([]);
 
-      await service.replaceEducations('prof-1', []);
+      await service.replaceEducations("prof-1", []);
 
       expect(prisma.education.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.education.createMany).not.toHaveBeenCalled();
     });
   });
 
-  describe('replaceCertifications', () => {
-    it('should delete existing certifications and create new ones with date conversion', async () => {
-      jest
-        .spyOn(prisma.certification, 'deleteMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.certification, 'createMany')
-        .mockResolvedValue({ count: 1 });
-      jest
-        .spyOn(prisma.certification, 'findMany')
-        .mockResolvedValue([{ id: 'c1' }] as any);
+  describe("replaceCertifications", () => {
+    it("should delete existing certifications and create new ones with date conversion", async () => {
+      jest.spyOn(prisma.certification, "deleteMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.certification, "createMany").mockResolvedValue({ count: 1 });
+      jest.spyOn(prisma.certification, "findMany").mockResolvedValue([{ id: "c1" }] as any);
 
-      const result = await service.replaceCertifications('prof-1', [
+      const result = await service.replaceCertifications("prof-1", [
         {
-          name: 'AWS',
-          issuingOrganization: 'Amazon',
-          issueDate: '2023-01-01',
-          expirationDate: '2026-01-01',
+          name: "AWS",
+          issuingOrganization: "Amazon",
+          issueDate: "2023-01-01",
+          expirationDate: "2026-01-01",
         },
       ]);
 
       expect(prisma.certification.deleteMany).toHaveBeenCalledWith({
-        where: { profileId: 'prof-1' },
+        where: { profileId: "prof-1" },
       });
       expect(prisma.certification.createMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -807,19 +755,19 @@ describe('ProfilesService', () => {
     });
   });
 
-  describe('searchProfiles', () => {
-    it('should return matching profiles for a valid query', async () => {
+  describe("searchProfiles", () => {
+    it("should return matching profiles for a valid query", async () => {
       const rawRows = [
         {
-          id: 'prof-1',
-          user_id: 'user-123',
-          headline: 'React Developer',
-          about: 'I build apps',
-          location: 'NY',
+          id: "prof-1",
+          user_id: "user-123",
+          headline: "React Developer",
+          about: "I build apps",
+          location: "NY",
           website: null,
           open_to_work: true,
           recruiting_eligible: false,
-          visibility: 'PUBLIC',
+          visibility: "PUBLIC",
           created_at: new Date(),
           updated_at: new Date(),
           rank: 0.9,
@@ -827,21 +775,21 @@ describe('ProfilesService', () => {
         },
       ];
 
-      jest.spyOn(prisma, '$queryRaw').mockResolvedValue(rawRows);
+      jest.spyOn(prisma, "$queryRaw").mockResolvedValue(rawRows);
 
-      const result = await service.searchProfiles('react developer', 20, 0);
+      const result = await service.searchProfiles("react developer", 20, 0);
 
       expect(result.data).toHaveLength(1);
       expect(result.data[0]).toEqual(
         expect.objectContaining({
-          id: 'prof-1',
-          userId: 'user-123',
-          headline: 'React Developer',
-          about: 'I build apps',
-          location: 'NY',
+          id: "prof-1",
+          userId: "user-123",
+          headline: "React Developer",
+          about: "I build apps",
+          location: "NY",
           openToWork: true,
           recruitingEligible: false,
-          visibility: 'PUBLIC',
+          visibility: "PUBLIC",
           rank: 0.9,
         }),
       );
@@ -850,24 +798,24 @@ describe('ProfilesService', () => {
       expect(result.meta.offset).toBe(0);
     });
 
-    it('should return empty result for empty sanitized query', async () => {
-      const result = await service.searchProfiles('!!!', 20, 0);
+    it("should return empty result for empty sanitized query", async () => {
+      const result = await service.searchProfiles("!!!", 20, 0);
       expect(result.data).toEqual([]);
       expect(result.meta.total).toBe(0);
     });
 
-    it('should apply limit and offset', async () => {
+    it("should apply limit and offset", async () => {
       const rawRows = [
         {
-          id: 'prof-2',
-          user_id: 'user-456',
-          headline: 'Senior React Developer',
+          id: "prof-2",
+          user_id: "user-456",
+          headline: "Senior React Developer",
           about: null,
-          location: 'SF',
+          location: "SF",
           website: null,
           open_to_work: false,
           recruiting_eligible: true,
-          visibility: 'PUBLIC',
+          visibility: "PUBLIC",
           created_at: new Date(),
           updated_at: new Date(),
           rank: 0.8,
@@ -875,9 +823,9 @@ describe('ProfilesService', () => {
         },
       ];
 
-      jest.spyOn(prisma, '$queryRaw').mockResolvedValue(rawRows);
+      jest.spyOn(prisma, "$queryRaw").mockResolvedValue(rawRows);
 
-      const result = await service.searchProfiles('react', 5, 10);
+      const result = await service.searchProfiles("react", 5, 10);
 
       expect(result.meta.limit).toBe(5);
       expect(result.meta.offset).toBe(10);
@@ -885,121 +833,105 @@ describe('ProfilesService', () => {
     });
   });
 
-  describe('endorseSkill', () => {
+  describe("endorseSkill", () => {
     it("should create an endorsement for another user's skill", async () => {
-      const endorser = { id: 'user-456', email: 'endorser@example.com' };
+      const endorser = { id: "user-456", email: "endorser@example.com" };
       const skill = {
-        id: 'skill-1',
-        profileId: 'prof-1',
-        profile: { userId: 'user-123' },
+        id: "skill-1",
+        profileId: "prof-1",
+        profile: { userId: "user-123" },
       };
       const createdEndorsement = {
-        id: 'end-1',
-        profileId: 'prof-1',
-        profileSkillId: 'skill-1',
-        endorserId: 'user-456',
+        id: "end-1",
+        profileId: "prof-1",
+        profileSkillId: "skill-1",
+        endorserId: "user-456",
         createdAt: new Date(),
       };
 
-      jest
-        .spyOn(prisma.profileSkill, 'findUnique')
-        .mockResolvedValue(skill as any);
-      jest
-        .spyOn(prisma.endorsement, 'create')
-        .mockResolvedValue(createdEndorsement);
+      jest.spyOn(prisma.profileSkill, "findUnique").mockResolvedValue(skill as any);
+      jest.spyOn(prisma.endorsement, "create").mockResolvedValue(createdEndorsement);
 
-      const result = await service.endorseSkill('skill-1', endorser);
+      const result = await service.endorseSkill("skill-1", endorser);
 
       expect(result).toEqual(createdEndorsement);
       expect(prisma.endorsement.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: {
-            profileId: 'prof-1',
-            profileSkillId: 'skill-1',
-            endorserId: 'user-456',
+            profileId: "prof-1",
+            profileSkillId: "skill-1",
+            endorserId: "user-456",
           },
         }),
       );
     });
 
-    it('should throw NotFoundException when skill does not exist', async () => {
-      const endorser = { id: 'user-456', email: 'endorser@example.com' };
-      jest.spyOn(prisma.profileSkill, 'findUnique').mockResolvedValue(null);
+    it("should throw NotFoundException when skill does not exist", async () => {
+      const endorser = { id: "user-456", email: "endorser@example.com" };
+      jest.spyOn(prisma.profileSkill, "findUnique").mockResolvedValue(null);
 
-      await expect(service.endorseSkill('skill-1', endorser)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.endorseSkill("skill-1", endorser)).rejects.toThrow(NotFoundException);
     });
 
-    it('should throw BadRequestException for self-endorsement', async () => {
-      const endorser = { id: 'user-123', email: 'self@example.com' };
+    it("should throw BadRequestException for self-endorsement", async () => {
+      const endorser = { id: "user-123", email: "self@example.com" };
       const skill = {
-        id: 'skill-1',
-        profileId: 'prof-1',
-        profile: { userId: 'user-123' },
+        id: "skill-1",
+        profileId: "prof-1",
+        profile: { userId: "user-123" },
       };
 
-      jest
-        .spyOn(prisma.profileSkill, 'findUnique')
-        .mockResolvedValue(skill as any);
+      jest.spyOn(prisma.profileSkill, "findUnique").mockResolvedValue(skill as any);
 
-      await expect(service.endorseSkill('skill-1', endorser)).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(service.endorseSkill("skill-1", endorser)).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw ConflictException on duplicate endorsement P2002', async () => {
-      const endorser = { id: 'user-456', email: 'endorser@example.com' };
+    it("should throw ConflictException on duplicate endorsement P2002", async () => {
+      const endorser = { id: "user-456", email: "endorser@example.com" };
       const skill = {
-        id: 'skill-1',
-        profileId: 'prof-1',
-        profile: { userId: 'user-123' },
+        id: "skill-1",
+        profileId: "prof-1",
+        profile: { userId: "user-123" },
       };
 
+      jest.spyOn(prisma.profileSkill, "findUnique").mockResolvedValue(skill as any);
       jest
-        .spyOn(prisma.profileSkill, 'findUnique')
-        .mockResolvedValue(skill as any);
-      jest
-        .spyOn(prisma.endorsement, 'create')
+        .spyOn(prisma.endorsement, "create")
         .mockRejectedValue(createPrismaUniqueViolationError());
 
-      await expect(service.endorseSkill('skill-1', endorser)).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(service.endorseSkill("skill-1", endorser)).rejects.toThrow(ConflictException);
     });
   });
 
-  describe('removeEndorsement', () => {
-    it('should delete an existing endorsement', async () => {
-      const endorser = { id: 'user-456', email: 'endorser@example.com' };
+  describe("removeEndorsement", () => {
+    it("should delete an existing endorsement", async () => {
+      const endorser = { id: "user-456", email: "endorser@example.com" };
       const endorsement = {
-        id: 'end-1',
-        profileId: 'prof-1',
-        profileSkillId: 'skill-1',
-        endorserId: 'user-456',
+        id: "end-1",
+        profileId: "prof-1",
+        profileSkillId: "skill-1",
+        endorserId: "user-456",
         createdAt: new Date(),
       };
 
-      jest
-        .spyOn(prisma.endorsement, 'findUnique')
-        .mockResolvedValue(endorsement);
-      jest.spyOn(prisma.endorsement, 'delete').mockResolvedValue(endorsement);
+      jest.spyOn(prisma.endorsement, "findUnique").mockResolvedValue(endorsement);
+      jest.spyOn(prisma.endorsement, "delete").mockResolvedValue(endorsement);
 
-      const result = await service.removeEndorsement('skill-1', endorser);
+      const result = await service.removeEndorsement("skill-1", endorser);
 
       expect(result).toEqual({ deleted: true });
       expect(prisma.endorsement.delete).toHaveBeenCalledWith({
-        where: { id: 'end-1' },
+        where: { id: "end-1" },
       });
     });
 
-    it('should throw NotFoundException when endorsement does not exist', async () => {
-      const endorser = { id: 'user-456', email: 'endorser@example.com' };
-      jest.spyOn(prisma.endorsement, 'findUnique').mockResolvedValue(null);
+    it("should throw NotFoundException when endorsement does not exist", async () => {
+      const endorser = { id: "user-456", email: "endorser@example.com" };
+      jest.spyOn(prisma.endorsement, "findUnique").mockResolvedValue(null);
 
-      await expect(
-        service.removeEndorsement('skill-1', endorser),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.removeEndorsement("skill-1", endorser)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 });

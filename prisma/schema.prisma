@@ -589,6 +589,7 @@ model Profile {
   searchVector       Unsupported("tsvector")? @default(dbgenerated("''::tsvector")) @map("search_vector")
   createdAt          DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime                 @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt          DateTime?                @map("deleted_at") @db.Timestamptz(3)
 
   user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   skills         ProfileSkill[]
@@ -600,6 +601,7 @@ model Profile {
   views          ProfileView[]
 
   @@index([searchVector], type: Gin, name: "idx_profiles_search")
+  @@index([deletedAt])
   @@map("profiles")
 }
 

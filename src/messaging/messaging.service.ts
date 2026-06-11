@@ -1,28 +1,24 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-} from '@nestjs/common';
-import * as crypto from 'node:crypto';
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common";
+import * as crypto from "node:crypto";
 import {
   DEFAULT_PAGE_LIMIT,
   MAX_PAGE_LIMIT,
   type CursorPaginationQueryDto,
-} from '../common/pagination/cursor-pagination.dto';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
-import { RecruitingPolicyService } from '../recruiting/recruiting-policy.service';
-import type { CreateConversationDto } from './dto/create-conversation.dto';
-import type { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
-import type { SendMessageDto } from './dto/send-message.dto';
-import { MessagingPolicyService } from './messaging-policy.service';
+} from "../common/pagination/cursor-pagination.dto";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { IdempotencyService } from "../outbox/idempotency.service";
+import { OutboxService } from "../outbox/outbox.service";
+import { RecruitingPolicyService } from "../recruiting/recruiting-policy.service";
+import type { CreateConversationDto } from "./dto/create-conversation.dto";
+import type { CreateRecruitingConversationDto } from "./dto/create-recruiting-conversation.dto";
+import type { SendMessageDto } from "./dto/send-message.dto";
+import { MessagingPolicyService } from "./messaging-policy.service";
 import {
   decodeCursor,
   encodeCursor,
   buildCursorWhere,
   paginateRows,
-} from '../common/pagination/cursor';
+} from "../common/pagination/cursor";
 
 @Injectable()
 export class MessagingService {
@@ -38,26 +34,23 @@ export class MessagingService {
     const targetUserId = dto.participantIds[0];
 
     if (userId === targetUserId) {
-      throw new BadRequestException('SELF_CONVERSATION');
+      throw new BadRequestException("SELF_CONVERSATION");
     }
 
-    const canCreate = await this.messagingPolicy.canCreateConversation(
-      userId,
-      targetUserId,
-    );
+    const canCreate = await this.messagingPolicy.canCreateConversation(userId, targetUserId);
     if (!canCreate) {
-      throw new BadRequestException('BLOCKED_USER');
+      throw new BadRequestException("BLOCKED_USER");
     }
 
     // Idempotency: use canonical (sorted) key so A→B and B→A share the same key.
     // Move the findFirst + create into a single transaction to close the TOCTOU gap.
-    const canonicalKey = [userId, targetUserId].sort().join(':');
+    const canonicalKey = [userId, targetUserId].sort().join(":");
 
     return this.prisma.$transaction(async (tx) => {
       // Check for existing DIRECT conversation between these two users
       const existing = await tx.conversation.findFirst({
         where: {
-          type: 'DIRECT',
+          type: "DIRECT",
           AND: [
             { participants: { some: { userId } } },
             { participants: { some: { userId: targetUserId } } },
@@ -70,20 +63,16 @@ export class MessagingService {
         return existing;
       }
 
-      await this.idempotencyService.claim(
-        tx,
-        'Conversation:create',
-        canonicalKey,
-      );
+      await this.idempotencyService.claim(tx, "Conversation:create", canonicalKey);
 
       const conversation = await tx.conversation.create({
         data: {
-          type: 'DIRECT',
+          type: "DIRECT",
           participants: {
             createMany: {
               data: [
-                { userId, role: 'MEMBER' },
-                { userId: targetUserId, role: 'MEMBER' },
+                { userId, role: "MEMBER" },
+                { userId: targetUserId, role: "MEMBER" },
               ],
             },
           },
@@ -92,8 +81,8 @@ export class MessagingService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'ConversationCreated',
-        aggregateType: 'Conversation',
+        eventType: "ConversationCreated",
+        aggregateType: "Conversation",
         aggregateId: conversation.id,
         payload: {
           conversationId: conversation.id,
@@ -105,12 +94,9 @@ export class MessagingService {
     });
   }
 
-  async createRecruitingConversation(
-    recruiterId: string,
-    dto: CreateRecruitingConversationDto,
-  ) {
+  async createRecruitingConversation(recruiterId: string, dto: CreateRecruitingConversationDto) {
     if (recruiterId === dto.candidateUserId) {
-      throw new BadRequestException('SELF_CONVERSATION');
+      throw new BadRequestException("SELF_CONVERSATION");
     }
 
     const decision = await this.recruitingPolicy.canMessageCandidate(
@@ -124,13 +110,13 @@ export class MessagingService {
 
     // Idempotency: canonical (sorted) key.
     // Move the findFirst + create into a single transaction.
-    const canonicalKey = [recruiterId, dto.candidateUserId].sort().join(':');
+    const canonicalKey = [recruiterId, dto.candidateUserId].sort().join(":");
 
     return this.prisma.$transaction(async (tx) => {
       // Check for existing conversation
       const existing = await tx.conversation.findFirst({
         where: {
-          type: 'DIRECT',
+          type: "DIRECT",
           AND: [
             { participants: { some: { userId: recruiterId } } },
             { participants: { some: { userId: dto.candidateUserId } } },
@@ -143,20 +129,16 @@ export class MessagingService {
         return existing;
       }
 
-      await this.idempotencyService.claim(
-        tx,
-        'Conversation:recruiting',
-        canonicalKey,
-      );
+      await this.idempotencyService.claim(tx, "Conversation:recruiting", canonicalKey);
 
       const conversation = await tx.conversation.create({
         data: {
-          type: 'DIRECT',
+          type: "DIRECT",
           participants: {
             createMany: {
               data: [
-                { userId: recruiterId, role: 'MEMBER' },
-                { userId: dto.candidateUserId, role: 'MEMBER' },
+                { userId: recruiterId, role: "MEMBER" },
+                { userId: dto.candidateUserId, role: "MEMBER" },
               ],
             },
           },
@@ -165,8 +147,8 @@ export class MessagingService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'ConversationCreated',
-        aggregateType: 'Conversation',
+        eventType: "ConversationCreated",
+        aggregateType: "Conversation",
         aggregateId: conversation.id,
         payload: {
           conversationId: conversation.id,
@@ -206,10 +188,7 @@ export class MessagingService {
 
     const conversations = await this.prisma.conversation.findMany({
       where,
-      orderBy: [
-        { lastMessageAt: { sort: 'desc', nulls: 'last' } },
-        { id: 'desc' },
-      ],
+      orderBy: [{ lastMessageAt: { sort: "desc", nulls: "last" } }, { id: "desc" }],
       take: limit + 1,
       include: {
         participants: {
@@ -234,8 +213,7 @@ export class MessagingService {
     const nextCursor =
       items.length > 0
         ? encodeCursor(
-            items[items.length - 1].lastMessageAt ??
-              items[items.length - 1].createdAt,
+            items[items.length - 1].lastMessageAt ?? items[items.length - 1].createdAt,
             items[items.length - 1].id,
           )
         : undefined;
@@ -251,12 +229,9 @@ export class MessagingService {
   }
 
   async getConversation(userId: string, conversationId: string) {
-    const isActive = await this.messagingPolicy.isActiveParticipant(
-      userId,
-      conversationId,
-    );
+    const isActive = await this.messagingPolicy.isActiveParticipant(userId, conversationId);
     if (!isActive) {
-      throw new ForbiddenException('NOT_A_PARTICIPANT');
+      throw new ForbiddenException("NOT_A_PARTICIPANT");
     }
 
     const conversation = await this.prisma.conversation.findUnique({
@@ -278,31 +253,21 @@ export class MessagingService {
     });
 
     if (!conversation) {
-      throw new BadRequestException('CONVERSATION_NOT_FOUND');
+      throw new BadRequestException("CONVERSATION_NOT_FOUND");
     }
 
     return conversation;
   }
 
-  async sendMessage(
-    userId: string,
-    conversationId: string,
-    dto: SendMessageDto,
-  ) {
-    const isActive = await this.messagingPolicy.isActiveParticipant(
-      userId,
-      conversationId,
-    );
+  async sendMessage(userId: string, conversationId: string, dto: SendMessageDto) {
+    const isActive = await this.messagingPolicy.isActiveParticipant(userId, conversationId);
     if (!isActive) {
-      throw new ForbiddenException('NOT_A_PARTICIPANT');
+      throw new ForbiddenException("NOT_A_PARTICIPANT");
     }
 
-    const canSend = await this.messagingPolicy.canSendMessage(
-      userId,
-      conversationId,
-    );
+    const canSend = await this.messagingPolicy.canSendMessage(userId, conversationId);
     if (!canSend) {
-      throw new ForbiddenException('BLOCKED_USER');
+      throw new ForbiddenException("BLOCKED_USER");
     }
 
     // Get conversation to find other participants
@@ -317,7 +282,7 @@ export class MessagingService {
     });
 
     if (!conversation) {
-      throw new BadRequestException('CONVERSATION_NOT_FOUND');
+      throw new BadRequestException("CONVERSATION_NOT_FOUND");
     }
 
     const recipientIds = conversation.participants
@@ -325,38 +290,30 @@ export class MessagingService {
       .filter((id: string) => id !== userId);
 
     // Compute idempotency key to prevent duplicate messages on client retry
-    const contentHash = crypto
-      .createHash('sha256')
-      .update(dto.content)
-      .digest('hex');
+    const contentHash = crypto.createHash("sha256").update(dto.content).digest("hex");
     const idempotencyKey = `${conversationId}:${userId}:${contentHash}`;
 
     return this.prisma.$transaction(async (tx) => {
-      await this.idempotencyService.claim(tx, 'Message:send', idempotencyKey);
+      await this.idempotencyService.claim(tx, "Message:send", idempotencyKey);
 
       const message = await tx.message.create({
         data: {
           conversationId,
           senderId: userId,
           content: dto.content,
-          type: 'TEXT',
+          type: "TEXT",
         },
       });
 
       const preview =
-        dto.content.length > 500
-          ? dto.content.substring(0, 497) + '...'
-          : dto.content;
+        dto.content.length > 500 ? dto.content.substring(0, 497) + "..." : dto.content;
 
       // Monotonic guard: prevents concurrent sendMessage calls from
       // overwriting lastMessageAt with an older value (last-writer-wins).
       await tx.conversation.updateMany({
         where: {
           id: conversationId,
-          OR: [
-            { lastMessageAt: null },
-            { lastMessageAt: { lt: message.createdAt } },
-          ],
+          OR: [{ lastMessageAt: null }, { lastMessageAt: { lt: message.createdAt } }],
         },
         data: {
           lastMessageAt: message.createdAt,
@@ -365,8 +322,8 @@ export class MessagingService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'MessageSent',
-        aggregateType: 'Conversation',
+        eventType: "MessageSent",
+        aggregateType: "Conversation",
         aggregateId: conversationId,
         payload: {
           messageId: message.id,
@@ -380,22 +337,20 @@ export class MessagingService {
     });
   }
 
-  async getMessages(
-    userId: string,
-    conversationId: string,
-    query: CursorPaginationQueryDto,
-  ) {
-    const isActive = await this.messagingPolicy.isActiveParticipant(
-      userId,
-      conversationId,
-    );
+  async getMessages(userId: string, conversationId: string, query: CursorPaginationQueryDto) {
+    const isActive = await this.messagingPolicy.isActiveParticipant(userId, conversationId);
     if (!isActive) {
-      throw new ForbiddenException('NOT_A_PARTICIPANT');
+      throw new ForbiddenException("NOT_A_PARTICIPANT");
     }
 
     const limit = Math.min(query.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
     const where: Record<string, unknown> = {
       conversationId,
+      // Soft-deleted messages (e.g. removed by moderation REMOVE_CONTENT)
+      // are hidden from history reads. The MessageRemoved outbox event
+      // can be consumed by future consumers (analytics, audit) but the
+      // content itself should never resurface to readers.
+      deletedAt: null,
     };
 
     if (query.cursor) {
@@ -407,7 +362,7 @@ export class MessagingService {
 
     const messages = await this.prisma.message.findMany({
       where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       select: {
         id: true,
@@ -429,12 +384,9 @@ export class MessagingService {
   }
 
   async markRead(userId: string, conversationId: string) {
-    const isActive = await this.messagingPolicy.isActiveParticipant(
-      userId,
-      conversationId,
-    );
+    const isActive = await this.messagingPolicy.isActiveParticipant(userId, conversationId);
     if (!isActive) {
-      throw new ForbiddenException('NOT_A_PARTICIPANT');
+      throw new ForbiddenException("NOT_A_PARTICIPANT");
     }
 
     await this.prisma.conversationParticipant.update({
