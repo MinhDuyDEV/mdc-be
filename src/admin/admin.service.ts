@@ -1,19 +1,22 @@
-import { Injectable } from '@nestjs/common';
-import { UserStatus } from '@prisma/client';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { DeadLetterService } from '../outbox';
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { UserStatus } from "@prisma/client";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { DeadLetterService } from "../outbox";
+import { OutboxService } from "../outbox/outbox.service";
 import type {
   AdminDeadLetterQueryDto,
   AdminUserQueryDto,
   UpdateUserStatusDto,
   VerifyCompanyDto,
-} from './dto';
+} from "./dto";
+import { assertValidUserStatusTransition } from "./user-status.machine";
 
 @Injectable()
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly deadLetter: DeadLetterService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async listUsers(query: AdminUserQueryDto) {
@@ -22,23 +25,40 @@ export class AdminService {
         status: query.status,
         OR: query.search
           ? [
-              { email: { contains: query.search, mode: 'insensitive' } },
-              { displayName: { contains: query.search, mode: 'insensitive' } },
+              { email: { contains: query.search, mode: "insensitive" } },
+              { displayName: { contains: query.search, mode: "insensitive" } },
             ]
           : undefined,
       },
       take: 50,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     return { data: users, meta: { hasNextPage: users.length === 50 } };
   }
 
-  async updateUserStatus(
-    userId: string,
-    dto: UpdateUserStatusDto,
-    adminId: string,
-  ): Promise<void> {
+  async updateUserStatus(userId: string, dto: UpdateUserStatusDto, adminId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      // Read current status so we can validate the transition and
+      // record previousStatus for downstream consumers / auditors.
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { status: true },
+      });
+      if (!current) {
+        throw new NotFoundException("User not found");
+      }
+
+      // No-op short-circuit: same-status updates write nothing and
+      // emit no event (avoids noisy "transition ACTIVE → ACTIVE"
+      // audit / outbox spam from repeated admin clicks).
+      if (current.status === dto.status) {
+        return;
+      }
+
+      // Validate the transition against the state machine.
+      // Throws BadRequestException for any disallowed edge.
+      assertValidUserStatusTransition(current.status, dto.status);
+
       await tx.user.update({
         where: { id: userId },
         data: { status: dto.status },
@@ -47,10 +67,14 @@ export class AdminService {
       await tx.auditLog.create({
         data: {
           actorUserId: adminId,
-          action: 'admin.user.status_change',
-          entityType: 'User',
+          action: "admin.user.status_change",
+          entityType: "User",
           entityId: userId,
-          metadata: { newStatus: dto.status, reason: dto.reason },
+          metadata: {
+            previousStatus: current.status,
+            newStatus: dto.status,
+            reason: dto.reason,
+          },
         },
       });
 
@@ -60,25 +84,36 @@ export class AdminService {
           data: { revokedAt: new Date() },
         });
       }
+
+      // Emit domain event so downstream consumers (analytics, audit
+      // pipeline, notification fan-out) can react to status changes.
+      // Note: UserStatus.DELETED can be reached from any status, so
+      // we emit in the same transaction as the user update.
+      await this.outboxService.emit(tx, {
+        eventType: "UserStatusChanged",
+        aggregateType: "User",
+        aggregateId: userId,
+        payload: {
+          userId,
+          previousStatus: current.status,
+          newStatus: dto.status,
+          changedBy: adminId,
+          reason: dto.reason ?? null,
+        },
+      });
     });
   }
 
   async listCompanies(query: { search?: string }) {
     const companies = await this.prisma.company.findMany({
-      where: query.search
-        ? { name: { contains: query.search, mode: 'insensitive' } }
-        : undefined,
+      where: query.search ? { name: { contains: query.search, mode: "insensitive" } } : undefined,
       take: 50,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     return { data: companies, meta: { hasNextPage: companies.length === 50 } };
   }
 
-  async verifyCompany(
-    companyId: string,
-    dto: VerifyCompanyDto,
-    adminId: string,
-  ): Promise<void> {
+  async verifyCompany(companyId: string, dto: VerifyCompanyDto, adminId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       // Upsert verification record (one per company due to @@unique)
       await tx.companyVerification.upsert({
@@ -86,14 +121,14 @@ export class AdminService {
         create: {
           companyId,
           requestedByUserId: adminId,
-          status: 'VERIFIED',
+          status: "VERIFIED",
           reviewedByUserId: adminId,
           reviewedAt: new Date(),
           notes: dto.notes,
           documentUrls: [],
         },
         update: {
-          status: 'VERIFIED',
+          status: "VERIFIED",
           reviewedByUserId: adminId,
           reviewedAt: new Date(),
           notes: dto.notes,
@@ -112,8 +147,8 @@ export class AdminService {
       await tx.auditLog.create({
         data: {
           actorUserId: adminId,
-          action: 'admin.company.verify',
-          entityType: 'Company',
+          action: "admin.company.verify",
+          entityType: "Company",
           entityId: companyId,
           metadata: { notes: dto.notes },
         },
@@ -125,7 +160,7 @@ export class AdminService {
     const jobs = await this.prisma.job.findMany({
       where: query.companyId ? { companyId: query.companyId } : undefined,
       take: 50,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
     return { data: jobs, meta: { hasNextPage: jobs.length === 50 } };
   }
@@ -140,7 +175,7 @@ export class AdminService {
             skip: 1,
           }
         : {}),
-      orderBy: { failedAt: 'desc' },
+      orderBy: { failedAt: "desc" },
     });
     const data = rows.slice(0, 50);
     return {
@@ -158,8 +193,8 @@ export class AdminService {
       await tx.auditLog.create({
         data: {
           actorUserId: adminId,
-          action: 'admin.outbox.dead_letter.replay',
-          entityType: 'OutboxDeadLetter',
+          action: "admin.outbox.dead_letter.replay",
+          entityType: "OutboxDeadLetter",
           entityId: deadLetterId,
           metadata: {},
         },

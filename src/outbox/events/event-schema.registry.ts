@@ -224,6 +224,17 @@ export const outboxEventSchemas = {
     targetEntity: z.string(),
     targetId: z.string(),
   }),
+  ProfileRemoved: payload.extend({
+    profileId: z.string(),
+    userId: z.string(),
+  }),
+  CompanyRemoved: payload.extend({
+    companyId: z.string(),
+  }),
+  MessageRemoved: payload.extend({
+    messageId: z.string(),
+    conversationId: z.string(),
+  }),
   SubscriptionCancelled: payload.extend({
     subscriptionId: z.string(),
     companyId: z.string(),
@@ -236,6 +247,13 @@ export const outboxEventSchemas = {
   UserBlocked: payload.extend({
     blockerUserId: z.string(),
     blockedUserId: z.string(),
+  }),
+  UserStatusChanged: payload.extend({
+    userId: z.string(),
+    previousStatus: z.string(),
+    newStatus: z.string(),
+    changedBy: z.string(),
+    reason: z.string().nullable().optional(),
   }),
   UserLoggedIn: payload.extend({
     userId: z.string(),

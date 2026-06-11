@@ -50,6 +50,7 @@ describe("OutboxProcessor", () => {
       processApplicationStatusChanged: jest.fn().mockResolvedValue(undefined),
       processApplicationNoteAdded: jest.fn().mockResolvedValue(undefined),
       processRecruiterSeatAllocated: jest.fn().mockResolvedValue(undefined),
+      processUserStatusChanged: jest.fn().mockResolvedValue(undefined),
     };
     const mockPostInteraction = {
       processPostCreated: jest.fn(),
@@ -689,6 +690,36 @@ describe("OutboxProcessor", () => {
 
       expect(mockPostSearchIndex.processPostUpdated).toHaveBeenCalledWith(
         expect.objectContaining({ postId: "post-1" }),
+      );
+    });
+
+    it("UserStatusChanged routes to notification.processUserStatusChanged", async () => {
+      const { processor, mockNotification } = createProcessor();
+      const event = {
+        id: "evt-usc",
+        eventType: "UserStatusChanged",
+        payload: {
+          userId: "user-1",
+          previousStatus: "ACTIVE",
+          newStatus: "SUSPENDED",
+          changedBy: "admin-1",
+          reason: "spam",
+        },
+        attempts: 0,
+      };
+
+      await (
+        processor as unknown as {
+          dispatch: (e: typeof event) => Promise<void>;
+        }
+      ).dispatch(event);
+
+      expect(mockNotification.processUserStatusChanged).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: "user-1",
+          previousStatus: "ACTIVE",
+          newStatus: "SUSPENDED",
+        }),
       );
     });
   });
