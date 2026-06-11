@@ -1,23 +1,23 @@
-import * as crypto from 'node:crypto';
+import * as crypto from "node:crypto";
 import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { CompanyRole, type Prisma } from '@prisma/client';
-import { withUniqueSlug } from '../common/strings/slug';
-import { EntitlementsService } from '../billing/entitlements/entitlements.service';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
-import type { AddMemberDto } from './dto/add-member.dto';
-import type { CreateCompanyDto } from './dto/create-company.dto';
-import type { InviteMemberDto } from './dto/invite-member.dto';
-import type { ListCompaniesDto } from './dto/list-companies.dto';
-import type { UpdateCompanyDto } from './dto/update-company.dto';
-import type { UpdateMemberRoleDto } from './dto/update-member-role.dto';
+} from "@nestjs/common";
+import { CompanyRole, type Prisma } from "@prisma/client";
+import { withUniqueSlug } from "../common/strings/slug";
+import { EntitlementsService } from "../billing/entitlements/entitlements.service";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { IdempotencyService } from "../outbox/idempotency.service";
+import { OutboxService } from "../outbox/outbox.service";
+import type { AddMemberDto } from "./dto/add-member.dto";
+import type { CreateCompanyDto } from "./dto/create-company.dto";
+import type { InviteMemberDto } from "./dto/invite-member.dto";
+import type { ListCompaniesDto } from "./dto/list-companies.dto";
+import type { UpdateCompanyDto } from "./dto/update-company.dto";
+import type { UpdateMemberRoleDto } from "./dto/update-member-role.dto";
 
 const ROLE_LEVEL: Record<CompanyRole, number> = {
   OWNER: 3,
@@ -35,12 +35,9 @@ function hasRoleAtLeast(actual: CompanyRole, required: CompanyRole): boolean {
  * Privilege-cap helper: an actor cannot grant a role higher than their own.
  * Prevents ADMIN from minting an OWNER via add/invite/promote.
  */
-function assertCanGrantRole(
-  actorRole: CompanyRole,
-  requestedRole: CompanyRole,
-): void {
+function assertCanGrantRole(actorRole: CompanyRole, requestedRole: CompanyRole): void {
   if (ROLE_LEVEL[requestedRole] > ROLE_LEVEL[actorRole]) {
-    throw new ForbiddenException('INSUFFICIENT_PRIVILEGE_FOR_ROLE_GRANT');
+    throw new ForbiddenException("INSUFFICIENT_PRIVILEGE_FOR_ROLE_GRANT");
   }
 }
 
@@ -48,12 +45,9 @@ function assertCanGrantRole(
  * Privilege-cap helper: an actor cannot modify a member whose role is higher than their own.
  * Prevents ADMIN from demoting/removing OWNERs.
  */
-function assertCanModifyTarget(
-  actorRole: CompanyRole,
-  targetRole: CompanyRole,
-): void {
+function assertCanModifyTarget(actorRole: CompanyRole, targetRole: CompanyRole): void {
   if (ROLE_LEVEL[targetRole] > ROLE_LEVEL[actorRole]) {
-    throw new ForbiddenException('INSUFFICIENT_PRIVILEGE_FOR_TARGET');
+    throw new ForbiddenException("INSUFFICIENT_PRIVILEGE_FOR_TARGET");
   }
 }
 
@@ -88,7 +82,7 @@ function withCompanyRelationshipCounts<
   T extends { _count?: { followers?: number; members?: number } },
 >(
   company: T,
-): Omit<T, '_count'> & {
+): Omit<T, "_count"> & {
   followerCount: number;
   memberCount: number;
 } {
@@ -116,19 +110,15 @@ export class CompaniesService {
       select: { id: true, emailVerifiedAt: true },
     });
     if (!user) {
-      throw new NotFoundException('User not found');
+      throw new NotFoundException("User not found");
     }
     if (!user.emailVerifiedAt) {
-      throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+      throw new ForbiddenException("EMAIL_NOT_VERIFIED");
     }
 
     return this.prisma.$transaction(async (tx) => {
       // NFR: idempotent creation per (user, name) tuple
-      await this.idempotencyService.claim(
-        tx,
-        'CompanyCreate',
-        `${userId}:${data.name}`,
-      );
+      await this.idempotencyService.claim(tx, "CompanyCreate", `${userId}:${data.name}`);
 
       const company = await createCompanyWithUniqueSlug(
         data.name,
@@ -150,23 +140,23 @@ export class CompaniesService {
           companyId: company.id,
           userId,
           role: CompanyRole.OWNER,
-          status: 'active',
+          status: "active",
         },
       });
 
       await tx.auditLog.create({
         data: {
           actorUserId: userId,
-          action: 'company.create',
-          entityType: 'Company',
+          action: "company.create",
+          entityType: "Company",
           entityId: company.id,
           metadata: { name: company.name, slug: company.slug },
         },
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyCreated',
-        aggregateType: 'Company',
+        eventType: "CompanyCreated",
+        aggregateType: "Company",
         aggregateId: company.id,
         payload: {
           companyId: company.id,
@@ -187,7 +177,7 @@ export class CompaniesService {
     });
 
     if (!company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException("Company not found");
     }
 
     return withCompanyRelationshipCounts(company);
@@ -200,7 +190,7 @@ export class CompaniesService {
       });
 
       if (!company) {
-        throw new NotFoundException('Company not found');
+        throw new NotFoundException("Company not found");
       }
 
       const existing = await tx.companyFollower.findUnique({
@@ -219,8 +209,8 @@ export class CompaniesService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyFollowed',
-        aggregateType: 'Company',
+        eventType: "CompanyFollowed",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: { companyId, userId },
       });
@@ -234,7 +224,7 @@ export class CompaniesService {
         select: { id: true },
       });
       if (!company) {
-        throw new NotFoundException('Company not found');
+        throw new NotFoundException("Company not found");
       }
 
       const existing = await tx.companyFollower.findUnique({
@@ -244,7 +234,7 @@ export class CompaniesService {
       });
 
       if (!existing) {
-        throw new NotFoundException('Not following this company');
+        throw new NotFoundException("Not following this company");
       }
 
       await tx.companyFollower.delete({
@@ -252,26 +242,22 @@ export class CompaniesService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyUnfollowed',
-        aggregateType: 'Company',
+        eventType: "CompanyUnfollowed",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: { companyId, userId },
       });
     });
   }
 
-  async updateCompany(
-    userId: string,
-    companyId: string,
-    data: UpdateCompanyDto,
-  ) {
+  async updateCompany(userId: string, companyId: string, data: UpdateCompanyDto) {
     return this.prisma.$transaction(async (tx) => {
       const company = await tx.company.findFirst({
         where: { id: companyId, deletedAt: null },
       });
 
       if (!company) {
-        throw new NotFoundException('Company not found');
+        throw new NotFoundException("Company not found");
       }
 
       const member = await tx.companyMember.findUnique({
@@ -281,9 +267,7 @@ export class CompaniesService {
       });
 
       if (!member || !hasRoleAtLeast(member.role, CompanyRole.ADMIN)) {
-        throw new ForbiddenException(
-          'Only company admins or owners can update the company',
-        );
+        throw new ForbiddenException("Only company admins or owners can update the company");
       }
 
       const updateData: Prisma.CompanyUpdateInput = {
@@ -324,8 +308,8 @@ export class CompaniesService {
             });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyUpdated',
-        aggregateType: 'Company',
+        eventType: "CompanyUpdated",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,
@@ -345,7 +329,7 @@ export class CompaniesService {
       });
 
       if (!company) {
-        throw new NotFoundException('Company not found');
+        throw new NotFoundException("Company not found");
       }
 
       const member = await tx.companyMember.findUnique({
@@ -355,9 +339,7 @@ export class CompaniesService {
       });
 
       if (!member || !hasRoleAtLeast(member.role, CompanyRole.ADMIN)) {
-        throw new ForbiddenException(
-          'Only company admins or owners can invite members',
-        );
+        throw new ForbiddenException("Only company admins or owners can invite members");
       }
 
       // Privilege cap: actor cannot invite at a role higher than their own.
@@ -373,14 +355,29 @@ export class CompaniesService {
           role: data.role,
           token,
           invitedBy: userId,
-          status: 'pending',
+          status: "pending",
           expiresAt,
         },
       });
 
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: "company.member.invite",
+          entityType: "Company",
+          entityId: companyId,
+          metadata: {
+            companyId,
+            email: data.email,
+            role: data.role,
+            invitationId: invitation.id,
+          },
+        },
+      });
+
       await this.outboxService.emit(tx, {
-        eventType: 'MemberInvited',
-        aggregateType: 'Company',
+        eventType: "MemberInvited",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,
@@ -402,17 +399,15 @@ export class CompaniesService {
       });
 
       if (!invitation) {
-        throw new NotFoundException('Invitation not found');
+        throw new NotFoundException("Invitation not found");
       }
 
-      if (invitation.status !== 'pending') {
-        throw new BadRequestException(
-          `Invitation is already ${invitation.status}`,
-        );
+      if (invitation.status !== "pending") {
+        throw new BadRequestException(`Invitation is already ${invitation.status}`);
       }
 
       if (new Date() > invitation.expiresAt) {
-        throw new BadRequestException('Invitation has expired');
+        throw new BadRequestException("Invitation has expired");
       }
 
       // Identity binding: caller must be the invited user (matched by email)
@@ -422,15 +417,13 @@ export class CompaniesService {
         select: { email: true, emailVerifiedAt: true },
       });
       if (!acceptingUser) {
-        throw new NotFoundException('User not found');
+        throw new NotFoundException("User not found");
       }
-      if (
-        acceptingUser.email.toLowerCase() !== invitation.email.toLowerCase()
-      ) {
-        throw new ForbiddenException('INVITATION_EMAIL_MISMATCH');
+      if (acceptingUser.email.toLowerCase() !== invitation.email.toLowerCase()) {
+        throw new ForbiddenException("INVITATION_EMAIL_MISMATCH");
       }
       if (!acceptingUser.emailVerifiedAt) {
-        throw new ForbiddenException('EMAIL_NOT_VERIFIED');
+        throw new ForbiddenException("EMAIL_NOT_VERIFIED");
       }
 
       // Idempotency: if user is already a member, mark invitation accepted and return.
@@ -445,7 +438,7 @@ export class CompaniesService {
       if (existingMember) {
         await tx.memberInvitation.update({
           where: { id: invitation.id },
-          data: { status: 'accepted', acceptedAt: new Date() },
+          data: { status: "accepted", acceptedAt: new Date() },
         });
         return existingMember;
       }
@@ -457,21 +450,21 @@ export class CompaniesService {
           // invitation.role is stored as String in the DB but is validated
           // as a CompanyRole enum at write-time via InviteMemberDto.
           role: invitation.role as CompanyRole,
-          status: 'active',
+          status: "active",
         },
       });
 
       await tx.memberInvitation.update({
         where: { id: invitation.id },
         data: {
-          status: 'accepted',
+          status: "accepted",
           acceptedAt: new Date(),
         },
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'MemberJoined',
-        aggregateType: 'Company',
+        eventType: "MemberJoined",
+        aggregateType: "Company",
         aggregateId: invitation.companyId,
         payload: {
           companyId: invitation.companyId,
@@ -485,22 +478,18 @@ export class CompaniesService {
     });
   }
 
-  async allocateRecruiterSeat(
-    userId: string,
-    companyId: string,
-    targetUserId: string,
-  ) {
+  async allocateRecruiterSeat(userId: string, companyId: string, targetUserId: string) {
     return this.prisma.$transaction(async (tx) => {
       // Check seat limit inside transaction to prevent TOCTOU race
       const entitlement = await tx.companyEntitlement.findFirst({
         where: {
           companyId,
-          entitlementType: 'recruiter_seats',
+          entitlementType: "recruiter_seats",
           validUntil: { gte: new Date() },
         },
       });
       if (!entitlement || entitlement.creditsRemaining <= 0) {
-        throw new ForbiddenException('RECRUITER_SEAT_LIMIT_EXCEEDED');
+        throw new ForbiddenException("RECRUITER_SEAT_LIMIT_EXCEEDED");
       }
 
       const company = await tx.company.findFirst({
@@ -508,7 +497,7 @@ export class CompaniesService {
       });
 
       if (!company) {
-        throw new NotFoundException('Company not found');
+        throw new NotFoundException("Company not found");
       }
 
       const member = await tx.companyMember.findUnique({
@@ -518,9 +507,7 @@ export class CompaniesService {
       });
 
       if (!member || !hasRoleAtLeast(member.role, CompanyRole.ADMIN)) {
-        throw new ForbiddenException(
-          'Only company admins or owners can allocate recruiter seats',
-        );
+        throw new ForbiddenException("Only company admins or owners can allocate recruiter seats");
       }
 
       // Check target user exists
@@ -529,36 +516,34 @@ export class CompaniesService {
       });
 
       if (!targetUser) {
-        throw new NotFoundException('Target user not found');
+        throw new NotFoundException("Target user not found");
       }
 
       // Find an available seat
       const availableSeat = await tx.recruiterSeat.findFirst({
         where: {
           companyId,
-          status: 'available',
+          status: "available",
         },
       });
 
       if (!availableSeat) {
-        throw new BadRequestException('No available recruiter seats');
+        throw new BadRequestException("No available recruiter seats");
       }
 
       // Atomic claim: only succeeds if status is still 'available'.
       // Closes TOCTOU race where two admins could read the same seat
       // and both call update() with conflicting userIds.
       const claimed = await tx.recruiterSeat.updateMany({
-        where: { id: availableSeat.id, status: 'available' },
+        where: { id: availableSeat.id, status: "available" },
         data: {
           userId: targetUserId,
-          status: 'allocated',
+          status: "allocated",
           allocatedAt: new Date(),
         },
       });
       if (claimed.count === 0) {
-        throw new ConflictException(
-          'Recruiter seat was claimed concurrently; retry',
-        );
+        throw new ConflictException("Recruiter seat was claimed concurrently; retry");
       }
 
       const seat = await tx.recruiterSeat.findUniqueOrThrow({
@@ -568,16 +553,30 @@ export class CompaniesService {
       // Consume one recruiter seat credit atomically within the same transaction
       await this.entitlementsService.consumeCredit(
         companyId,
-        'recruiter_seats',
+        "recruiter_seats",
         1,
-        'RecruiterSeat',
+        "RecruiterSeat",
         seat.id,
         tx,
       );
 
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: "company.recruiter_seat.allocate",
+          entityType: "Company",
+          entityId: companyId,
+          metadata: {
+            companyId,
+            seatId: seat.id,
+            recruiterUserId: targetUserId,
+          },
+        },
+      });
+
       await this.outboxService.emit(tx, {
-        eventType: 'RecruiterSeatAllocated',
-        aggregateType: 'Company',
+        eventType: "RecruiterSeatAllocated",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,
@@ -592,11 +591,7 @@ export class CompaniesService {
     });
   }
 
-  async deallocateRecruiterSeat(
-    userId: string,
-    companyId: string,
-    seatId: string,
-  ) {
+  async deallocateRecruiterSeat(userId: string, companyId: string, seatId: string) {
     return this.prisma.$transaction(async (tx) => {
       const member = await tx.companyMember.findUnique({
         where: {
@@ -606,7 +601,7 @@ export class CompaniesService {
 
       if (!member || !hasRoleAtLeast(member.role, CompanyRole.ADMIN)) {
         throw new ForbiddenException(
-          'Only company admins or owners can deallocate recruiter seats',
+          "Only company admins or owners can deallocate recruiter seats",
         );
       }
 
@@ -615,27 +610,35 @@ export class CompaniesService {
       });
 
       if (!seat || seat.companyId !== companyId) {
-        throw new NotFoundException('Recruiter seat not found');
+        throw new NotFoundException("Recruiter seat not found");
       }
 
-      if (seat.status !== 'allocated') {
-        throw new BadRequestException(
-          `Recruiter seat is ${seat.status}, not allocated`,
-        );
+      if (seat.status !== "allocated") {
+        throw new BadRequestException(`Recruiter seat is ${seat.status}, not allocated`);
       }
 
       const updated = await tx.recruiterSeat.update({
         where: { id: seatId },
         data: {
           userId: null,
-          status: 'available',
+          status: "available",
           allocatedAt: null,
         },
       });
 
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: "company.recruiter_seat.deallocate",
+          entityType: "Company",
+          entityId: companyId,
+          metadata: { companyId, seatId, previousUserId: seat.userId },
+        },
+      });
+
       await this.outboxService.emit(tx, {
-        eventType: 'RecruiterSeatDeallocated',
-        aggregateType: 'Company',
+        eventType: "RecruiterSeatDeallocated",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,
@@ -655,7 +658,7 @@ export class CompaniesService {
       include: COMPANY_INCLUDES,
     });
     if (!company) {
-      throw new NotFoundException('Company not found');
+      throw new NotFoundException("Company not found");
     }
     return withCompanyRelationshipCounts(company);
   }
@@ -667,15 +670,15 @@ export class CompaniesService {
     const where: Prisma.CompanyWhereInput = { deletedAt: null };
     if (query.search) {
       where.OR = [
-        { name: { contains: query.search, mode: 'insensitive' } },
-        { description: { contains: query.search, mode: 'insensitive' } },
+        { name: { contains: query.search, mode: "insensitive" } },
+        { description: { contains: query.search, mode: "insensitive" } },
       ];
     }
 
     // Cursor pagination — fetch limit+1 to detect hasMore
     const rows = await this.prisma.company.findMany({
       where,
-      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      orderBy: [{ name: "asc" }, { id: "asc" }],
       take: limit + 1,
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: {
@@ -705,8 +708,7 @@ export class CompaniesService {
     const data = (hasMore ? rows.slice(0, limit) : rows).map((company) =>
       withCompanyRelationshipCounts(company),
     );
-    const nextCursor =
-      hasMore && data.length > 0 ? data[data.length - 1].id : null;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : null;
 
     return { data, meta: { nextCursor, hasMore } };
   }
@@ -717,15 +719,13 @@ export class CompaniesService {
         where: { id: companyId, deletedAt: null },
         select: { id: true },
       });
-      if (!company) throw new NotFoundException('Company not found');
+      if (!company) throw new NotFoundException("Company not found");
 
       const actor = await tx.companyMember.findUnique({
         where: { companyId_userId: { companyId, userId: actorUserId } },
       });
       if (!actor || !hasRoleAtLeast(actor.role, CompanyRole.ADMIN)) {
-        throw new ForbiddenException(
-          'Only company admins or owners can add members',
-        );
+        throw new ForbiddenException("Only company admins or owners can add members");
       }
 
       // Privilege cap: actor cannot grant a role higher than their own.
@@ -735,7 +735,7 @@ export class CompaniesService {
         where: { id: dto.userId },
         select: { id: true },
       });
-      if (!target) throw new NotFoundException('Target user not found');
+      if (!target) throw new NotFoundException("Target user not found");
 
       const existing = await tx.companyMember.findUnique({
         where: {
@@ -743,7 +743,7 @@ export class CompaniesService {
         },
       });
       if (existing) {
-        throw new ConflictException('User is already a member');
+        throw new ConflictException("User is already a member");
       }
 
       const member = await tx.companyMember.create({
@@ -751,23 +751,23 @@ export class CompaniesService {
           companyId,
           userId: dto.userId,
           role: dto.role,
-          status: 'active',
+          status: "active",
         },
       });
 
       await tx.auditLog.create({
         data: {
           actorUserId,
-          action: 'company.member.add',
-          entityType: 'Company',
+          action: "company.member.add",
+          entityType: "Company",
           entityId: companyId,
           metadata: { addedUserId: dto.userId, role: dto.role },
         },
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyMemberAdded',
-        aggregateType: 'Company',
+        eventType: "CompanyMemberAdded",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,
@@ -790,20 +790,20 @@ export class CompaniesService {
       where: { id: companyId, deletedAt: null },
       select: { id: true },
     });
-    if (!company) throw new NotFoundException('Company not found');
+    if (!company) throw new NotFoundException("Company not found");
 
     const actor = await this.prisma.companyMember.findUnique({
       where: { companyId_userId: { companyId, userId: actorUserId } },
     });
-    if (!actor || actor.status !== 'active') {
-      throw new ForbiddenException('Only members can view the member list');
+    if (!actor || actor.status !== "active") {
+      throw new ForbiddenException("Only members can view the member list");
     }
 
     const limit = Math.min(Math.max(query.limit ?? 20, 1), 100);
 
     const rows = await this.prisma.companyMember.findMany({
-      where: { companyId, status: 'active' },
-      orderBy: [{ joinedAt: 'asc' }, { id: 'asc' }],
+      where: { companyId, status: "active" },
+      orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
       take: limit + 1,
       ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
       include: {
@@ -815,8 +815,7 @@ export class CompaniesService {
 
     const hasMore = rows.length > limit;
     const data = hasMore ? rows.slice(0, limit) : rows;
-    const nextCursor =
-      hasMore && data.length > 0 ? data[data.length - 1].id : null;
+    const nextCursor = hasMore && data.length > 0 ? data[data.length - 1].id : null;
 
     return { data, meta: { nextCursor, hasMore } };
   }
@@ -832,22 +831,20 @@ export class CompaniesService {
         where: { id: companyId, deletedAt: null },
         select: { id: true },
       });
-      if (!company) throw new NotFoundException('Company not found');
+      if (!company) throw new NotFoundException("Company not found");
 
       const actor = await tx.companyMember.findUnique({
         where: { companyId_userId: { companyId, userId: actorUserId } },
       });
       if (!actor || !hasRoleAtLeast(actor.role, CompanyRole.ADMIN)) {
-        throw new ForbiddenException(
-          'Only company admins or owners can change member roles',
-        );
+        throw new ForbiddenException("Only company admins or owners can change member roles");
       }
 
       const target = await tx.companyMember.findUnique({
         where: { id: memberId },
       });
       if (!target || target.companyId !== companyId) {
-        throw new NotFoundException('Member not found');
+        throw new NotFoundException("Member not found");
       }
 
       // Privilege caps: actor must outrank both the target's current role AND the new role.
@@ -857,10 +854,10 @@ export class CompaniesService {
       // Last-owner protection: refuse demotion that leaves zero OWNERs.
       if (target.role === CompanyRole.OWNER && dto.role !== CompanyRole.OWNER) {
         const ownerCount = await tx.companyMember.count({
-          where: { companyId, role: CompanyRole.OWNER, status: 'active' },
+          where: { companyId, role: CompanyRole.OWNER, status: "active" },
         });
         if (ownerCount <= 1) {
-          throw new BadRequestException('CANNOT_DEMOTE_LAST_OWNER');
+          throw new BadRequestException("CANNOT_DEMOTE_LAST_OWNER");
         }
       }
 
@@ -872,8 +869,8 @@ export class CompaniesService {
       await tx.auditLog.create({
         data: {
           actorUserId,
-          action: 'company.member.update_role',
-          entityType: 'Company',
+          action: "company.member.update_role",
+          entityType: "Company",
           entityId: companyId,
           metadata: {
             memberId,
@@ -884,8 +881,8 @@ export class CompaniesService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyMemberRoleChanged',
-        aggregateType: 'Company',
+        eventType: "CompanyMemberRoleChanged",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,
@@ -907,22 +904,20 @@ export class CompaniesService {
         where: { id: companyId, deletedAt: null },
         select: { id: true },
       });
-      if (!company) throw new NotFoundException('Company not found');
+      if (!company) throw new NotFoundException("Company not found");
 
       const actor = await tx.companyMember.findUnique({
         where: { companyId_userId: { companyId, userId: actorUserId } },
       });
       if (!actor || !hasRoleAtLeast(actor.role, CompanyRole.ADMIN)) {
-        throw new ForbiddenException(
-          'Only company admins or owners can remove members',
-        );
+        throw new ForbiddenException("Only company admins or owners can remove members");
       }
 
       const target = await tx.companyMember.findUnique({
         where: { id: memberId },
       });
       if (!target || target.companyId !== companyId) {
-        throw new NotFoundException('Member not found');
+        throw new NotFoundException("Member not found");
       }
 
       // Privilege cap: actor must outrank the target's current role.
@@ -930,10 +925,10 @@ export class CompaniesService {
 
       if (target.role === CompanyRole.OWNER) {
         const ownerCount = await tx.companyMember.count({
-          where: { companyId, role: CompanyRole.OWNER, status: 'active' },
+          where: { companyId, role: CompanyRole.OWNER, status: "active" },
         });
         if (ownerCount <= 1) {
-          throw new BadRequestException('CANNOT_REMOVE_LAST_OWNER');
+          throw new BadRequestException("CANNOT_REMOVE_LAST_OWNER");
         }
       }
 
@@ -942,8 +937,8 @@ export class CompaniesService {
       await tx.auditLog.create({
         data: {
           actorUserId,
-          action: 'company.member.remove',
-          entityType: 'Company',
+          action: "company.member.remove",
+          entityType: "Company",
           entityId: companyId,
           metadata: {
             memberId,
@@ -954,8 +949,8 @@ export class CompaniesService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CompanyMemberRemoved',
-        aggregateType: 'Company',
+        eventType: "CompanyMemberRemoved",
+        aggregateType: "Company",
         aggregateId: companyId,
         payload: {
           companyId,

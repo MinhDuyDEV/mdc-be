@@ -1,13 +1,13 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { Test, type TestingModule } from '@nestjs/testing';
-import { CompanyRole, Industry } from '@prisma/client';
-import { EntitlementsService } from '../billing/entitlements/entitlements.service';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
-import { CompaniesService } from './companies.service';
+import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { Test, type TestingModule } from "@nestjs/testing";
+import { CompanyRole, Industry } from "@prisma/client";
+import { EntitlementsService } from "../billing/entitlements/entitlements.service";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { IdempotencyService } from "../outbox/idempotency.service";
+import { OutboxService } from "../outbox/outbox.service";
+import { CompaniesService } from "./companies.service";
 
-describe('CompaniesService', () => {
+describe("CompaniesService", () => {
   let service: CompaniesService;
   let mockPrismaValue: any;
   let mockOutboxService: any;
@@ -40,7 +40,9 @@ describe('CompaniesService', () => {
       recruiterSeat: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       memberInvitation: {
         findUnique: jest.fn(),
@@ -54,7 +56,7 @@ describe('CompaniesService', () => {
 
     mockOutboxService = { emit: jest.fn() };
     mockIdempotencyService = {
-      claim: jest.fn().mockResolvedValue({ id: 'idem-1' }),
+      claim: jest.fn().mockResolvedValue({ id: "idem-1" }),
     };
     mockEntitlementsService = {
       checkLimit: jest.fn().mockResolvedValue(true),
@@ -74,50 +76,50 @@ describe('CompaniesService', () => {
     service = module.get<CompaniesService>(CompaniesService);
   });
 
-  describe('createCompany', () => {
-    it('creates company with OWNER membership when email is verified', async () => {
+  describe("createCompany", () => {
+    it("creates company with OWNER membership when email is verified", async () => {
       mockPrismaValue.user.findUnique.mockResolvedValue({
-        id: 'user-1',
+        id: "user-1",
         emailVerifiedAt: new Date(),
       });
       const created = {
-        id: 'company-1',
-        name: 'Acme',
-        slug: 'acme',
+        id: "company-1",
+        name: "Acme",
+        slug: "acme",
       };
       mockPrismaValue.company.create.mockResolvedValue(created);
 
-      const result = await service.createCompany('user-1', {
-        name: 'Acme',
+      const result = await service.createCompany("user-1", {
+        name: "Acme",
         industry: Industry.TECHNOLOGY,
       });
 
       expect(mockIdempotencyService.claim).toHaveBeenCalledWith(
         mockPrismaValue,
-        'CompanyCreate',
-        'user-1:Acme',
+        "CompanyCreate",
+        "user-1:Acme",
       );
       expect(mockPrismaValue.companyMember.create).toHaveBeenCalledWith({
         data: {
-          companyId: 'company-1',
-          userId: 'user-1',
+          companyId: "company-1",
+          userId: "user-1",
           role: CompanyRole.OWNER,
-          status: 'active',
+          status: "active",
         },
       });
       expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          actorUserId: 'user-1',
-          action: 'company.create',
-          entityType: 'Company',
-          entityId: 'company-1',
+          actorUserId: "user-1",
+          action: "company.create",
+          entityType: "Company",
+          entityId: "company-1",
         }),
       });
       expect(mockOutboxService.emit).toHaveBeenCalledWith(
         mockPrismaValue,
         expect.objectContaining({
-          eventType: 'CompanyCreated',
-          aggregateId: 'company-1',
+          eventType: "CompanyCreated",
+          aggregateId: "company-1",
         }),
       );
       expect(result).toEqual({
@@ -127,31 +129,31 @@ describe('CompaniesService', () => {
       });
     });
 
-    it('retries company creation on slug unique conflicts without pre-counting', async () => {
+    it("retries company creation on slug unique conflicts without pre-counting", async () => {
       mockPrismaValue.user.findUnique.mockResolvedValue({
-        id: 'user-1',
+        id: "user-1",
         emailVerifiedAt: new Date(),
       });
       const created = {
-        id: 'company-1',
-        name: 'Acme',
-        slug: 'acme-2',
+        id: "company-1",
+        name: "Acme",
+        slug: "acme-2",
       };
       mockPrismaValue.company.create
-        .mockRejectedValueOnce({ code: 'P2002' })
+        .mockRejectedValueOnce({ code: "P2002" })
         .mockResolvedValue(created);
 
-      const result = await service.createCompany('user-1', {
-        name: 'Acme',
+      const result = await service.createCompany("user-1", {
+        name: "Acme",
         industry: Industry.TECHNOLOGY,
       });
 
       expect(mockPrismaValue.company.count).not.toHaveBeenCalled();
       expect(mockPrismaValue.company.create).toHaveBeenNthCalledWith(1, {
-        data: expect.objectContaining({ slug: 'acme' }),
+        data: expect.objectContaining({ slug: "acme" }),
       });
       expect(mockPrismaValue.company.create).toHaveBeenNthCalledWith(2, {
-        data: expect.objectContaining({ slug: 'acme-2' }),
+        data: expect.objectContaining({ slug: "acme-2" }),
       });
       expect(result).toEqual({
         ...created,
@@ -160,143 +162,260 @@ describe('CompaniesService', () => {
       });
     });
 
-    it('throws ForbiddenException when email not verified (FR1)', async () => {
+    it("throws ForbiddenException when email not verified (FR1)", async () => {
       mockPrismaValue.user.findUnique.mockResolvedValue({
-        id: 'user-1',
+        id: "user-1",
         emailVerifiedAt: null,
       });
 
-      await expect(
-        service.createCompany('user-1', { name: 'Acme' }),
-      ).rejects.toThrow(ForbiddenException);
+      await expect(service.createCompany("user-1", { name: "Acme" })).rejects.toThrow(
+        ForbiddenException,
+      );
       expect(mockIdempotencyService.claim).not.toHaveBeenCalled();
       expect(mockPrismaValue.company.create).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundException when user does not exist', async () => {
+    it("throws NotFoundException when user does not exist", async () => {
       mockPrismaValue.user.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.createCompany('missing', { name: 'Acme' }),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.createCompany("missing", { name: "Acme" })).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
-  describe('updateCompany', () => {
-    it('retries slug update on unique conflicts', async () => {
+  describe("updateCompany", () => {
+    it("retries slug update on unique conflicts", async () => {
       mockPrismaValue.company.findFirst.mockResolvedValue({
-        id: 'c1',
-        name: 'Old Name',
-        slug: 'old-name',
+        id: "c1",
+        name: "Old Name",
+        slug: "old-name",
       });
       mockPrismaValue.companyMember.findUnique.mockResolvedValue({
-        id: 'm1',
+        id: "m1",
         role: CompanyRole.ADMIN,
       });
       const updated = {
-        id: 'c1',
-        name: 'Acme',
-        slug: 'acme-2',
+        id: "c1",
+        name: "Acme",
+        slug: "acme-2",
       };
       mockPrismaValue.company.update
-        .mockRejectedValueOnce({ code: 'P2002' })
+        .mockRejectedValueOnce({ code: "P2002" })
         .mockResolvedValue(updated);
 
-      const result = await service.updateCompany('user-1', 'c1', {
-        name: 'Acme',
+      const result = await service.updateCompany("user-1", "c1", {
+        name: "Acme",
         industry: Industry.TECHNOLOGY,
       });
 
       expect(mockPrismaValue.company.update).toHaveBeenNthCalledWith(1, {
-        where: { id: 'c1' },
+        where: { id: "c1" },
         data: expect.objectContaining({
-          name: 'Acme',
+          name: "Acme",
           industry: Industry.TECHNOLOGY,
-          slug: 'acme',
+          slug: "acme",
         }),
       });
       expect(mockPrismaValue.company.update).toHaveBeenNthCalledWith(2, {
-        where: { id: 'c1' },
+        where: { id: "c1" },
         data: expect.objectContaining({
-          name: 'Acme',
+          name: "Acme",
           industry: Industry.TECHNOLOGY,
-          slug: 'acme-2',
+          slug: "acme-2",
         }),
       });
       expect(mockOutboxService.emit).toHaveBeenCalledWith(
         mockPrismaValue,
-        expect.objectContaining({ eventType: 'CompanyUpdated' }),
+        expect.objectContaining({ eventType: "CompanyUpdated" }),
       );
       expect(result).toEqual(updated);
     });
   });
 
-  describe('followCompany', () => {
-    it('returns no-op when already following (FR7 idempotent)', async () => {
-      mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
+  describe("followCompany", () => {
+    it("returns no-op when already following (FR7 idempotent)", async () => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: "c1" });
       mockPrismaValue.companyFollower.findUnique.mockResolvedValue({
-        id: 'f1',
+        id: "f1",
       });
 
-      await expect(
-        service.followCompany('user-1', 'c1'),
-      ).resolves.toBeUndefined();
+      await expect(service.followCompany("user-1", "c1")).resolves.toBeUndefined();
 
       expect(mockPrismaValue.companyFollower.create).not.toHaveBeenCalled();
       expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
     });
 
-    it('creates follower record without mutating denormalized counts', async () => {
-      mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
+    it("creates follower record without mutating denormalized counts", async () => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: "c1" });
       mockPrismaValue.companyFollower.findUnique.mockResolvedValue(null);
 
-      await service.followCompany('user-1', 'c1');
+      await service.followCompany("user-1", "c1");
 
       expect(mockPrismaValue.companyFollower.create).toHaveBeenCalledWith({
-        data: { companyId: 'c1', userId: 'user-1' },
+        data: { companyId: "c1", userId: "user-1" },
       });
       expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
       expect(mockOutboxService.emit).toHaveBeenCalledWith(
         mockPrismaValue,
-        expect.objectContaining({ eventType: 'CompanyFollowed' }),
+        expect.objectContaining({ eventType: "CompanyFollowed" }),
       );
     });
 
-    it('throws NotFoundException when company missing or soft-deleted', async () => {
+    it("throws NotFoundException when company missing or soft-deleted", async () => {
       mockPrismaValue.company.findFirst.mockResolvedValue(null);
 
-      await expect(service.followCompany('user-1', 'c1')).rejects.toThrow(
-        NotFoundException,
+      await expect(service.followCompany("user-1", "c1")).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe("unfollowCompany", () => {
+    it("throws NotFoundException when not following", async () => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: "c1" });
+      mockPrismaValue.companyFollower.findUnique.mockResolvedValue(null);
+
+      await expect(service.unfollowCompany("user-1", "c1")).rejects.toThrow(NotFoundException);
+    });
+
+    it("removes follower without mutating denormalized counts", async () => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: "c1" });
+      mockPrismaValue.companyFollower.findUnique.mockResolvedValue({
+        id: "f1",
+      });
+
+      await service.unfollowCompany("user-1", "c1");
+
+      expect(mockPrismaValue.companyFollower.delete).toHaveBeenCalledWith({
+        where: { id: "f1" },
+      });
+      expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
+      expect(mockOutboxService.emit).toHaveBeenCalledWith(
+        mockPrismaValue,
+        expect.objectContaining({ eventType: "CompanyUnfollowed" }),
       );
     });
   });
 
-  describe('unfollowCompany', () => {
-    it('throws NotFoundException when not following', async () => {
-      mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
-      mockPrismaValue.companyFollower.findUnique.mockResolvedValue(null);
-
-      await expect(service.unfollowCompany('user-1', 'c1')).rejects.toThrow(
-        NotFoundException,
-      );
+  describe("inviteMember", () => {
+    beforeEach(() => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: "company-1" });
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: "m1",
+        role: CompanyRole.ADMIN,
+      });
+      mockPrismaValue.memberInvitation.create.mockResolvedValue({
+        id: "inv-1",
+        email: "new@test.com",
+        role: "MEMBER",
+        token: "tok-1",
+      });
     });
 
-    it('removes follower without mutating denormalized counts', async () => {
-      mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'c1' });
-      mockPrismaValue.companyFollower.findUnique.mockResolvedValue({
-        id: 'f1',
+    it("writes audit log on invite", async () => {
+      await service.inviteMember("user-1", "company-1", {
+        email: "new@test.com",
+        role: "MEMBER" as any,
       });
 
-      await service.unfollowCompany('user-1', 'c1');
-
-      expect(mockPrismaValue.companyFollower.delete).toHaveBeenCalledWith({
-        where: { id: 'f1' },
+      expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: "user-1",
+          action: "company.member.invite",
+          entityType: "Company",
+          entityId: "company-1",
+          metadata: expect.objectContaining({
+            companyId: "company-1",
+            email: "new@test.com",
+            role: "MEMBER",
+          }),
+        }),
       });
-      expect(mockPrismaValue.company.update).not.toHaveBeenCalled();
-      expect(mockOutboxService.emit).toHaveBeenCalledWith(
-        mockPrismaValue,
-        expect.objectContaining({ eventType: 'CompanyUnfollowed' }),
-      );
+    });
+  });
+
+  describe("allocateRecruiterSeat", () => {
+    beforeEach(() => {
+      mockPrismaValue.companyEntitlement = {
+        findFirst: jest.fn().mockResolvedValue({
+          id: "ent-1",
+          creditsRemaining: 5,
+          entitlementType: "recruiter_seats",
+        }),
+      };
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: "company-1" });
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: "m1",
+        role: CompanyRole.ADMIN,
+      });
+      mockPrismaValue.user.findUnique.mockResolvedValue({ id: "target-1" });
+      mockPrismaValue.recruiterSeat.findFirst.mockResolvedValue({
+        id: "seat-1",
+        status: "available",
+      });
+      mockPrismaValue.recruiterSeat.updateMany.mockResolvedValue({ count: 1 });
+      mockPrismaValue.recruiterSeat.findUniqueOrThrow.mockResolvedValue({
+        id: "seat-1",
+        userId: "target-1",
+        status: "allocated",
+        companyId: "company-1",
+      });
+    });
+
+    it("writes audit log on seat allocation", async () => {
+      await service.allocateRecruiterSeat("user-1", "company-1", "target-1");
+
+      expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: "user-1",
+          action: "company.recruiter_seat.allocate",
+          entityType: "Company",
+          entityId: "company-1",
+          metadata: expect.objectContaining({
+            companyId: "company-1",
+            seatId: "seat-1",
+            recruiterUserId: "target-1",
+          }),
+        }),
+      });
+    });
+  });
+
+  describe("deallocateRecruiterSeat", () => {
+    beforeEach(() => {
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: "m1",
+        role: CompanyRole.ADMIN,
+      });
+      mockPrismaValue.recruiterSeat.findUnique.mockResolvedValue({
+        id: "seat-1",
+        companyId: "company-1",
+        status: "allocated",
+        userId: "target-1",
+      });
+      mockPrismaValue.recruiterSeat.update.mockResolvedValue({
+        id: "seat-1",
+        status: "available",
+        userId: null,
+        allocatedAt: null,
+      });
+    });
+
+    it("writes audit log on seat deallocation", async () => {
+      await service.deallocateRecruiterSeat("user-1", "company-1", "seat-1");
+
+      expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: "user-1",
+          action: "company.recruiter_seat.deallocate",
+          entityType: "Company",
+          entityId: "company-1",
+          metadata: expect.objectContaining({
+            companyId: "company-1",
+            seatId: "seat-1",
+            previousUserId: "target-1",
+          }),
+        }),
+      });
     });
   });
 });
