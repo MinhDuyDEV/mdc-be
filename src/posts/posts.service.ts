@@ -23,6 +23,9 @@ const POST_INCLUDE = {
       id: true,
       email: true,
       profile: {
+        // Soft-deleted profiles (moderation REMOVE_CONTENT) must not
+        // surface their headline next to the post.
+        where: { deletedAt: null },
         select: { headline: true },
       },
     },
@@ -150,11 +153,6 @@ export class PostsService {
     return post;
   }
 
-  // fallow-ignore-next-line complexity
-  // updatePost's cyclomatic complexity is inherent to the multi-branch
-  // post-edit flow (content vs visibility vs both), and is fully covered
-  // by the updatePost test block. CRAP score is dominated by estimated
-  // coverage tier (no coverage data in CI).
   async updatePost(userId: string, postId: string, dto: UpdatePostDto) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
@@ -169,6 +167,7 @@ export class PostsService {
       throw new ForbiddenException("Not the post author");
     }
 
+    // fallow-ignore-next-line complexity cognitive
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.post.update({
         where: { id: postId },
