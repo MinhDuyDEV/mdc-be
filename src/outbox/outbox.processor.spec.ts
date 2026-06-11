@@ -1,6 +1,6 @@
-import { OutboxProcessor } from "./outbox.processor";
+import { OutboxProcessor } from './outbox.processor';
 
-describe("OutboxProcessor", () => {
+describe('OutboxProcessor', () => {
   function createProcessor() {
     const mockPrisma = {
       $transaction: jest.fn(),
@@ -139,30 +139,30 @@ describe("OutboxProcessor", () => {
     };
   }
 
-  it("registers pending-count gauge callback", async () => {
+  it('registers pending-count gauge callback', async () => {
     const { mockMetrics, mockPrisma } = createProcessor();
     mockPrisma.outboxEvent.count.mockResolvedValue(3);
-    const [readPendingCount] = mockMetrics.registerPendingGauge.mock.calls[0] as [
-      () => Promise<number>,
-      (error: unknown) => void,
-    ];
+    const [readPendingCount] = mockMetrics.registerPendingGauge.mock
+      .calls[0] as [() => Promise<number>, (error: unknown) => void];
 
     await expect(readPendingCount()).resolves.toBe(3);
     expect(mockPrisma.outboxEvent.count).toHaveBeenCalledWith({
-      where: { status: "PENDING" },
+      where: { status: 'PENDING' },
     });
   });
 
-  describe("claimEvents", () => {
-    it("should claim events atomically via transaction", async () => {
+  describe('claimEvents', () => {
+    it('should claim events atomically via transaction', async () => {
       const { processor, mockPrisma } = createProcessor();
 
-      const mockEvents = [{ id: "event-1", eventType: "test.event", payload: { foo: "bar" } }];
+      const mockEvents = [
+        { id: 'event-1', eventType: 'test.event', payload: { foo: 'bar' } },
+      ];
       const executeRaw = jest.fn().mockResolvedValue(1);
 
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         return fn({
-          $queryRaw: jest.fn().mockResolvedValue([{ id: "event-1" }]),
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'event-1' }]),
           $executeRaw: executeRaw,
           outboxEvent: {
             findMany: jest.fn().mockResolvedValue(mockEvents),
@@ -172,12 +172,12 @@ describe("OutboxProcessor", () => {
 
       const claimed = await processor.claimEvents();
       expect(claimed).toHaveLength(1);
-      expect(claimed[0].id).toBe("event-1");
+      expect(claimed[0].id).toBe('event-1');
       expect(mockPrisma.$transaction).toHaveBeenCalled();
-      expect(String.raw(executeRaw.mock.calls[0][0])).not.toContain("attempts");
+      expect(String.raw(executeRaw.mock.calls[0][0])).not.toContain('attempts');
     });
 
-    it("should return empty array when no pending events", async () => {
+    it('should return empty array when no pending events', async () => {
       const { processor, mockPrisma } = createProcessor();
 
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
@@ -193,9 +193,10 @@ describe("OutboxProcessor", () => {
     });
   });
 
-  describe("processOutbox", () => {
-    it("should mark claimed events as PROCESSED on success", async () => {
-      const { processor, mockPrisma, mockMetrics, mockProfileCreation } = createProcessor();
+  describe('processOutbox', () => {
+    it('should mark claimed events as PROCESSED on success', async () => {
+      const { processor, mockPrisma, mockMetrics, mockProfileCreation } =
+        createProcessor();
 
       // stale lock recovery (no stale locks)
       mockPrisma.$executeRaw.mockResolvedValue(0);
@@ -203,16 +204,16 @@ describe("OutboxProcessor", () => {
       // claimEvents: return one event
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         return fn({
-          $queryRaw: jest.fn().mockResolvedValue([{ id: "event-1" }]),
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'event-1' }]),
           $executeRaw: jest.fn().mockResolvedValue(1),
           outboxEvent: {
             findMany: jest.fn().mockResolvedValue([
               {
-                id: "event-1",
-                eventType: "UserRegistered",
+                id: 'event-1',
+                eventType: 'UserRegistered',
                 payload: {
-                  userId: "user-1",
-                  email: "test@example.com",
+                  userId: 'user-1',
+                  email: 'test@example.com',
                   createdAt: new Date().toISOString(),
                 },
                 attempts: 1,
@@ -230,24 +231,26 @@ describe("OutboxProcessor", () => {
       const updateCalls = mockPrisma.outboxEvent.update.mock.calls;
       expect(updateCalls.length).toBeGreaterThanOrEqual(1);
       const markProcessedCall = updateCalls.find(
-        (call: any) => call[0].data?.status === "PROCESSED",
+        (call: any) => call[0].data?.status === 'PROCESSED',
       );
       expect(markProcessedCall).toBeDefined();
-      expect(markProcessedCall[0].where.id).toBe("event-1");
-      expect(mockMetrics.recordProcessed).toHaveBeenCalledWith("UserRegistered");
+      expect(markProcessedCall[0].where.id).toBe('event-1');
+      expect(mockMetrics.recordProcessed).toHaveBeenCalledWith(
+        'UserRegistered',
+      );
       expect(mockMetrics.recordDispatchDuration).toHaveBeenCalledWith(
-        "UserRegistered",
-        "success",
+        'UserRegistered',
+        'success',
         expect.any(Number),
       );
       expect(mockProfileCreation.processUserRegistered).toHaveBeenCalledWith({
-        userId: "user-1",
-        email: "test@example.com",
+        userId: 'user-1',
+        email: 'test@example.com',
         createdAt: expect.any(String),
       });
     });
 
-    it("processes independent aggregate groups in parallel", async () => {
+    it('processes independent aggregate groups in parallel', async () => {
       const { processor, mockPrisma, mockJobSearchIndex } = createProcessor();
       let releaseSlowHandler: () => void = () => undefined;
       const slowHandler = new Promise<void>((resolve) => {
@@ -257,30 +260,32 @@ describe("OutboxProcessor", () => {
       mockPrisma.$executeRaw.mockResolvedValue(0);
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         return fn({
-          $queryRaw: jest.fn().mockResolvedValue([{ id: "event-slow" }, { id: "event-fast" }]),
+          $queryRaw: jest
+            .fn()
+            .mockResolvedValue([{ id: 'event-slow' }, { id: 'event-fast' }]),
           $executeRaw: jest.fn().mockResolvedValue(1),
           outboxEvent: {
             findMany: jest.fn().mockResolvedValue([
               {
-                id: "event-slow",
-                eventType: "JobCreated",
-                aggregateType: "Job",
-                aggregateId: "job-1",
+                id: 'event-slow',
+                eventType: 'JobCreated',
+                aggregateType: 'Job',
+                aggregateId: 'job-1',
                 payload: {
-                  jobId: "job-1",
-                  companyId: "company-1",
-                  createdByUserId: "user-1",
+                  jobId: 'job-1',
+                  companyId: 'company-1',
+                  createdByUserId: 'user-1',
                 },
                 attempts: 0,
               },
               {
-                id: "event-fast",
-                eventType: "UserRegistered",
-                aggregateType: "User",
-                aggregateId: "user-1",
+                id: 'event-fast',
+                eventType: 'UserRegistered',
+                aggregateType: 'User',
+                aggregateId: 'user-1',
                 payload: {
-                  userId: "user-1",
-                  email: "test@example.com",
+                  userId: 'user-1',
+                  email: 'test@example.com',
                   createdAt: new Date().toISOString(),
                 },
                 attempts: 0,
@@ -296,8 +301,8 @@ describe("OutboxProcessor", () => {
 
       expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: "event-fast" },
-          data: expect.objectContaining({ status: "PROCESSED" }),
+          where: { id: 'event-fast' },
+          data: expect.objectContaining({ status: 'PROCESSED' }),
         }),
       );
 
@@ -305,22 +310,27 @@ describe("OutboxProcessor", () => {
       await processing;
     });
 
-    it("should move exhausted events to dead-letter", async () => {
-      const { processor, mockPrisma, mockDeadLetter, mockCompanySearchIndex, mockMetrics } =
-        createProcessor();
+    it('should move exhausted events to dead-letter', async () => {
+      const {
+        processor,
+        mockPrisma,
+        mockDeadLetter,
+        mockCompanySearchIndex,
+        mockMetrics,
+      } = createProcessor();
 
       mockPrisma.$executeRaw.mockResolvedValue(0);
 
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         return fn({
-          $queryRaw: jest.fn().mockResolvedValue([{ id: "event-2" }]),
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'event-2' }]),
           $executeRaw: jest.fn().mockResolvedValue(1),
           outboxEvent: {
             findMany: jest.fn().mockResolvedValue([
               {
-                id: "event-2",
-                eventType: "CompanyCreated",
-                payload: { companyId: "company-1" },
+                id: 'event-2',
+                eventType: 'CompanyCreated',
+                payload: { companyId: 'company-1' },
                 attempts: 6, // > maxRetries (5)
               },
             ]),
@@ -328,49 +338,56 @@ describe("OutboxProcessor", () => {
         });
       });
 
-      mockCompanySearchIndex.processCompanyCreated.mockRejectedValue(new Error("Handler failed"));
+      mockCompanySearchIndex.processCompanyCreated.mockRejectedValue(
+        new Error('Handler failed'),
+      );
       mockPrisma.outboxEvent.update.mockResolvedValueOnce({ attempts: 5 });
 
       await processor.processOutbox();
 
       expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith({
-        where: { id: "event-2" },
+        where: { id: 'event-2' },
         data: { attempts: { increment: 1 } },
         select: { attempts: true },
       });
       expect(mockDeadLetter.moveToDeadLetter).toHaveBeenCalledWith(
         expect.objectContaining({
-          id: "event-2",
-          eventType: "CompanyCreated",
+          id: 'event-2',
+          eventType: 'CompanyCreated',
         }),
         expect.any(Error),
       );
-      expect(mockMetrics.recordFailed).toHaveBeenCalledWith("CompanyCreated", 5);
-      expect(mockMetrics.recordDeadLettered).toHaveBeenCalledWith("CompanyCreated");
+      expect(mockMetrics.recordFailed).toHaveBeenCalledWith(
+        'CompanyCreated',
+        5,
+      );
+      expect(mockMetrics.recordDeadLettered).toHaveBeenCalledWith(
+        'CompanyCreated',
+      );
       expect(mockMetrics.recordDispatchDuration).toHaveBeenCalledWith(
-        "CompanyCreated",
-        "failure",
+        'CompanyCreated',
+        'failure',
         expect.any(Number),
       );
     });
 
-    it("should requeue events with backoff on transient failure", async () => {
+    it('should requeue events with backoff on transient failure', async () => {
       const { processor, mockPrisma, mockMetrics } = createProcessor();
 
       mockPrisma.$executeRaw.mockResolvedValue(0);
 
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         return fn({
-          $queryRaw: jest.fn().mockResolvedValue([{ id: "event-3" }]),
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'event-3' }]),
           $executeRaw: jest.fn().mockResolvedValue(1),
           outboxEvent: {
             findMany: jest.fn().mockResolvedValue([
               {
-                id: "event-3",
-                eventType: "UserRegistered",
+                id: 'event-3',
+                eventType: 'UserRegistered',
                 payload: {
-                  userId: "user-1",
-                  email: "test@example.com",
+                  userId: 'user-1',
+                  email: 'test@example.com',
                   createdAt: new Date().toISOString(),
                 },
                 attempts: 2, // < maxRetries (5)
@@ -382,7 +399,7 @@ describe("OutboxProcessor", () => {
 
       mockPrisma.outboxEvent.update
         // markProcessed throws → requeue
-        .mockRejectedValueOnce(new Error("Transient failure"))
+        .mockRejectedValueOnce(new Error('Transient failure'))
         // recordFailure returns current failed attempt count
         .mockResolvedValueOnce({ attempts: 2 })
         .mockResolvedValueOnce({});
@@ -390,40 +407,45 @@ describe("OutboxProcessor", () => {
       await processor.processOutbox();
 
       expect(mockPrisma.outboxEvent.update).toHaveBeenCalledWith({
-        where: { id: "event-3" },
+        where: { id: 'event-3' },
         data: { attempts: { increment: 1 } },
         select: { attempts: true },
       });
       const updateCalls = mockPrisma.outboxEvent.update.mock.calls;
       expect(updateCalls.length).toBeGreaterThanOrEqual(1);
-      const requeueCall = updateCalls.find((call: any) => call[0].data?.status === "PENDING");
+      const requeueCall = updateCalls.find(
+        (call: any) => call[0].data?.status === 'PENDING',
+      );
       expect(requeueCall).toBeDefined();
-      expect(requeueCall[0].where.id).toBe("event-3");
+      expect(requeueCall[0].where.id).toBe('event-3');
       expect(requeueCall[0].data.availableAt).toBeInstanceOf(Date);
       expect(requeueCall[0].data.lockedAt).toBeNull();
-      expect(mockMetrics.recordFailed).toHaveBeenCalledWith("UserRegistered", 2);
+      expect(mockMetrics.recordFailed).toHaveBeenCalledWith(
+        'UserRegistered',
+        2,
+      );
       expect(mockMetrics.recordDeadLettered).not.toHaveBeenCalled();
     });
   });
 
-  describe("stale lock recovery", () => {
-    it("should reset stale PROCESSING rows to PENDING", async () => {
+  describe('stale lock recovery', () => {
+    it('should reset stale PROCESSING rows to PENDING', async () => {
       const { processor, mockPrisma } = createProcessor();
 
       mockPrisma.$executeRaw.mockResolvedValue(0);
 
       mockPrisma.$transaction.mockImplementation(async (fn: any) => {
         return fn({
-          $queryRaw: jest.fn().mockResolvedValue([{ id: "event-4" }]),
+          $queryRaw: jest.fn().mockResolvedValue([{ id: 'event-4' }]),
           $executeRaw: jest.fn().mockResolvedValue(1),
           outboxEvent: {
             findMany: jest.fn().mockResolvedValue([
               {
-                id: "event-4",
-                eventType: "UserRegistered",
+                id: 'event-4',
+                eventType: 'UserRegistered',
                 payload: {
-                  userId: "user-1",
-                  email: "test@example.com",
+                  userId: 'user-1',
+                  email: 'test@example.com',
                   createdAt: new Date().toISOString(),
                 },
                 attempts: 1,
@@ -442,30 +464,34 @@ describe("OutboxProcessor", () => {
     });
   });
 
-  describe("shutdown lock release", () => {
-    it("releases locks owned by this processor", async () => {
-      const { processor, mockPrisma, mockLogger, mockMetrics } = createProcessor();
+  describe('shutdown lock release', () => {
+    it('releases locks owned by this processor', async () => {
+      const { processor, mockPrisma, mockLogger, mockMetrics } =
+        createProcessor();
       mockPrisma.outboxEvent.updateMany.mockResolvedValue({ count: 2 });
 
       await processor.onApplicationShutdown();
 
       expect(mockPrisma.outboxEvent.updateMany).toHaveBeenCalledWith({
         where: {
-          status: "PROCESSING",
+          status: 'PROCESSING',
           lockedBy: expect.any(String),
         },
         data: {
-          status: "PENDING",
+          status: 'PENDING',
           lockedAt: null,
           lockedBy: null,
         },
       });
-      expect(mockLogger.warn).toHaveBeenCalledWith("Released %d outbox locks during shutdown", 2);
+      expect(mockLogger.warn).toHaveBeenCalledWith(
+        'Released %d outbox locks during shutdown',
+        2,
+      );
       expect(mockMetrics.unregisterPendingGauge).toHaveBeenCalled();
     });
   });
 
-  it("should calculate exponential backoff with jitter", () => {
+  it('should calculate exponential backoff with jitter', () => {
     const { processor } = createProcessor();
 
     const calcBackoff = (processor as any).calculateBackoff.bind(processor);
@@ -481,35 +507,35 @@ describe("OutboxProcessor", () => {
     expect(delay5).toBeLessThanOrEqual(60000);
   });
 
-  describe("Candidate notification routing (Phase B T5)", () => {
+  describe('Candidate notification routing (Phase B T5)', () => {
     const CANDIDATE_EVENTS = [
       {
-        eventType: "CandidateSaved",
-        method: "processCandidateSaved",
+        eventType: 'CandidateSaved',
+        method: 'processCandidateSaved',
         payload: {
-          savedCandidateId: "saved-1",
-          companyId: "company-1",
-          candidateUserId: "candidate-1",
-          savedByUserId: "user-1",
+          savedCandidateId: 'saved-1',
+          companyId: 'company-1',
+          candidateUserId: 'candidate-1',
+          savedByUserId: 'user-1',
         },
       },
       {
-        eventType: "CandidateAddedToTalentPool",
-        method: "processCandidateAddedToTalentPool",
+        eventType: 'CandidateAddedToTalentPool',
+        method: 'processCandidateAddedToTalentPool',
         payload: {
-          talentPoolCandidateId: "tpc-1",
-          talentPoolId: "pool-1",
-          companyId: "company-1",
-          candidateUserId: "candidate-1",
+          talentPoolCandidateId: 'tpc-1',
+          talentPoolId: 'pool-1',
+          companyId: 'company-1',
+          candidateUserId: 'candidate-1',
         },
       },
     ] as const;
 
     it.each(CANDIDATE_EVENTS)(
-      "routes $eventType to notification.$method",
+      'routes $eventType to notification.$method',
       async ({ eventType, method, payload }) => {
         const { processor, mockNotification } = createProcessor();
-        const event = { id: "evt-1", eventType, payload, attempts: 0 };
+        const event = { id: 'evt-1', eventType, payload, attempts: 0 };
 
         await (
           processor as unknown as {
@@ -517,22 +543,22 @@ describe("OutboxProcessor", () => {
           }
         ).dispatch(event);
 
-        expect((mockNotification as Record<string, jest.Mock>)[method]).toHaveBeenCalledWith(
-          expect.objectContaining(payload),
-        );
+        expect(
+          (mockNotification as Record<string, jest.Mock>)[method],
+        ).toHaveBeenCalledWith(expect.objectContaining(payload));
       },
     );
   });
 
-  describe("Analytics / external actions", () => {
-    it("handles ExternalApplyClicked by incrementing job click count", async () => {
+  describe('Analytics / external actions', () => {
+    it('handles ExternalApplyClicked by incrementing job click count', async () => {
       const { processor, mockPrisma, mockLogger } = createProcessor();
       const event = {
-        id: "evt-eac",
-        eventType: "ExternalApplyClicked",
+        id: 'evt-eac',
+        eventType: 'ExternalApplyClicked',
         payload: {
-          jobId: "job-1",
-          companyId: "company-1",
+          jobId: 'job-1',
+          companyId: 'company-1',
           userId: null,
           occurredAt: new Date().toISOString(),
         },
@@ -546,20 +572,20 @@ describe("OutboxProcessor", () => {
       ).dispatch(event);
 
       expect(mockPrisma.job.update).toHaveBeenCalledWith({
-        where: { id: "job-1" },
+        where: { id: 'job-1' },
         data: { externalClickCount: { increment: 1 } },
       });
 
       expect(mockLogger.debug).toHaveBeenCalledWith(
-        expect.stringContaining("ExternalApplyClicked"),
+        expect.stringContaining('ExternalApplyClicked'),
       );
     });
 
-    it("rejects malformed payload before dispatching handlers", async () => {
+    it('rejects malformed payload before dispatching handlers', async () => {
       const { processor, mockCompanySearchIndex } = createProcessor();
       const event = {
-        id: "evt-bad",
-        eventType: "CompanyCreated",
+        id: 'evt-bad',
+        eventType: 'CompanyCreated',
         payload: {},
         attempts: 0,
       };
@@ -570,20 +596,23 @@ describe("OutboxProcessor", () => {
             dispatch: (e: typeof event) => Promise<void>;
           }
         ).dispatch(event),
-      ).rejects.toThrow("Invalid outbox payload for CompanyCreated");
-      expect(mockCompanySearchIndex.processCompanyCreated).not.toHaveBeenCalled();
+      ).rejects.toThrow('Invalid outbox payload for CompanyCreated');
+      expect(
+        mockCompanySearchIndex.processCompanyCreated,
+      ).not.toHaveBeenCalled();
     });
 
-    it("RecruiterSeatAllocated routes to companySearchIndex AND notification", async () => {
-      const { processor, mockCompanySearchIndex, mockNotification } = createProcessor();
+    it('RecruiterSeatAllocated routes to companySearchIndex AND notification', async () => {
+      const { processor, mockCompanySearchIndex, mockNotification } =
+        createProcessor();
       const event = {
-        id: "evt-rs",
-        eventType: "RecruiterSeatAllocated",
+        id: 'evt-rs',
+        eventType: 'RecruiterSeatAllocated',
         payload: {
-          companyId: "c1",
-          seatId: "seat-1",
-          recruiterUserId: "u1",
-          allocatedBy: "admin-1",
+          companyId: 'c1',
+          seatId: 'seat-1',
+          recruiterUserId: 'u1',
+          allocatedBy: 'admin-1',
         },
         attempts: 0,
       };
@@ -594,25 +623,29 @@ describe("OutboxProcessor", () => {
         }
       ).dispatch(event);
 
-      expect(mockCompanySearchIndex.processCompanyUpdated).toHaveBeenCalledWith({
-        companyId: "c1",
-      });
-      expect(mockNotification.processRecruiterSeatAllocated).toHaveBeenCalledWith({
-        companyId: "c1",
-        recruiterUserId: "u1",
+      expect(mockCompanySearchIndex.processCompanyUpdated).toHaveBeenCalledWith(
+        {
+          companyId: 'c1',
+        },
+      );
+      expect(
+        mockNotification.processRecruiterSeatAllocated,
+      ).toHaveBeenCalledWith({
+        companyId: 'c1',
+        recruiterUserId: 'u1',
       });
     });
 
-    it("ApplicationSubmitted routes to notification.processApplicationSubmitted", async () => {
+    it('ApplicationSubmitted routes to notification.processApplicationSubmitted', async () => {
       const { processor, mockNotification } = createProcessor();
       const event = {
-        id: "evt-as",
-        eventType: "ApplicationSubmitted",
+        id: 'evt-as',
+        eventType: 'ApplicationSubmitted',
         payload: {
-          applicationId: "app-1",
-          jobId: "job-1",
-          companyId: "company-1",
-          candidateUserId: "candidate-1",
+          applicationId: 'app-1',
+          jobId: 'job-1',
+          companyId: 'company-1',
+          candidateUserId: 'candidate-1',
         },
         attempts: 0,
       };
@@ -624,20 +657,20 @@ describe("OutboxProcessor", () => {
       ).dispatch(event);
 
       expect(mockNotification.processApplicationSubmitted).toHaveBeenCalledWith(
-        expect.objectContaining({ applicationId: "app-1" }),
+        expect.objectContaining({ applicationId: 'app-1' }),
       );
     });
 
-    it("ApplicationNoteAdded routes to notification.processApplicationNoteAdded", async () => {
+    it('ApplicationNoteAdded routes to notification.processApplicationNoteAdded', async () => {
       const { processor, mockNotification } = createProcessor();
       const event = {
-        id: "evt-an",
-        eventType: "ApplicationNoteAdded",
+        id: 'evt-an',
+        eventType: 'ApplicationNoteAdded',
         payload: {
-          applicationId: "app-1",
-          noteId: "note-1",
-          authorUserId: "u1",
-          companyId: "c1",
+          applicationId: 'app-1',
+          noteId: 'note-1',
+          authorUserId: 'u1',
+          companyId: 'c1',
         },
         attempts: 0,
       };
@@ -649,19 +682,19 @@ describe("OutboxProcessor", () => {
       ).dispatch(event);
 
       expect(mockNotification.processApplicationNoteAdded).toHaveBeenCalledWith(
-        expect.objectContaining({ noteId: "note-1" }),
+        expect.objectContaining({ noteId: 'note-1' }),
       );
     });
 
-    it("MentionRemoved routes to postInteraction.processMentionRemoved", async () => {
+    it('MentionRemoved routes to postInteraction.processMentionRemoved', async () => {
       const { processor, mockPostInteraction } = createProcessor();
       const event = {
-        id: "evt-mr",
-        eventType: "MentionRemoved",
+        id: 'evt-mr',
+        eventType: 'MentionRemoved',
         payload: {
-          postId: "post-1",
-          mentionedUserId: "user-2",
-          mentionerUserId: "user-1",
+          postId: 'post-1',
+          mentionedUserId: 'user-2',
+          mentionerUserId: 'user-1',
         },
         attempts: 0,
       };
@@ -673,16 +706,16 @@ describe("OutboxProcessor", () => {
       ).dispatch(event);
 
       expect(mockPostInteraction.processMentionRemoved).toHaveBeenCalledWith(
-        expect.objectContaining({ postId: "post-1" }),
+        expect.objectContaining({ postId: 'post-1' }),
       );
     });
 
-    it("PostContentChanged routes to postSearchIndex.processPostUpdated", async () => {
+    it('PostContentChanged routes to postSearchIndex.processPostUpdated', async () => {
       const { processor, mockPostSearchIndex } = createProcessor();
       const event = {
-        id: "evt-pcc",
-        eventType: "PostContentChanged",
-        payload: { postId: "post-1", authorId: "user-1" },
+        id: 'evt-pcc',
+        eventType: 'PostContentChanged',
+        payload: { postId: 'post-1', authorId: 'user-1' },
         attempts: 0,
       };
 
@@ -693,21 +726,21 @@ describe("OutboxProcessor", () => {
       ).dispatch(event);
 
       expect(mockPostSearchIndex.processPostUpdated).toHaveBeenCalledWith(
-        expect.objectContaining({ postId: "post-1" }),
+        expect.objectContaining({ postId: 'post-1' }),
       );
     });
 
-    it("UserStatusChanged routes to notification.processUserStatusChanged", async () => {
+    it('UserStatusChanged routes to notification.processUserStatusChanged', async () => {
       const { processor, mockNotification } = createProcessor();
       const event = {
-        id: "evt-usc",
-        eventType: "UserStatusChanged",
+        id: 'evt-usc',
+        eventType: 'UserStatusChanged',
         payload: {
-          userId: "user-1",
-          previousStatus: "ACTIVE",
-          newStatus: "SUSPENDED",
-          changedBy: "admin-1",
-          reason: "spam",
+          userId: 'user-1',
+          previousStatus: 'ACTIVE',
+          newStatus: 'SUSPENDED',
+          changedBy: 'admin-1',
+          reason: 'spam',
         },
         attempts: 0,
       };
@@ -720,57 +753,57 @@ describe("OutboxProcessor", () => {
 
       expect(mockNotification.processUserStatusChanged).toHaveBeenCalledWith(
         expect.objectContaining({
-          userId: "user-1",
-          previousStatus: "ACTIVE",
-          newStatus: "SUSPENDED",
+          userId: 'user-1',
+          previousStatus: 'ACTIVE',
+          newStatus: 'SUSPENDED',
         }),
       );
     });
   });
 
-  describe("Job search index routing", () => {
+  describe('Job search index routing', () => {
     const JOB_EVENTS = [
       {
-        eventType: "JobCreated",
-        method: "processJobCreated",
+        eventType: 'JobCreated',
+        method: 'processJobCreated',
         payload: {
-          jobId: "job-1",
-          companyId: "company-1",
-          createdByUserId: "user-1",
+          jobId: 'job-1',
+          companyId: 'company-1',
+          createdByUserId: 'user-1',
         },
       },
       {
-        eventType: "JobUpdated",
-        method: "processJobUpdated",
+        eventType: 'JobUpdated',
+        method: 'processJobUpdated',
         payload: {
-          jobId: "job-1",
-          companyId: "company-1",
-          changes: { title: "new" },
+          jobId: 'job-1',
+          companyId: 'company-1',
+          changes: { title: 'new' },
         },
       },
       {
-        eventType: "JobPublished",
-        method: "processJobPublished",
-        payload: { jobId: "job-1", companyId: "company-1" },
+        eventType: 'JobPublished',
+        method: 'processJobPublished',
+        payload: { jobId: 'job-1', companyId: 'company-1' },
       },
       {
-        eventType: "JobClosed",
-        method: "processJobClosed",
-        payload: { jobId: "job-1", companyId: "company-1" },
+        eventType: 'JobClosed',
+        method: 'processJobClosed',
+        payload: { jobId: 'job-1', companyId: 'company-1' },
       },
       {
-        eventType: "JobDeleted",
-        method: "processJobDeleted",
-        payload: { jobId: "job-1", companyId: "company-1" },
+        eventType: 'JobDeleted',
+        method: 'processJobDeleted',
+        payload: { jobId: 'job-1', companyId: 'company-1' },
       },
     ] as const;
 
     it.each(JOB_EVENTS)(
-      "routes $eventType to jobSearchIndex.$method",
+      'routes $eventType to jobSearchIndex.$method',
       async ({ eventType, method, payload }) => {
         const { processor, mockJobSearchIndex } = createProcessor();
         const event = {
-          id: "evt-job",
+          id: 'evt-job',
           eventType,
           payload,
           attempts: 0,
@@ -782,24 +815,24 @@ describe("OutboxProcessor", () => {
           }
         ).dispatch(event);
 
-        expect((mockJobSearchIndex as Record<string, jest.Mock>)[method]).toHaveBeenCalledWith(
-          expect.objectContaining({ jobId: "job-1" }),
-        );
+        expect(
+          (mockJobSearchIndex as Record<string, jest.Mock>)[method],
+        ).toHaveBeenCalledWith(expect.objectContaining({ jobId: 'job-1' }));
       },
     );
   });
 
-  it("routes ApplicationStatusChanged to applicationEmail.processApplicationStatusChanged", async () => {
+  it('routes ApplicationStatusChanged to applicationEmail.processApplicationStatusChanged', async () => {
     const { processor, mockApplicationEmail } = createProcessor();
     const event = {
-      id: "evt-app",
-      eventType: "ApplicationStatusChanged",
+      id: 'evt-app',
+      eventType: 'ApplicationStatusChanged',
       payload: {
-        applicationId: "app-1",
-        fromStatus: "SUBMITTED",
-        toStatus: "INTERVIEW",
-        companyId: "company-1",
-        candidateUserId: "candidate-1",
+        applicationId: 'app-1',
+        fromStatus: 'SUBMITTED',
+        toStatus: 'INTERVIEW',
+        companyId: 'company-1',
+        candidateUserId: 'candidate-1',
       },
       attempts: 0,
     };
@@ -810,10 +843,12 @@ describe("OutboxProcessor", () => {
       }
     ).dispatch(event);
 
-    expect(mockApplicationEmail.processApplicationStatusChanged).toHaveBeenCalledWith(
+    expect(
+      mockApplicationEmail.processApplicationStatusChanged,
+    ).toHaveBeenCalledWith(
       expect.objectContaining({
-        applicationId: "app-1",
-        toStatus: "INTERVIEW",
+        applicationId: 'app-1',
+        toStatus: 'INTERVIEW',
       }),
     );
   });

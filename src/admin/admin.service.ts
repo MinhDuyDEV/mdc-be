@@ -1,15 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { UserStatus } from "@prisma/client";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import { DeadLetterService } from "../outbox";
-import { OutboxService } from "../outbox/outbox.service";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { UserStatus } from '@prisma/client';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { DeadLetterService } from '../outbox';
+import { OutboxService } from '../outbox/outbox.service';
 import type {
   AdminDeadLetterQueryDto,
   AdminUserQueryDto,
   UpdateUserStatusDto,
   VerifyCompanyDto,
-} from "./dto";
-import { assertValidUserStatusTransition } from "./user-status.machine";
+} from './dto';
+import { assertValidUserStatusTransition } from './user-status.machine';
 
 @Injectable()
 export class AdminService {
@@ -25,18 +25,22 @@ export class AdminService {
         status: query.status,
         OR: query.search
           ? [
-              { email: { contains: query.search, mode: "insensitive" } },
-              { displayName: { contains: query.search, mode: "insensitive" } },
+              { email: { contains: query.search, mode: 'insensitive' } },
+              { displayName: { contains: query.search, mode: 'insensitive' } },
             ]
           : undefined,
       },
       take: 50,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
     return { data: users, meta: { hasNextPage: users.length === 50 } };
   }
 
-  async updateUserStatus(userId: string, dto: UpdateUserStatusDto, adminId: string): Promise<void> {
+  async updateUserStatus(
+    userId: string,
+    dto: UpdateUserStatusDto,
+    adminId: string,
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       // Read current status so we can validate the transition and
       // record previousStatus for downstream consumers / auditors.
@@ -45,7 +49,7 @@ export class AdminService {
         select: { status: true },
       });
       if (!current) {
-        throw new NotFoundException("User not found");
+        throw new NotFoundException('User not found');
       }
 
       // No-op short-circuit: same-status updates write nothing and
@@ -67,8 +71,8 @@ export class AdminService {
       await tx.auditLog.create({
         data: {
           actorUserId: adminId,
-          action: "admin.user.status_change",
-          entityType: "User",
+          action: 'admin.user.status_change',
+          entityType: 'User',
           entityId: userId,
           metadata: {
             previousStatus: current.status,
@@ -90,8 +94,8 @@ export class AdminService {
       // Note: UserStatus.DELETED can be reached from any status, so
       // we emit in the same transaction as the user update.
       await this.outboxService.emit(tx, {
-        eventType: "UserStatusChanged",
-        aggregateType: "User",
+        eventType: 'UserStatusChanged',
+        aggregateType: 'User',
         aggregateId: userId,
         payload: {
           userId,
@@ -106,14 +110,20 @@ export class AdminService {
 
   async listCompanies(query: { search?: string }) {
     const companies = await this.prisma.company.findMany({
-      where: query.search ? { name: { contains: query.search, mode: "insensitive" } } : undefined,
+      where: query.search
+        ? { name: { contains: query.search, mode: 'insensitive' } }
+        : undefined,
       take: 50,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
     return { data: companies, meta: { hasNextPage: companies.length === 50 } };
   }
 
-  async verifyCompany(companyId: string, dto: VerifyCompanyDto, adminId: string): Promise<void> {
+  async verifyCompany(
+    companyId: string,
+    dto: VerifyCompanyDto,
+    adminId: string,
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
       // Upsert verification record (one per company due to @@unique)
       await tx.companyVerification.upsert({
@@ -121,14 +131,14 @@ export class AdminService {
         create: {
           companyId,
           requestedByUserId: adminId,
-          status: "VERIFIED",
+          status: 'VERIFIED',
           reviewedByUserId: adminId,
           reviewedAt: new Date(),
           notes: dto.notes,
           documentUrls: [],
         },
         update: {
-          status: "VERIFIED",
+          status: 'VERIFIED',
           reviewedByUserId: adminId,
           reviewedAt: new Date(),
           notes: dto.notes,
@@ -147,8 +157,8 @@ export class AdminService {
       await tx.auditLog.create({
         data: {
           actorUserId: adminId,
-          action: "admin.company.verify",
-          entityType: "Company",
+          action: 'admin.company.verify',
+          entityType: 'Company',
           entityId: companyId,
           metadata: { notes: dto.notes },
         },
@@ -160,7 +170,7 @@ export class AdminService {
     const jobs = await this.prisma.job.findMany({
       where: query.companyId ? { companyId: query.companyId } : undefined,
       take: 50,
-      orderBy: { createdAt: "desc" },
+      orderBy: { createdAt: 'desc' },
     });
     return { data: jobs, meta: { hasNextPage: jobs.length === 50 } };
   }
@@ -175,7 +185,7 @@ export class AdminService {
             skip: 1,
           }
         : {}),
-      orderBy: { failedAt: "desc" },
+      orderBy: { failedAt: 'desc' },
     });
     const data = rows.slice(0, 50);
     return {
@@ -193,8 +203,8 @@ export class AdminService {
       await tx.auditLog.create({
         data: {
           actorUserId: adminId,
-          action: "admin.outbox.dead_letter.replay",
-          entityType: "OutboxDeadLetter",
+          action: 'admin.outbox.dead_letter.replay',
+          entityType: 'OutboxDeadLetter',
           entityId: deadLetterId,
           metadata: {},
         },

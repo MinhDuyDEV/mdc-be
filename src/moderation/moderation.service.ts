@@ -4,12 +4,19 @@ import {
   Injectable,
   NotFoundException,
   NotImplementedException,
-} from "@nestjs/common";
-import { PostStatus, ReportStatus, UserStatus } from "@prisma/client";
-import { PrismaService, type PrismaTransaction } from "../infra/prisma/prisma.service";
-import { OutboxService } from "../outbox/outbox.service";
-import type { CreateModerationActionDto, CreateReportDto, ReportResponseDto } from "./dto";
-import { ModerationPolicyService } from "./moderation-policy.service";
+} from '@nestjs/common';
+import { PostStatus, ReportStatus, UserStatus } from '@prisma/client';
+import {
+  PrismaService,
+  type PrismaTransaction,
+} from '../infra/prisma/prisma.service';
+import { OutboxService } from '../outbox/outbox.service';
+import type {
+  CreateModerationActionDto,
+  CreateReportDto,
+  ReportResponseDto,
+} from './dto';
+import { ModerationPolicyService } from './moderation-policy.service';
 
 @Injectable()
 export class ModerationService {
@@ -20,10 +27,16 @@ export class ModerationService {
     private readonly policy: ModerationPolicyService,
   ) {}
 
-  async createReport(dto: CreateReportDto, reporterId: string): Promise<ReportResponseDto> {
-    const targetExists = await this.policy.validateTargetExists(dto.targetEntity, dto.targetId);
+  async createReport(
+    dto: CreateReportDto,
+    reporterId: string,
+  ): Promise<ReportResponseDto> {
+    const targetExists = await this.policy.validateTargetExists(
+      dto.targetEntity,
+      dto.targetId,
+    );
     if (!targetExists) {
-      throw new NotFoundException("Reported content not found");
+      throw new NotFoundException('Reported content not found');
     }
 
     const existing = await this.prisma.report.findFirst({
@@ -37,7 +50,7 @@ export class ModerationService {
 
     if (existing) {
       throw new ConflictException(
-        "You have already reported this content and it is still under review",
+        'You have already reported this content and it is still under review',
       );
     }
 
@@ -49,23 +62,23 @@ export class ModerationService {
           targetId: dto.targetId,
           category: dto.category,
           description: dto.description,
-          priority: dto.category === "SPAM" ? 2 : 1,
+          priority: dto.category === 'SPAM' ? 2 : 1,
         },
       });
 
       await tx.auditLog.create({
         data: {
           actorUserId: reporterId,
-          action: "report.create",
-          entityType: "Report",
+          action: 'report.create',
+          entityType: 'Report',
           entityId: report.id,
           metadata: { targetEntity: dto.targetEntity, targetId: dto.targetId },
         },
       });
 
       await this.outbox.emit(tx, {
-        eventType: "ReportCreated",
-        aggregateType: "Report",
+        eventType: 'ReportCreated',
+        aggregateType: 'Report',
         aggregateId: report.id,
         payload: {
           reportId: report.id,
@@ -78,7 +91,10 @@ export class ModerationService {
     });
   }
 
-  async claimReport(reportId: string, moderatorId: string): Promise<ReportResponseDto> {
+  async claimReport(
+    reportId: string,
+    moderatorId: string,
+  ): Promise<ReportResponseDto> {
     return this.prisma.$transaction(async (tx) => {
       const locked = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM reports
@@ -89,7 +105,7 @@ export class ModerationService {
       `;
 
       if (!locked || locked.length === 0) {
-        throw new ConflictException("Report already claimed or not found");
+        throw new ConflictException('Report already claimed or not found');
       }
 
       return tx.report.update({
@@ -102,22 +118,30 @@ export class ModerationService {
   async listReports(status?: ReportStatus): Promise<ReportResponseDto[]> {
     return this.prisma.report.findMany({
       where: status ? { status } : undefined,
-      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+      orderBy: [{ priority: 'desc' }, { createdAt: 'desc' }],
       take: 50,
     });
   }
 
-  async applyModerationAction(dto: CreateModerationActionDto, moderatorId: string): Promise<void> {
+  async applyModerationAction(
+    dto: CreateModerationActionDto,
+    moderatorId: string,
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx: PrismaTransaction) => {
       // Validate that the report exists and matches the target
       const report = await tx.report.findUnique({
         where: { id: dto.reportId },
       });
       if (!report) {
-        throw new NotFoundException("Report not found");
+        throw new NotFoundException('Report not found');
       }
-      if (report.targetEntity !== dto.targetEntity || report.targetId !== dto.targetId) {
-        throw new ConflictException("Action target does not match report target");
+      if (
+        report.targetEntity !== dto.targetEntity ||
+        report.targetId !== dto.targetId
+      ) {
+        throw new ConflictException(
+          'Action target does not match report target',
+        );
       }
 
       await tx.moderationAction.create({
@@ -129,29 +153,31 @@ export class ModerationService {
           targetId: dto.targetId,
           reason: dto.reason,
           durationHours: dto.durationHours,
-          expiresAt: dto.durationHours ? new Date(Date.now() + dto.durationHours * 3600000) : null,
+          expiresAt: dto.durationHours
+            ? new Date(Date.now() + dto.durationHours * 3600000)
+            : null,
         },
       });
 
       // Apply content/side-effect actions based on actionType
       let reportStatus: ReportStatus;
       switch (dto.actionType) {
-        case "REMOVE_CONTENT":
+        case 'REMOVE_CONTENT':
           await this.applyContentRemoval(tx, dto.targetEntity, dto.targetId);
           reportStatus = ReportStatus.RESOLVED_ACTIONED;
           break;
-        case "SUSPEND_USER":
-        case "BAN_USER":
+        case 'SUSPEND_USER':
+        case 'BAN_USER':
           reportStatus = ReportStatus.RESOLVED_ACTIONED;
           await this.applyUserSuspension(
             tx,
             await this.resolveTargetUser(tx, dto.targetEntity, dto.targetId),
           );
           break;
-        case "WARN":
+        case 'WARN':
           reportStatus = ReportStatus.RESOLVED_ACTIONED;
           break;
-        case "DISMISS":
+        case 'DISMISS':
           reportStatus = ReportStatus.RESOLVED_DISMISSED;
           break;
         default:
@@ -171,8 +197,8 @@ export class ModerationService {
       await tx.auditLog.create({
         data: {
           actorUserId: moderatorId,
-          action: "moderation.action",
-          entityType: "ModerationAction",
+          action: 'moderation.action',
+          entityType: 'ModerationAction',
           entityId: dto.reportId,
           metadata: {
             actionType: dto.actionType,
@@ -189,31 +215,31 @@ export class ModerationService {
     targetId: string,
   ): Promise<void> {
     switch (targetEntity) {
-      case "POST":
+      case 'POST':
         await tx.post.update({
           where: { id: targetId },
           data: { contentStatus: PostStatus.REMOVED_BY_MODERATOR },
         });
         break;
-      case "COMMENT":
+      case 'COMMENT':
         await tx.comment.update({
           where: { id: targetId },
-          data: { contentStatus: "HIDDEN" },
+          data: { contentStatus: 'HIDDEN' },
         });
         break;
-      case "JOB":
+      case 'JOB':
         await tx.job.update({
           where: { id: targetId },
-          data: { contentStatus: "HIDDEN" },
+          data: { contentStatus: 'HIDDEN' },
         });
         break;
-      case "PROFILE": {
+      case 'PROFILE': {
         const profile = await tx.profile.findUnique({
           where: { id: targetId },
           select: { userId: true, deletedAt: true },
         });
         if (!profile) {
-          throw new NotFoundException("Profile not found");
+          throw new NotFoundException('Profile not found');
         }
         if (profile.deletedAt) {
           // Idempotent: already removed; nothing to do.
@@ -224,20 +250,20 @@ export class ModerationService {
           data: { deletedAt: new Date() },
         });
         await this.outbox.emit(tx, {
-          eventType: "ProfileRemoved",
-          aggregateType: "Profile",
+          eventType: 'ProfileRemoved',
+          aggregateType: 'Profile',
           aggregateId: targetId,
           payload: { profileId: targetId, userId: profile.userId },
         });
         break;
       }
-      case "COMPANY": {
+      case 'COMPANY': {
         const company = await tx.company.findUnique({
           where: { id: targetId },
           select: { deletedAt: true },
         });
         if (!company) {
-          throw new NotFoundException("Company not found");
+          throw new NotFoundException('Company not found');
         }
         if (company.deletedAt) {
           return;
@@ -247,20 +273,20 @@ export class ModerationService {
           data: { deletedAt: new Date() },
         });
         await this.outbox.emit(tx, {
-          eventType: "CompanyRemoved",
-          aggregateType: "Company",
+          eventType: 'CompanyRemoved',
+          aggregateType: 'Company',
           aggregateId: targetId,
           payload: { companyId: targetId },
         });
         break;
       }
-      case "MESSAGE": {
+      case 'MESSAGE': {
         const message = await tx.message.findUnique({
           where: { id: targetId },
           select: { conversationId: true, deletedAt: true },
         });
         if (!message) {
-          throw new NotFoundException("Message not found");
+          throw new NotFoundException('Message not found');
         }
         if (message.deletedAt) {
           return;
@@ -270,8 +296,8 @@ export class ModerationService {
           data: { deletedAt: new Date() },
         });
         await this.outbox.emit(tx, {
-          eventType: "MessageRemoved",
-          aggregateType: "Message",
+          eventType: 'MessageRemoved',
+          aggregateType: 'Message',
           aggregateId: targetId,
           payload: {
             messageId: targetId,
@@ -293,50 +319,59 @@ export class ModerationService {
     targetId: string,
   ): Promise<string> {
     switch (targetEntity) {
-      case "POST": {
+      case 'POST': {
         const post = await tx.post.findUnique({
           where: { id: targetId },
           select: { authorId: true },
         });
-        if (!post) throw new NotFoundException("Post not found for user resolution");
+        if (!post)
+          throw new NotFoundException('Post not found for user resolution');
         return post.authorId;
       }
-      case "COMMENT": {
+      case 'COMMENT': {
         const comment = await tx.comment.findUnique({
           where: { id: targetId },
           select: { authorId: true },
         });
-        if (!comment) throw new NotFoundException("Comment not found for user resolution");
+        if (!comment)
+          throw new NotFoundException('Comment not found for user resolution');
         return comment.authorId;
       }
-      case "MESSAGE": {
+      case 'MESSAGE': {
         const message = await tx.message.findFirst({
           where: { id: targetId, deletedAt: null },
           select: { senderId: true },
         });
-        if (!message) throw new NotFoundException("Message not found for user resolution");
+        if (!message)
+          throw new NotFoundException('Message not found for user resolution');
         return message.senderId;
       }
-      case "PROFILE": {
+      case 'PROFILE': {
         const profile = await tx.profile.findFirst({
           where: { id: targetId, deletedAt: null },
           select: { userId: true },
         });
-        if (!profile) throw new NotFoundException("Profile not found for user resolution");
+        if (!profile)
+          throw new NotFoundException('Profile not found for user resolution');
         return profile.userId;
       }
-      case "COMPANY":
-      case "JOB":
+      case 'COMPANY':
+      case 'JOB':
         throw new NotImplementedException(
           `User suspension/ban for ${targetEntity} targets is not yet implemented. ` +
-            "Use REMOVE_CONTENT to hide the content instead.",
+            'Use REMOVE_CONTENT to hide the content instead.',
         );
       default:
-        throw new NotImplementedException(`Cannot resolve user for entity type ${targetEntity}`);
+        throw new NotImplementedException(
+          `Cannot resolve user for entity type ${targetEntity}`,
+        );
     }
   }
 
-  private async applyUserSuspension(tx: PrismaTransaction, targetUserId: string): Promise<void> {
+  private async applyUserSuspension(
+    tx: PrismaTransaction,
+    targetUserId: string,
+  ): Promise<void> {
     await tx.user.update({
       where: { id: targetUserId },
       data: { status: UserStatus.SUSPENDED },

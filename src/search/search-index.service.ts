@@ -1,7 +1,7 @@
-import { Inject, Injectable } from "@nestjs/common";
-import { PinoLogger } from "nestjs-pino";
-import { PrismaService } from "../infra/prisma/prisma.service";
-import { SearchEngineService } from "../infra/search-engine";
+import { Inject, Injectable } from '@nestjs/common';
+import { PinoLogger } from 'nestjs-pino';
+import { PrismaService } from '../infra/prisma/prisma.service';
+import { SearchEngineService } from '../infra/search-engine';
 
 /**
  * Elasticsearch indexing facade consumed by outbox processors
@@ -23,7 +23,11 @@ export class SearchIndexService {
    * Index a document in Elasticsearch.
    * Falls back gracefully: logs a warning if ES is unavailable.
    */
-  async indexDocument(index: string, id: string, body: Record<string, unknown>): Promise<void> {
+  async indexDocument(
+    index: string,
+    id: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
     try {
       await this.searchEngine.index(index, id, body);
     } catch (error: unknown) {
@@ -37,19 +41,27 @@ export class SearchIndexService {
   /**
    * Remove documents matching a query.
    */
-  async deleteByQuery(index: string, query: Record<string, unknown>): Promise<void> {
+  async deleteByQuery(
+    index: string,
+    query: Record<string, unknown>,
+  ): Promise<void> {
     try {
       await this.searchEngine.deleteByQuery(index, query);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
-      this.logger.warn(`SearchIndexService: failed to delete from ${index}: ${message}`);
+      this.logger.warn(
+        `SearchIndexService: failed to delete from ${index}: ${message}`,
+      );
     }
   }
 
   /**
    * Search documents in Elasticsearch.
    */
-  async search(index: string, query: Record<string, unknown>): Promise<unknown> {
+  async search(
+    index: string,
+    query: Record<string, unknown>,
+  ): Promise<unknown> {
     return this.searchEngine.search(index, query);
   }
 
@@ -63,7 +75,7 @@ export class SearchIndexService {
    * swaps it atomically.
    */
   async createSearchIndex(
-    entityType: "profiles" | "companies" | "jobs" | "posts",
+    entityType: 'profiles' | 'companies' | 'jobs' | 'posts',
     version: number = 1,
   ): Promise<void> {
     const indexName = `${entityType}-v${version}`;
@@ -75,15 +87,21 @@ export class SearchIndexService {
 
     try {
       await this.searchEngine.createIndex(indexName, mappings, settings);
-      this.logger.info({ indexName }, "Created search index");
+      this.logger.info({ indexName }, 'Created search index');
 
       await this.searchEngine.updateAliases([
         { add: { index: indexName, alias: writeAlias, is_write_index: true } },
         { add: { index: indexName, alias: readAlias } },
       ]);
-      this.logger.info({ indexName, writeAlias, readAlias }, "Created index aliases");
+      this.logger.info(
+        { indexName, writeAlias, readAlias },
+        'Created index aliases',
+      );
     } catch (error) {
-      this.logger.error({ error: String(error), indexName }, "Failed to create search index");
+      this.logger.error(
+        { error: String(error), indexName },
+        'Failed to create search index',
+      );
       throw error;
     }
   }
@@ -98,15 +116,17 @@ export class SearchIndexService {
    * 5. Records the run outcome in the `SearchReindexRun` table.
    */
   async reindexEntity(
-    entityType: "profiles" | "companies" | "jobs" | "posts",
+    entityType: 'profiles' | 'companies' | 'jobs' | 'posts',
     triggeredBy: string,
   ): Promise<string> {
     // Prevent concurrent reindex runs for the same entity type
     const existing = await this.prisma.searchReindexRun.findFirst({
-      where: { entityType, status: "in_progress" },
+      where: { entityType, status: 'in_progress' },
     });
     if (existing) {
-      throw new Error(`Reindex already in progress for ${entityType} (run ${existing.id})`);
+      throw new Error(
+        `Reindex already in progress for ${entityType} (run ${existing.id})`,
+      );
     }
 
     const runId = `reindex-${entityType}-${Date.now()}`;
@@ -124,7 +144,7 @@ export class SearchIndexService {
           entityType,
           oldIndex,
           newIndex,
-          status: "in_progress",
+          status: 'in_progress',
           triggeredBy,
         },
       });
@@ -133,14 +153,21 @@ export class SearchIndexService {
 
       // Create new index with bulk-friendly settings (no replicas,
       // refresh disabled — we'll re-enable after swapping aliases).
-      await this.searchEngine.createIndex(newIndex, this.getEntityMappings(entityType), {
-        number_of_shards: 1,
-        number_of_replicas: 0,
-        "index.refresh_interval": "-1",
-      });
+      await this.searchEngine.createIndex(
+        newIndex,
+        this.getEntityMappings(entityType),
+        {
+          number_of_shards: 1,
+          number_of_replicas: 0,
+          'index.refresh_interval': '-1',
+        },
+      );
 
       // Bulk reindex from database (stub — returns 0 until Phase 9c)
-      const documentCount = await this.bulkReindexFromDatabase(entityType, newIndex);
+      const documentCount = await this.bulkReindexFromDatabase(
+        entityType,
+        newIndex,
+      );
 
       // Swap write alias first so new documents flow to the new index
       await this.searchEngine.updateAliases([
@@ -164,7 +191,10 @@ export class SearchIndexService {
       try {
         await this.searchEngine.deleteIndex(oldIndex);
       } catch {
-        this.logger.warn({ oldIndex }, "Failed to delete old index after reindex");
+        this.logger.warn(
+          { oldIndex },
+          'Failed to delete old index after reindex',
+        );
       }
 
       const durationMs = Date.now() - startTime;
@@ -172,27 +202,33 @@ export class SearchIndexService {
       await this.prisma.searchReindexRun.update({
         where: { id: runId },
         data: {
-          status: "completed",
+          status: 'completed',
           documentCount,
           durationMs,
           completedAt: new Date(),
         },
       });
 
-      this.logger.info({ runId, entityType, documentCount, durationMs }, "Reindex completed");
+      this.logger.info(
+        { runId, entityType, documentCount, durationMs },
+        'Reindex completed',
+      );
       return runId;
     } catch (error) {
       await this.prisma.searchReindexRun
         .update({
           where: { id: runId },
           data: {
-            status: "failed",
+            status: 'failed',
             error: String(error),
             completedAt: new Date(),
           },
         })
         .catch(() => {});
-      this.logger.error({ error: String(error), runId, entityType }, "Reindex failed");
+      this.logger.error(
+        { error: String(error), runId, entityType },
+        'Reindex failed',
+      );
       throw error;
     }
   }
@@ -204,77 +240,80 @@ export class SearchIndexService {
    */
   private getEntityMappings(entityType: string): Record<string, unknown> {
     const commonFields: Record<string, { type: string }> = {
-      id: { type: "keyword" },
-      createdAt: { type: "date" },
-      updatedAt: { type: "date" },
+      id: { type: 'keyword' },
+      createdAt: { type: 'date' },
+      updatedAt: { type: 'date' },
     };
 
-    const entityMappings: Record<string, { properties: Record<string, unknown> }> = {
+    const entityMappings: Record<
+      string,
+      { properties: Record<string, unknown> }
+    > = {
       profiles: {
         properties: {
           ...commonFields,
-          userId: { type: "keyword" },
+          userId: { type: 'keyword' },
           displayName: {
-            type: "text",
-            fields: { keyword: { type: "keyword" } },
+            type: 'text',
+            fields: { keyword: { type: 'keyword' } },
           },
-          headline: { type: "text", analyzer: "english" },
-          about: { type: "text", analyzer: "english" },
-          location: { type: "text" },
-          skills: { type: "keyword" },
-          visibility: { type: "keyword" },
+          headline: { type: 'text', analyzer: 'english' },
+          about: { type: 'text', analyzer: 'english' },
+          location: { type: 'text' },
+          skills: { type: 'keyword' },
+          visibility: { type: 'keyword' },
         },
       },
       companies: {
         properties: {
           ...commonFields,
           name: {
-            type: "text",
-            fields: { keyword: { type: "keyword" } },
+            type: 'text',
+            fields: { keyword: { type: 'keyword' } },
           },
-          industry: { type: "text" },
-          description: { type: "text", analyzer: "english" },
-          location: { type: "text" },
-          size: { type: "keyword" },
-          website: { type: "keyword" },
+          industry: { type: 'text' },
+          description: { type: 'text', analyzer: 'english' },
+          location: { type: 'text' },
+          size: { type: 'keyword' },
+          website: { type: 'keyword' },
         },
       },
       jobs: {
         properties: {
           ...commonFields,
           title: {
-            type: "text",
-            fields: { keyword: { type: "keyword" } },
+            type: 'text',
+            fields: { keyword: { type: 'keyword' } },
           },
-          description: { type: "text", analyzer: "english" },
-          companyId: { type: "keyword" },
+          description: { type: 'text', analyzer: 'english' },
+          companyId: { type: 'keyword' },
           companyName: {
-            type: "text",
-            fields: { keyword: { type: "keyword" } },
+            type: 'text',
+            fields: { keyword: { type: 'keyword' } },
           },
-          location: { type: "text" },
-          salaryMin: { type: "integer" },
-          salaryMax: { type: "integer" },
-          salaryCurrency: { type: "keyword" },
-          employmentType: { type: "keyword" },
-          workplaceType: { type: "keyword" },
-          skills: { type: "keyword" },
-          status: { type: "keyword" },
+          location: { type: 'text' },
+          salaryMin: { type: 'integer' },
+          salaryMax: { type: 'integer' },
+          salaryCurrency: { type: 'keyword' },
+          employmentType: { type: 'keyword' },
+          workplaceType: { type: 'keyword' },
+          skills: { type: 'keyword' },
+          status: { type: 'keyword' },
         },
       },
       posts: {
         properties: {
           ...commonFields,
-          authorId: { type: "keyword" },
+          authorId: { type: 'keyword' },
           authorName: {
-            type: "text",
-            fields: { keyword: { type: "keyword" } },
+            type: 'text',
+            fields: { keyword: { type: 'keyword' } },
           },
-          content: { type: "text", analyzer: "english" },
-          hashtags: { type: "keyword" },
-          visibility: { type: "keyword" },
-          reactionCount: { type: "integer" },
-          commentCount: { type: "integer" },
+          content: { type: 'text', analyzer: 'english' },
+          hashtags: { type: 'keyword' },
+          visibility: { type: 'keyword' },
+          reactionCount: { type: 'integer' },
+          commentCount: { type: 'integer' },
         },
       },
     };
@@ -289,20 +328,20 @@ export class SearchIndexService {
     return {
       number_of_shards: 1,
       number_of_replicas: 1,
-      "index.refresh_interval": "30s",
+      'index.refresh_interval': '30s',
       analysis: {
         analyzer: {
           autocomplete: {
-            tokenizer: "autocomplete",
-            filter: ["lowercase"],
+            tokenizer: 'autocomplete',
+            filter: ['lowercase'],
           },
         },
         tokenizer: {
           autocomplete: {
-            type: "edge_ngram",
+            type: 'edge_ngram',
             min_gram: 2,
             max_gram: 20,
-            token_chars: ["letter", "digit"],
+            token_chars: ['letter', 'digit'],
           },
         },
       },
@@ -331,7 +370,7 @@ export class SearchIndexService {
     } catch {
       this.logger.warn(
         { entityType },
-        "Failed to list ES indices for version derivation, defaulting to 0",
+        'Failed to list ES indices for version derivation, defaulting to 0',
       );
       return 0;
     }
@@ -341,25 +380,31 @@ export class SearchIndexService {
    * Bulk-indexes documents from the database into the target
    * Elasticsearch index.  Returns the number of documents indexed.
    */
-  private async bulkReindexFromDatabase(entityType: string, targetIndex: string): Promise<number> {
+  private async bulkReindexFromDatabase(
+    entityType: string,
+    targetIndex: string,
+  ): Promise<number> {
     switch (entityType) {
-      case "profiles":
+      case 'profiles':
         return this.bulkReindexProfiles(targetIndex);
-      case "companies":
+      case 'companies':
         return this.bulkReindexCompanies(targetIndex);
-      case "jobs":
+      case 'jobs':
         return this.bulkReindexJobs(targetIndex);
-      case "posts":
+      case 'posts':
         return this.bulkReindexPosts(targetIndex);
       default:
-        this.logger.warn({ entityType }, "Unknown entity type for bulk reindex");
+        this.logger.warn(
+          { entityType },
+          'Unknown entity type for bulk reindex',
+        );
         return 0;
     }
   }
 
   private async bulkReindexProfiles(targetIndex: string): Promise<number> {
     const profiles = await this.prisma.profile.findMany({
-      where: { visibility: "PUBLIC", deletedAt: null },
+      where: { visibility: 'PUBLIC', deletedAt: null },
       include: {
         user: { select: { displayName: true } },
         skills: { select: { name: true } },
@@ -430,7 +475,7 @@ export class SearchIndexService {
 
   private async bulkReindexJobs(targetIndex: string): Promise<number> {
     const jobs = await this.prisma.job.findMany({
-      where: { deletedAt: null, status: "PUBLISHED" },
+      where: { deletedAt: null, status: 'PUBLISHED' },
       include: {
         company: { select: { id: true, name: true, slug: true } },
         skills: true,
@@ -446,8 +491,8 @@ export class SearchIndexService {
         title: j.title,
         description: j.description,
         companyId: j.companyId,
-        companyName: j.company?.name ?? "",
-        companySlug: j.company?.slug ?? "",
+        companyName: j.company?.name ?? '',
+        companySlug: j.company?.slug ?? '',
         location: j.location,
         salaryMin: j.salaryMin,
         salaryMax: j.salaryMax,
@@ -468,7 +513,7 @@ export class SearchIndexService {
 
   private async bulkReindexPosts(targetIndex: string): Promise<number> {
     const posts = await this.prisma.post.findMany({
-      where: { deletedAt: null, visibility: "PUBLIC", status: "PUBLISHED" },
+      where: { deletedAt: null, visibility: 'PUBLIC', status: 'PUBLISHED' },
       include: {
         author: { select: { id: true, displayName: true } },
         hashtags: {

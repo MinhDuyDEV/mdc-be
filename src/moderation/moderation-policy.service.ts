@@ -1,6 +1,6 @@
-import { Injectable } from "@nestjs/common";
-import type { ReportEntityType } from "@prisma/client";
-import { PrismaService } from "../infra/prisma/prisma.service";
+import { Injectable } from '@nestjs/common';
+import type { ReportEntityType } from '@prisma/client';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 /**
  * Exhaustive entity-type dispatcher.
@@ -14,7 +14,10 @@ import { PrismaService } from "../infra/prisma/prisma.service";
  */
 @Injectable()
 export class ModerationPolicyService {
-  private readonly validators: Record<ReportEntityType, (id: string) => Promise<boolean>>;
+  private readonly validators: Record<
+    ReportEntityType,
+    (id: string) => Promise<boolean>
+  >;
 
   constructor(private readonly prisma: PrismaService) {
     this.validators = {
@@ -29,7 +32,10 @@ export class ModerationPolicyService {
     };
   }
 
-  async validateTargetExists(entityType: ReportEntityType, entityId: string): Promise<boolean> {
+  async validateTargetExists(
+    entityType: ReportEntityType,
+    entityId: string,
+  ): Promise<boolean> {
     return this.validators[entityType](entityId);
   }
 

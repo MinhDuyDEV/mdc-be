@@ -1,7 +1,7 @@
-import { Injectable } from "@nestjs/common";
-import { ApplicationStatus } from "@prisma/client";
-import { ConnectionsPolicyService } from "../connections/connections-policy.service";
-import { PrismaService } from "../infra/prisma/prisma.service";
+import { Injectable } from '@nestjs/common';
+import { ApplicationStatus } from '@prisma/client';
+import { ConnectionsPolicyService } from '../connections/connections-policy.service';
+import { PrismaService } from '../infra/prisma/prisma.service';
 
 /**
  * Discriminated decision returned by `canMessageCandidate`. Phase 7 messaging
@@ -10,15 +10,15 @@ import { PrismaService } from "../infra/prisma/prisma.service";
 export type RecruitingMessageDecision =
   | {
       allowed: true;
-      reason: "APPLICATION_CONTEXT" | "TALENT_POOL_CONTEXT" | "OPT_IN";
+      reason: 'APPLICATION_CONTEXT' | 'TALENT_POOL_CONTEXT' | 'OPT_IN';
     }
   | {
       allowed: false;
       reason:
-        | "NO_RECRUITING_AUTHORIZATION"
-        | "CANDIDATE_NOT_OPTED_IN"
-        | "SELF_OUTREACH"
-        | "BLOCKED";
+        | 'NO_RECRUITING_AUTHORIZATION'
+        | 'CANDIDATE_NOT_OPTED_IN'
+        | 'SELF_OUTREACH'
+        | 'BLOCKED';
     };
 
 /**
@@ -55,13 +55,14 @@ export class RecruitingPolicyService {
     candidateUserId: string,
   ): Promise<RecruitingMessageDecision> {
     if (recruiterUserId === candidateUserId) {
-      return { allowed: false, reason: "SELF_OUTREACH" };
+      return { allowed: false, reason: 'SELF_OUTREACH' };
     }
 
     // 1. Find every company where the recruiter holds an active recruiting role.
-    const recruiterCompanies = await this.findRecruiterCompanies(recruiterUserId);
+    const recruiterCompanies =
+      await this.findRecruiterCompanies(recruiterUserId);
     if (recruiterCompanies.size === 0) {
-      return { allowed: false, reason: "NO_RECRUITING_AUTHORIZATION" };
+      return { allowed: false, reason: 'NO_RECRUITING_AUTHORIZATION' };
     }
     const recruiterCompanyIds = [...recruiterCompanies];
 
@@ -81,7 +82,7 @@ export class RecruitingPolicyService {
       select: { id: true },
     });
     if (application) {
-      return { allowed: true, reason: "APPLICATION_CONTEXT" };
+      return { allowed: true, reason: 'APPLICATION_CONTEXT' };
     }
 
     // 3. TALENT_POOL_CONTEXT: candidate is in an active TalentPool at one of
@@ -98,7 +99,7 @@ export class RecruitingPolicyService {
       select: { id: true },
     });
     if (poolMembership) {
-      return { allowed: true, reason: "TALENT_POOL_CONTEXT" };
+      return { allowed: true, reason: 'TALENT_POOL_CONTEXT' };
     }
 
     // 4. OPT_IN: candidate's profile is recruitingEligible.
@@ -107,22 +108,25 @@ export class RecruitingPolicyService {
       select: { recruitingEligible: true },
     });
     if (!profile) {
-      return { allowed: false, reason: "CANDIDATE_NOT_OPTED_IN" };
+      return { allowed: false, reason: 'CANDIDATE_NOT_OPTED_IN' };
     }
 
     // Check if either party has blocked the other.
     // Block check MUST come before recruitingEligible check —
     // a blocked candidate should get BLOCKED even if not opted in.
-    const isBlocked = await this.connectionsPolicy.isBlocked(recruiterUserId, candidateUserId);
+    const isBlocked = await this.connectionsPolicy.isBlocked(
+      recruiterUserId,
+      candidateUserId,
+    );
     if (isBlocked) {
-      return { allowed: false, reason: "BLOCKED" };
+      return { allowed: false, reason: 'BLOCKED' };
     }
 
     if (profile.recruitingEligible) {
-      return { allowed: true, reason: "OPT_IN" };
+      return { allowed: true, reason: 'OPT_IN' };
     }
 
-    return { allowed: false, reason: "CANDIDATE_NOT_OPTED_IN" };
+    return { allowed: false, reason: 'CANDIDATE_NOT_OPTED_IN' };
   }
 
   /**
@@ -134,15 +138,15 @@ export class RecruitingPolicyService {
       this.prisma.companyMember.findMany({
         where: {
           userId,
-          status: "active",
-          role: { in: ["OWNER", "ADMIN"] },
+          status: 'active',
+          role: { in: ['OWNER', 'ADMIN'] },
         },
         select: { companyId: true },
       }),
       this.prisma.recruiterSeat.findMany({
         where: {
           userId,
-          status: "allocated",
+          status: 'allocated',
         },
         select: { companyId: true },
       }),

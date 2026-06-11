@@ -1,5 +1,5 @@
-import { BadRequestException } from "@nestjs/common";
-import { UserStatus } from "@prisma/client";
+import { BadRequestException } from '@nestjs/common';
+import { UserStatus } from '@prisma/client';
 
 /**
  * Allowed user-status transitions.
@@ -26,16 +26,27 @@ const ALLOWED_TRANSITIONS: Record<UserStatus, ReadonlySet<UserStatus>> = {
     UserStatus.DISABLED,
     UserStatus.DELETED,
   ]),
-  [UserStatus.DISABLED]: new Set<UserStatus>([UserStatus.ACTIVE, UserStatus.DELETED]),
+  [UserStatus.DISABLED]: new Set<UserStatus>([
+    UserStatus.ACTIVE,
+    UserStatus.DELETED,
+  ]),
   [UserStatus.DELETED]: new Set<UserStatus>(),
 };
 
-export function isAllowedUserStatusTransition(from: UserStatus, to: UserStatus): boolean {
+export function isAllowedUserStatusTransition(
+  from: UserStatus,
+  to: UserStatus,
+): boolean {
   return ALLOWED_TRANSITIONS[from]?.has(to) ?? false;
 }
 
-export function assertValidUserStatusTransition(from: UserStatus, to: UserStatus): void {
+export function assertValidUserStatusTransition(
+  from: UserStatus,
+  to: UserStatus,
+): void {
   if (!isAllowedUserStatusTransition(from, to)) {
-    throw new BadRequestException(`Invalid user status transition: ${from} → ${to}`);
+    throw new BadRequestException(
+      `Invalid user status transition: ${from} → ${to}`,
+    );
   }
 }

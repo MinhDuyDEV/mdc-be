@@ -1,5 +1,5 @@
-import type { Prisma } from "@prisma/client";
-import { z } from "zod";
+import type { Prisma } from '@prisma/client';
+import { z } from 'zod';
 
 const payload = z.object({}).passthrough();
 const stringArray = z.array(z.string());
@@ -269,7 +269,9 @@ export const outboxEventSchemas = {
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;
 
-export function isOutboxEventType(eventType: string): eventType is OutboxEventType {
+export function isOutboxEventType(
+  eventType: string,
+): eventType is OutboxEventType {
   return eventType in outboxEventSchemas;
 }
 
@@ -283,7 +285,9 @@ export function validateOutboxPayload(
 
   const result = outboxEventSchemas[eventType].safeParse(payloadValue);
   if (!result.success) {
-    throw new Error(`Invalid outbox payload for ${eventType}: ${result.error.message}`);
+    throw new Error(
+      `Invalid outbox payload for ${eventType}: ${result.error.message}`,
+    );
   }
 
   return result.data as Prisma.InputJsonValue;

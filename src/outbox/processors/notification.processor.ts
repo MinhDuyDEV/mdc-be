@@ -1,8 +1,8 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { PrismaService } from "../../infra/prisma/prisma.service";
-import { NotificationEventDto } from "../../realtime/dto/notification-event.dto";
-import { RealtimeGateway } from "../../realtime/realtime.gateway";
-import { IdempotencyService } from "../idempotency.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import { NotificationEventDto } from '../../realtime/dto/notification-event.dto';
+import { RealtimeGateway } from '../../realtime/realtime.gateway';
+import { IdempotencyService } from '../idempotency.service';
 
 interface ApplicationSubmittedPayload {
   applicationId: string;
@@ -65,7 +65,10 @@ interface CandidateAddedToTalentPoolPayload {
   candidateUserId: string;
 }
 
-type PrismaForRecipients = Pick<PrismaService, "companyMember" | "recruiterSeat">;
+type PrismaForRecipients = Pick<
+  PrismaService,
+  'companyMember' | 'recruiterSeat'
+>;
 
 async function resolveCompanyRecruiters(
   prisma: PrismaForRecipients,
@@ -75,15 +78,15 @@ async function resolveCompanyRecruiters(
     prisma.companyMember.findMany({
       where: {
         companyId,
-        status: "active",
-        role: { in: ["OWNER", "ADMIN"] },
+        status: 'active',
+        role: { in: ['OWNER', 'ADMIN'] },
       },
       select: { userId: true },
     }),
     prisma.recruiterSeat.findMany({
       where: {
         companyId,
-        status: "allocated",
+        status: 'allocated',
         userId: { not: null },
       },
       select: { userId: true },
@@ -113,7 +116,9 @@ export class NotificationProcessor {
     private readonly realtimeGateway: RealtimeGateway,
   ) {}
 
-  async processApplicationSubmitted(payload: ApplicationSubmittedPayload): Promise<void> {
+  async processApplicationSubmitted(
+    payload: ApplicationSubmittedPayload,
+  ): Promise<void> {
     const application = await this.prisma.application.findUnique({
       where: { id: payload.applicationId },
       select: { id: true },
@@ -125,20 +130,23 @@ export class NotificationProcessor {
       return;
     }
 
-    const recipients = await resolveCompanyRecruiters(this.prisma, payload.companyId);
+    const recipients = await resolveCompanyRecruiters(
+      this.prisma,
+      payload.companyId,
+    );
 
     let inserted = 0;
     for (const recipientUserId of recipients) {
       const created = await this.insertNotification({
         recipientUserId,
-        eventType: "ApplicationSubmitted",
+        eventType: 'ApplicationSubmitted',
         aggregateId: payload.applicationId,
-        type: "ApplicationSubmitted",
+        type: 'ApplicationSubmitted',
         payloadJson: payload as unknown as Record<string, unknown>,
-        title: "New application",
+        title: 'New application',
         body: `A new application was submitted for job ${payload.jobId}`,
         actionUrl: `/applications/${payload.applicationId}`,
-        aggregateIdJsonField: "applicationId",
+        aggregateIdJsonField: 'applicationId',
       });
       if (created) inserted++;
     }
@@ -148,7 +156,9 @@ export class NotificationProcessor {
     );
   }
 
-  async processApplicationStatusChanged(payload: ApplicationStatusChangedPayload): Promise<void> {
+  async processApplicationStatusChanged(
+    payload: ApplicationStatusChangedPayload,
+  ): Promise<void> {
     const application = await this.prisma.application.findUnique({
       where: { id: payload.applicationId },
       select: { id: true, userId: true },
@@ -163,8 +173,11 @@ export class NotificationProcessor {
     const recipients = new Set<string>();
     recipients.add(payload.candidateUserId);
 
-    if (payload.toStatus === "WITHDRAWN") {
-      const recruiterIds = await resolveCompanyRecruiters(this.prisma, payload.companyId);
+    if (payload.toStatus === 'WITHDRAWN') {
+      const recruiterIds = await resolveCompanyRecruiters(
+        this.prisma,
+        payload.companyId,
+      );
       for (const id of recruiterIds) recipients.add(id);
     }
 
@@ -172,14 +185,14 @@ export class NotificationProcessor {
     for (const recipientUserId of recipients) {
       const created = await this.insertNotification({
         recipientUserId,
-        eventType: "ApplicationStatusChanged",
+        eventType: 'ApplicationStatusChanged',
         aggregateId: payload.applicationId,
-        type: "ApplicationStatusChanged",
+        type: 'ApplicationStatusChanged',
         payloadJson: payload as unknown as Record<string, unknown>,
-        title: "Application status updated",
+        title: 'Application status updated',
         body: `Application status changed to ${payload.toStatus}`,
         actionUrl: `/applications/${payload.applicationId}`,
-        aggregateIdJsonField: "applicationId",
+        aggregateIdJsonField: 'applicationId',
       });
       if (created) inserted++;
     }
@@ -189,7 +202,9 @@ export class NotificationProcessor {
     );
   }
 
-  async processApplicationNoteAdded(payload: ApplicationNoteAddedPayload): Promise<void> {
+  async processApplicationNoteAdded(
+    payload: ApplicationNoteAddedPayload,
+  ): Promise<void> {
     const application = await this.prisma.application.findUnique({
       where: { id: payload.applicationId },
       select: { id: true },
@@ -201,21 +216,26 @@ export class NotificationProcessor {
       return;
     }
 
-    const allRecruiters = await resolveCompanyRecruiters(this.prisma, payload.companyId);
-    const recipients = allRecruiters.filter((id) => id !== payload.authorUserId);
+    const allRecruiters = await resolveCompanyRecruiters(
+      this.prisma,
+      payload.companyId,
+    );
+    const recipients = allRecruiters.filter(
+      (id) => id !== payload.authorUserId,
+    );
 
     let inserted = 0;
     for (const recipientUserId of recipients) {
       const created = await this.insertNotification({
         recipientUserId,
-        eventType: "ApplicationNoteAdded",
+        eventType: 'ApplicationNoteAdded',
         aggregateId: payload.noteId,
-        type: "ApplicationNoteAdded",
+        type: 'ApplicationNoteAdded',
         payloadJson: payload as unknown as Record<string, unknown>,
-        title: "New note on application",
+        title: 'New note on application',
         body: `A note was added to application ${payload.applicationId}`,
         actionUrl: `/applications/${payload.applicationId}`,
-        aggregateIdJsonField: "noteId",
+        aggregateIdJsonField: 'noteId',
       });
       if (created) inserted++;
     }
@@ -225,12 +245,14 @@ export class NotificationProcessor {
     );
   }
 
-  async processRecruiterSeatAllocated(payload: RecruiterSeatAllocatedPayload): Promise<void> {
+  async processRecruiterSeatAllocated(
+    payload: RecruiterSeatAllocatedPayload,
+  ): Promise<void> {
     const seat = await this.prisma.recruiterSeat.findFirst({
       where: {
         companyId: payload.companyId,
         userId: payload.recruiterUserId,
-        status: "allocated",
+        status: 'allocated',
       },
       select: { id: true },
     });
@@ -243,18 +265,18 @@ export class NotificationProcessor {
 
     const created = await this.insertNotification({
       recipientUserId: payload.recruiterUserId,
-      eventType: "RecruiterSeatAllocated",
+      eventType: 'RecruiterSeatAllocated',
       aggregateId: seat.id,
-      type: "RecruiterSeatAllocated",
+      type: 'RecruiterSeatAllocated',
       payloadJson: { ...payload, seatId: seat.id },
-      title: "You were allocated a recruiter seat",
+      title: 'You were allocated a recruiter seat',
       body: `You have been granted a recruiter seat for company ${payload.companyId}`,
       actionUrl: `/companies/${payload.companyId}`,
-      aggregateIdJsonField: "seatId",
+      aggregateIdJsonField: 'seatId',
     });
 
     this.logger.debug(
-      `RecruiterSeatAllocated: ${created ? "inserted" : "skipped (duplicate)"} notification row for user=${payload.recruiterUserId}`,
+      `RecruiterSeatAllocated: ${created ? 'inserted' : 'skipped (duplicate)'} notification row for user=${payload.recruiterUserId}`,
     );
   }
 
@@ -281,18 +303,18 @@ export class NotificationProcessor {
 
     const created = await this.insertNotification({
       recipientUserId: payload.candidateUserId,
-      eventType: "CandidateSaved",
+      eventType: 'CandidateSaved',
       aggregateId: payload.savedCandidateId,
-      type: "CandidateSaved",
+      type: 'CandidateSaved',
       payloadJson: payload as unknown as Record<string, unknown>,
-      title: "A recruiter saved your profile",
-      body: "A recruiter has saved your profile",
-      actionUrl: "/recruiting/saved-candidates",
-      aggregateIdJsonField: "savedCandidateId",
+      title: 'A recruiter saved your profile',
+      body: 'A recruiter has saved your profile',
+      actionUrl: '/recruiting/saved-candidates',
+      aggregateIdJsonField: 'savedCandidateId',
     });
 
     this.logger.debug(
-      `CandidateSaved: ${created ? "inserted" : "skipped (duplicate)"} notification for candidate=${payload.candidateUserId}`,
+      `CandidateSaved: ${created ? 'inserted' : 'skipped (duplicate)'} notification for candidate=${payload.candidateUserId}`,
     );
   }
 
@@ -317,54 +339,58 @@ export class NotificationProcessor {
 
     const created = await this.insertNotification({
       recipientUserId: payload.candidateUserId,
-      eventType: "CandidateAddedToTalentPool",
+      eventType: 'CandidateAddedToTalentPool',
       aggregateId: payload.talentPoolCandidateId,
-      type: "CandidateAddedToTalentPool",
+      type: 'CandidateAddedToTalentPool',
       payloadJson: payload as unknown as Record<string, unknown>,
-      title: "You were added to a talent pool",
-      body: "A recruiter added you to a talent pool",
-      actionUrl: "/recruiting/talent-pools",
-      aggregateIdJsonField: "talentPoolCandidateId",
+      title: 'You were added to a talent pool',
+      body: 'A recruiter added you to a talent pool',
+      actionUrl: '/recruiting/talent-pools',
+      aggregateIdJsonField: 'talentPoolCandidateId',
     });
 
     this.logger.debug(
-      `CandidateAddedToTalentPool: ${created ? "inserted" : "skipped (duplicate)"} notification for candidate=${payload.candidateUserId}`,
+      `CandidateAddedToTalentPool: ${created ? 'inserted' : 'skipped (duplicate)'} notification for candidate=${payload.candidateUserId}`,
     );
   }
 
-  async processConnectionRequested(payload: ConnectionRequestedPayload): Promise<void> {
+  async processConnectionRequested(
+    payload: ConnectionRequestedPayload,
+  ): Promise<void> {
     const created = await this.insertNotification({
       recipientUserId: payload.targetUserId,
-      eventType: "ConnectionRequested",
+      eventType: 'ConnectionRequested',
       aggregateId: payload.connectionId,
-      type: "ConnectionRequested",
+      type: 'ConnectionRequested',
       payloadJson: payload as unknown as Record<string, unknown>,
-      title: "New connection request",
-      body: "You have a new connection request",
-      actionUrl: "/connections/pending",
-      aggregateIdJsonField: "connectionId",
+      title: 'New connection request',
+      body: 'You have a new connection request',
+      actionUrl: '/connections/pending',
+      aggregateIdJsonField: 'connectionId',
     });
 
     this.logger.debug(
-      `ConnectionRequested: ${created ? "inserted" : "skipped"} notification for target=${payload.targetUserId}`,
+      `ConnectionRequested: ${created ? 'inserted' : 'skipped'} notification for target=${payload.targetUserId}`,
     );
   }
 
-  async processConnectionAccepted(payload: ConnectionAcceptedPayload): Promise<void> {
+  async processConnectionAccepted(
+    payload: ConnectionAcceptedPayload,
+  ): Promise<void> {
     const created = await this.insertNotification({
       recipientUserId: payload.requesterUserId,
-      eventType: "ConnectionAccepted",
+      eventType: 'ConnectionAccepted',
       aggregateId: payload.connectionId,
-      type: "ConnectionAccepted",
+      type: 'ConnectionAccepted',
       payloadJson: payload as unknown as Record<string, unknown>,
-      title: "Connection accepted",
-      body: "Your connection request was accepted",
-      actionUrl: "/connections",
-      aggregateIdJsonField: "connectionId",
+      title: 'Connection accepted',
+      body: 'Your connection request was accepted',
+      actionUrl: '/connections',
+      aggregateIdJsonField: 'connectionId',
     });
 
     this.logger.debug(
-      `ConnectionAccepted: ${created ? "inserted" : "skipped"} notification for requester=${payload.requesterUserId}`,
+      `ConnectionAccepted: ${created ? 'inserted' : 'skipped'} notification for requester=${payload.requesterUserId}`,
     );
   }
 
@@ -412,7 +438,7 @@ export class NotificationProcessor {
     // existing row — it never throws on duplicate.  We must guard the
     // notification insert ourselves so that an outbox replay never
     // produces a duplicate Notification row.
-    await this.idempotencyService.claim("Notification", key);
+    await this.idempotencyService.claim('Notification', key);
 
     const where: Record<string, unknown> = {
       userId: opts.recipientUserId,
@@ -443,10 +469,12 @@ export class NotificationProcessor {
     const notification = await this.prisma.notification.create({
       data: {
         userId: opts.recipientUserId,
-        type: opts.type as Parameters<typeof this.prisma.notification.create>[0]["data"]["type"],
+        type: opts.type as Parameters<
+          typeof this.prisma.notification.create
+        >[0]['data']['type'],
         payloadJson: opts.payloadJson as Parameters<
           typeof this.prisma.notification.create
-        >[0]["data"]["payloadJson"],
+        >[0]['data']['payloadJson'],
         title: opts.title,
         body: opts.body,
         actionUrl: opts.actionUrl,

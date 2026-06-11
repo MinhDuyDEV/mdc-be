@@ -1,14 +1,19 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
-import { PrismaService } from "../../infra/prisma/prisma.service";
+import { Injectable, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../../infra/prisma/prisma.service';
 
 interface UserRegisteredPayload {
   userId: string;
   email: string;
 }
 
-function isPrismaUniqueViolation(error: unknown): error is Prisma.PrismaClientKnownRequestError {
-  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
+function isPrismaUniqueViolation(
+  error: unknown,
+): error is Prisma.PrismaClientKnownRequestError {
+  return (
+    error instanceof Prisma.PrismaClientKnownRequestError &&
+    error.code === 'P2002'
+  );
 }
 
 @Injectable()
@@ -42,7 +47,9 @@ export class ProfileCreationProcessor {
         data: { userId: payload.userId },
         select: { id: true },
       });
-      this.logger.debug(`Created profile shell ${profile.id} for user ${payload.userId}`);
+      this.logger.debug(
+        `Created profile shell ${profile.id} for user ${payload.userId}`,
+      );
     } catch (error) {
       if (isPrismaUniqueViolation(error)) {
         this.logger.debug(

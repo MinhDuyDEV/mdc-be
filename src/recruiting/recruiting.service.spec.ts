@@ -1,9 +1,13 @@
-import { ConflictException, ForbiddenException, NotFoundException } from "@nestjs/common";
-import { Prisma } from "@prisma/client";
-import type { EntitlementsService } from "../billing/entitlements/entitlements.service";
-import type { PrismaService } from "../infra/prisma/prisma.service";
-import type { IdempotencyService } from "../outbox/idempotency.service";
-import { RecruitingService } from "./recruiting.service";
+import {
+  ConflictException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { EntitlementsService } from '../billing/entitlements/entitlements.service';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { IdempotencyService } from '../outbox/idempotency.service';
+import { RecruitingService } from './recruiting.service';
 
 interface MockPrisma {
   company: { findFirst: jest.Mock };
@@ -33,7 +37,7 @@ interface MockPrisma {
 
 function buildMockPrisma(): MockPrisma {
   const prisma: MockPrisma = {
-    company: { findFirst: jest.fn().mockResolvedValue({ id: "c-1" }) },
+    company: { findFirst: jest.fn().mockResolvedValue({ id: 'c-1' }) },
     companyMember: { findUnique: jest.fn() },
     recruiterSeat: { findFirst: jest.fn() },
     profile: { findUnique: jest.fn(), findFirst: jest.fn() },
@@ -57,13 +61,13 @@ function buildMockPrisma(): MockPrisma {
     auditLog: { create: jest.fn() },
     $transaction: jest.fn(),
   };
-  prisma.$transaction.mockImplementation(async (cb: (tx: MockPrisma) => Promise<unknown>) =>
-    cb(prisma),
+  prisma.$transaction.mockImplementation(
+    async (cb: (tx: MockPrisma) => Promise<unknown>) => cb(prisma),
   );
   return prisma;
 }
 
-describe("RecruitingService", () => {
+describe('RecruitingService', () => {
   let prisma: MockPrisma;
   let outbox: { emit: jest.Mock };
   let idempotency: { claim: jest.Mock };
@@ -86,189 +90,199 @@ describe("RecruitingService", () => {
     );
   });
 
-  describe("authorization", () => {
-    it("rejects non-recruiter members with INSUFFICIENT_COMPANY_ROLE", async () => {
+  describe('authorization', () => {
+    it('rejects non-recruiter members with INSUFFICIENT_COMPANY_ROLE', async () => {
       prisma.companyMember.findUnique.mockResolvedValue({
-        role: "MEMBER",
-        status: "active",
+        role: 'MEMBER',
+        status: 'active',
       });
       prisma.recruiterSeat.findFirst.mockResolvedValue(null);
 
-      await expect(service.listSavedCandidates("user-1", "c-1", { limit: 20 })).rejects.toThrow(
-        new ForbiddenException("INSUFFICIENT_COMPANY_ROLE"),
-      );
+      await expect(
+        service.listSavedCandidates('user-1', 'c-1', { limit: 20 }),
+      ).rejects.toThrow(new ForbiddenException('INSUFFICIENT_COMPANY_ROLE'));
     });
 
-    it("allows OWNER role", async () => {
+    it('allows OWNER role', async () => {
       prisma.companyMember.findUnique.mockResolvedValue({
-        role: "OWNER",
-        status: "active",
+        role: 'OWNER',
+        status: 'active',
       });
       prisma.savedCandidate.findMany.mockResolvedValue([]);
       await expect(
-        service.listSavedCandidates("user-1", "c-1", { limit: 20 }),
+        service.listSavedCandidates('user-1', 'c-1', { limit: 20 }),
       ).resolves.toBeDefined();
     });
 
-    it("allows MEMBER with active RecruiterSeat", async () => {
+    it('allows MEMBER with active RecruiterSeat', async () => {
       prisma.companyMember.findUnique.mockResolvedValue({
-        role: "MEMBER",
-        status: "active",
+        role: 'MEMBER',
+        status: 'active',
       });
-      prisma.recruiterSeat.findFirst.mockResolvedValue({ id: "seat-1" });
+      prisma.recruiterSeat.findFirst.mockResolvedValue({ id: 'seat-1' });
       prisma.savedCandidate.findMany.mockResolvedValue([]);
       await expect(
-        service.listSavedCandidates("user-1", "c-1", { limit: 20 }),
+        service.listSavedCandidates('user-1', 'c-1', { limit: 20 }),
       ).resolves.toBeDefined();
     });
   });
 
-  describe("saveCandidate", () => {
+  describe('saveCandidate', () => {
     beforeEach(() => {
       prisma.companyMember.findUnique.mockResolvedValue({
-        role: "OWNER",
-        status: "active",
+        role: 'OWNER',
+        status: 'active',
       });
     });
 
-    it("rejects when candidate Profile.recruitingEligible=false", async () => {
+    it('rejects when candidate Profile.recruitingEligible=false', async () => {
       prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: false,
       });
 
       await expect(
-        service.saveCandidate("user-1", "c-1", {
-          candidateUserId: "cand-1",
+        service.saveCandidate('user-1', 'c-1', {
+          candidateUserId: 'cand-1',
         }),
-      ).rejects.toThrow(new ForbiddenException("CANDIDATE_NOT_OPTED_IN_TO_RECRUITING"));
+      ).rejects.toThrow(
+        new ForbiddenException('CANDIDATE_NOT_OPTED_IN_TO_RECRUITING'),
+      );
     });
 
-    it("is idempotent — returns existing active row", async () => {
+    it('is idempotent — returns existing active row', async () => {
       prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: true,
       });
       const existing = {
-        id: "saved-1",
-        companyId: "c-1",
-        candidateUserId: "cand-1",
+        id: 'saved-1',
+        companyId: 'c-1',
+        candidateUserId: 'cand-1',
       };
       prisma.savedCandidate.findFirst.mockResolvedValue(existing);
 
-      const result = await service.saveCandidate("user-1", "c-1", {
-        candidateUserId: "cand-1",
+      const result = await service.saveCandidate('user-1', 'c-1', {
+        candidateUserId: 'cand-1',
       });
 
       expect(result).toBe(existing);
       expect(prisma.savedCandidate.create).not.toHaveBeenCalled();
     });
 
-    it("creates new SavedCandidate, audits, emits CandidateSaved", async () => {
+    it('creates new SavedCandidate, audits, emits CandidateSaved', async () => {
       prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: true,
       });
       prisma.savedCandidate.findFirst.mockResolvedValue(null);
       prisma.savedCandidate.create.mockResolvedValue({
-        id: "saved-1",
-        companyId: "c-1",
-        candidateUserId: "cand-1",
+        id: 'saved-1',
+        companyId: 'c-1',
+        candidateUserId: 'cand-1',
       });
 
-      await service.saveCandidate("user-1", "c-1", {
-        candidateUserId: "cand-1",
+      await service.saveCandidate('user-1', 'c-1', {
+        candidateUserId: 'cand-1',
       });
 
       expect(prisma.savedCandidate.create).toHaveBeenCalled();
       expect(outbox.emit).toHaveBeenCalledWith(
         prisma,
-        expect.objectContaining({ eventType: "CandidateSaved" }),
+        expect.objectContaining({ eventType: 'CandidateSaved' }),
       );
     });
   });
 
-  describe("createTalentPool — name conflict", () => {
+  describe('createTalentPool — name conflict', () => {
     beforeEach(() => {
       prisma.companyMember.findUnique.mockResolvedValue({
-        role: "OWNER",
-        status: "active",
+        role: 'OWNER',
+        status: 'active',
       });
     });
 
-    it("returns 409 TALENT_POOL_NAME_TAKEN on partial unique index P2002", async () => {
-      const p2002 = new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
-        code: "P2002",
-        clientVersion: "test",
-      });
+    it('returns 409 TALENT_POOL_NAME_TAKEN on partial unique index P2002', async () => {
+      const p2002 = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        {
+          code: 'P2002',
+          clientVersion: 'test',
+        },
+      );
       prisma.talentPool.create.mockRejectedValue(p2002);
 
       await expect(
-        service.createTalentPool("user-1", "c-1", { name: "engineering" }),
-      ).rejects.toThrow(new ConflictException("TALENT_POOL_NAME_TAKEN"));
+        service.createTalentPool('user-1', 'c-1', { name: 'engineering' }),
+      ).rejects.toThrow(new ConflictException('TALENT_POOL_NAME_TAKEN'));
     });
 
-    it("creates pool on happy path", async () => {
+    it('creates pool on happy path', async () => {
       prisma.talentPool.create.mockResolvedValue({
-        id: "pool-1",
-        companyId: "c-1",
-        name: "engineering",
+        id: 'pool-1',
+        companyId: 'c-1',
+        name: 'engineering',
       });
 
-      const result = await service.createTalentPool("user-1", "c-1", {
-        name: "engineering",
+      const result = await service.createTalentPool('user-1', 'c-1', {
+        name: 'engineering',
       });
 
-      expect(result.id).toBe("pool-1");
+      expect(result.id).toBe('pool-1');
     });
   });
 
-  describe("addCandidateToPool — idempotency", () => {
+  describe('addCandidateToPool — idempotency', () => {
     beforeEach(() => {
       prisma.companyMember.findUnique.mockResolvedValue({
-        role: "OWNER",
-        status: "active",
+        role: 'OWNER',
+        status: 'active',
       });
       prisma.talentPool.findFirst.mockResolvedValue({
-        id: "pool-1",
-        companyId: "c-1",
+        id: 'pool-1',
+        companyId: 'c-1',
       });
     });
 
-    it("is idempotent — returns existing membership when already present", async () => {
-      const existing = { id: "tpc-1", talentPoolId: "pool-1" };
+    it('is idempotent — returns existing membership when already present', async () => {
+      const existing = { id: 'tpc-1', talentPoolId: 'pool-1' };
       prisma.talentPoolCandidate.findFirst.mockResolvedValue(existing);
 
-      const result = await service.addCandidateToPool("user-1", "c-1", "pool-1", {
-        candidateUserId: "cand-1",
-      });
+      const result = await service.addCandidateToPool(
+        'user-1',
+        'c-1',
+        'pool-1',
+        {
+          candidateUserId: 'cand-1',
+        },
+      );
       expect(result).toBe(existing);
       expect(prisma.talentPoolCandidate.create).not.toHaveBeenCalled();
     });
 
-    it("emits CandidateAddedToTalentPool on new membership", async () => {
+    it('emits CandidateAddedToTalentPool on new membership', async () => {
       prisma.talentPoolCandidate.findFirst.mockResolvedValue(null);
       prisma.talentPoolCandidate.create.mockResolvedValue({
-        id: "tpc-1",
-        talentPoolId: "pool-1",
-        candidateUserId: "cand-1",
+        id: 'tpc-1',
+        talentPoolId: 'pool-1',
+        candidateUserId: 'cand-1',
       });
 
-      await service.addCandidateToPool("user-1", "c-1", "pool-1", {
-        candidateUserId: "cand-1",
+      await service.addCandidateToPool('user-1', 'c-1', 'pool-1', {
+        candidateUserId: 'cand-1',
       });
 
       expect(outbox.emit).toHaveBeenCalledWith(
         prisma,
-        expect.objectContaining({ eventType: "CandidateAddedToTalentPool" }),
+        expect.objectContaining({ eventType: 'CandidateAddedToTalentPool' }),
       );
     });
 
-    it("rejects when pool does not exist", async () => {
+    it('rejects when pool does not exist', async () => {
       prisma.talentPool.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.addCandidateToPool("user-1", "c-1", "pool-1", {
-          candidateUserId: "cand-1",
+        service.addCandidateToPool('user-1', 'c-1', 'pool-1', {
+          candidateUserId: 'cand-1',
         }),
-      ).rejects.toThrow(new NotFoundException("TALENT_POOL_NOT_FOUND"));
+      ).rejects.toThrow(new NotFoundException('TALENT_POOL_NOT_FOUND'));
     });
   });
 });
