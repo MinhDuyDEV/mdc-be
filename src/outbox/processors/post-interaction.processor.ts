@@ -1,6 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../../infra/prisma/prisma.service';
-import { IdempotencyService } from '../idempotency.service';
+import { Injectable, Logger } from "@nestjs/common";
+import { PrismaService } from "../../infra/prisma/prisma.service";
+import { IdempotencyService } from "../idempotency.service";
 
 interface PostCreatedPayload {
   postId: string;
@@ -52,9 +52,7 @@ export class PostInteractionProcessor {
     });
 
     if (!post) {
-      this.logger.warn(
-        `CommentAdded: post ${payload.postId} not found — skipping`,
-      );
+      this.logger.warn(`CommentAdded: post ${payload.postId} not found — skipping`);
       return;
     }
 
@@ -68,18 +66,18 @@ export class PostInteractionProcessor {
 
     const created = await this.insertNotification({
       recipientUserId: post.authorId,
-      eventType: 'CommentAdded',
+      eventType: "CommentAdded",
       aggregateId: payload.postId,
-      type: 'PostCommented',
+      type: "PostCommented",
       payloadJson: payload as unknown as Record<string, unknown>,
-      title: 'New comment on your post',
-      body: 'Someone commented on your post',
+      title: "New comment on your post",
+      body: "Someone commented on your post",
       actionUrl: `/posts/${payload.postId}`,
-      aggregateIdJsonField: 'postId',
+      aggregateIdJsonField: "postId",
     });
 
     this.logger.debug(
-      `CommentAdded: ${created ? 'inserted' : 'skipped'} notification for post author=${post.authorId}`,
+      `CommentAdded: ${created ? "inserted" : "skipped"} notification for post author=${post.authorId}`,
     );
   }
 
@@ -90,9 +88,7 @@ export class PostInteractionProcessor {
     });
 
     if (!post) {
-      this.logger.warn(
-        `ReactionAdded: post ${payload.postId} not found — skipping`,
-      );
+      this.logger.warn(`ReactionAdded: post ${payload.postId} not found — skipping`);
       return;
     }
 
@@ -104,24 +100,22 @@ export class PostInteractionProcessor {
       return;
     }
 
-    const reactionType =
-      payload.type.charAt(0).toUpperCase() +
-      payload.type.slice(1).toLowerCase();
+    const reactionType = payload.type.charAt(0).toUpperCase() + payload.type.slice(1).toLowerCase();
 
     const created = await this.insertNotification({
       recipientUserId: post.authorId,
-      eventType: 'ReactionAdded',
+      eventType: "ReactionAdded",
       aggregateId: payload.postId,
-      type: 'PostLiked',
+      type: "PostLiked",
       payloadJson: payload as unknown as Record<string, unknown>,
       title: `New ${reactionType} on your post`,
       body: `Someone reacted with ${reactionType} on your post`,
       actionUrl: `/posts/${payload.postId}`,
-      aggregateIdJsonField: 'postId',
+      aggregateIdJsonField: "postId",
     });
 
     this.logger.debug(
-      `ReactionAdded: ${created ? 'inserted' : 'skipped'} notification for post author=${post.authorId}`,
+      `ReactionAdded: ${created ? "inserted" : "skipped"} notification for post author=${post.authorId}`,
     );
   }
 
@@ -136,19 +130,32 @@ export class PostInteractionProcessor {
 
     const created = await this.insertNotification({
       recipientUserId: payload.mentionedUserId,
-      eventType: 'MentionCreated',
+      eventType: "MentionCreated",
       aggregateId: payload.postId,
-      type: 'MentionedInPost',
+      type: "MentionedInPost",
       payloadJson: payload as unknown as Record<string, unknown>,
-      title: 'You were mentioned in a post',
-      body: 'Someone mentioned you in their post',
+      title: "You were mentioned in a post",
+      body: "Someone mentioned you in their post",
       actionUrl: `/posts/${payload.postId}`,
-      aggregateIdJsonField: 'postId',
+      aggregateIdJsonField: "postId",
     });
 
     this.logger.debug(
-      `MentionCreated: ${created ? 'inserted' : 'skipped'} notification for mentioned user=${payload.mentionedUserId}`,
+      `MentionCreated: ${created ? "inserted" : "skipped"} notification for mentioned user=${payload.mentionedUserId}`,
     );
+  }
+
+  async processMentionRemoved(payload: MentionCreatedPayload): Promise<void> {
+    // MentionRemoved is currently an analytics/audit signal only.
+    // We do not retract the MentionCreated notification because:
+    //   1. The user was genuinely mentioned at the time the notification
+    //      was sent, and deserves to retain that signal.
+    //   2. Future consumers (analytics, GDPR export reconciliation) may
+    //      subscribe to this event for their own bookkeeping.
+    this.logger.debug(
+      `MentionRemoved: post=${payload.postId} mentionedUser=${payload.mentionedUserId} (no-op — analytics/audit only)`,
+    );
+    await Promise.resolve();
   }
 
   private async insertNotification(opts: {
@@ -164,7 +171,7 @@ export class PostInteractionProcessor {
   }): Promise<boolean> {
     const key = `${opts.recipientUserId}:${opts.eventType}:${opts.aggregateId}`;
 
-    await this.idempotencyService.claim('Notification', key);
+    await this.idempotencyService.claim("Notification", key);
 
     const where: Record<string, unknown> = {
       userId: opts.recipientUserId,
@@ -191,12 +198,10 @@ export class PostInteractionProcessor {
     await this.prisma.notification.create({
       data: {
         userId: opts.recipientUserId,
-        type: opts.type as Parameters<
-          typeof this.prisma.notification.create
-        >[0]['data']['type'],
+        type: opts.type as Parameters<typeof this.prisma.notification.create>[0]["data"]["type"],
         payloadJson: opts.payloadJson as Parameters<
           typeof this.prisma.notification.create
-        >[0]['data']['payloadJson'],
+        >[0]["data"]["payloadJson"],
         title: opts.title,
         body: opts.body,
         actionUrl: opts.actionUrl,

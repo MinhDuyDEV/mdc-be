@@ -3,23 +3,19 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
-} from '@nestjs/common';
-import { PostStatus, PostVisibility } from '@prisma/client';
-import { PrismaService } from '../infra/prisma/prisma.service';
-import { IdempotencyService } from '../outbox/idempotency.service';
-import { OutboxService } from '../outbox/outbox.service';
-import type { CreateCommentDto } from './dto/create-comment.dto';
-import type { CreatePostDto } from './dto/create-post.dto';
-import type { CreateReactionDto } from './dto/create-reaction.dto';
-import type { UpdateCommentDto } from './dto/update-comment.dto';
-import type { UpdatePostDto } from './dto/update-post.dto';
-import { extractHashtags, extractMentions } from './mention-hashtag.util';
-import { PostsPolicyService } from './posts-policy.service';
-import {
-  buildCursorWhere,
-  decodeCursor,
-  paginateRows,
-} from '../common/pagination/cursor';
+} from "@nestjs/common";
+import { PostStatus, PostVisibility } from "@prisma/client";
+import { PrismaService } from "../infra/prisma/prisma.service";
+import { IdempotencyService } from "../outbox/idempotency.service";
+import { OutboxService } from "../outbox/outbox.service";
+import type { CreateCommentDto } from "./dto/create-comment.dto";
+import type { CreatePostDto } from "./dto/create-post.dto";
+import type { CreateReactionDto } from "./dto/create-reaction.dto";
+import type { UpdateCommentDto } from "./dto/update-comment.dto";
+import type { UpdatePostDto } from "./dto/update-post.dto";
+import { extractHashtags, extractMentions } from "./mention-hashtag.util";
+import { PostsPolicyService } from "./posts-policy.service";
+import { buildCursorWhere, decodeCursor, paginateRows } from "../common/pagination/cursor";
 
 const POST_INCLUDE = {
   author: {
@@ -56,8 +52,8 @@ export class PostsService {
     return this.prisma.$transaction(async (tx) => {
       await this.idempotencyService.claim(
         tx,
-        'Post:create',
-        `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? 'PUBLIC'}`,
+        "Post:create",
+        `${userId}:${dto.content.slice(0, 100)}:${dto.visibility ?? "PUBLIC"}`,
       );
 
       const post = await tx.post.create({
@@ -106,8 +102,8 @@ export class PostsService {
             },
           });
           await this.outboxService.emit(tx, {
-            eventType: 'MentionCreated',
-            aggregateType: 'Mention',
+            eventType: "MentionCreated",
+            aggregateType: "Mention",
             aggregateId: post.id,
             payload: {
               postId: post.id,
@@ -119,8 +115,8 @@ export class PostsService {
       }
 
       await this.outboxService.emit(tx, {
-        eventType: 'PostCreated',
-        aggregateType: 'Post',
+        eventType: "PostCreated",
+        aggregateType: "Post",
         aggregateId: post.id,
         payload: {
           postId: post.id,
@@ -139,7 +135,7 @@ export class PostsService {
   async getPost(viewerId: string | undefined, postId: string) {
     const canView = await this.postsPolicy.canViewPost(viewerId, postId);
     if (!canView) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     const post = await this.prisma.post.findUnique({
@@ -148,7 +144,7 @@ export class PostsService {
     });
 
     if (!post || post.deletedAt) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     return post;
@@ -161,11 +157,11 @@ export class PostsService {
     });
 
     if (!post || post.deletedAt) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     if (post.authorId !== userId) {
-      throw new ForbiddenException('Not the post author');
+      throw new ForbiddenException("Not the post author");
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -205,6 +201,26 @@ export class PostsService {
           });
         }
 
+        // Emit MentionRemoved for each existing mention BEFORE deleting them.
+        // This ensures consumers can react to the removal (e.g. retract
+        // notifications, update mention-tracking systems).
+        const existingMentions = await tx.mention.findMany({
+          where: { postId },
+          select: { id: true, mentionedUserId: true, mentionerUserId: true },
+        });
+        for (const m of existingMentions) {
+          await this.outboxService.emit(tx, {
+            eventType: "MentionRemoved",
+            aggregateType: "Mention",
+            aggregateId: m.id,
+            payload: {
+              postId,
+              mentionedUserId: m.mentionedUserId,
+              mentionerUserId: m.mentionerUserId,
+            },
+          });
+        }
+
         await tx.mention.deleteMany({ where: { postId } });
         const mentions = extractMentions(dto.content);
         for (const username of mentions) {
@@ -221,8 +237,8 @@ export class PostsService {
               },
             });
             await this.outboxService.emit(tx, {
-              eventType: 'MentionCreated',
-              aggregateType: 'Mention',
+              eventType: "MentionCreated",
+              aggregateType: "Mention",
               aggregateId: postId,
               payload: {
                 postId,
@@ -234,12 +250,24 @@ export class PostsService {
         }
       }
 
-      await this.outboxService.emit(tx, {
-        eventType: 'PostUpdated',
-        aggregateType: 'Post',
-        aggregateId: postId,
-        payload: { postId, authorId: userId },
-      });
+      // Granular event: PostContentChanged (when content changed) gives
+      // the search indexer a re-index signal; PostUpdated (when only
+      // visibility changed) keeps the generic metadata-update channel.
+      if (dto.content !== undefined) {
+        await this.outboxService.emit(tx, {
+          eventType: "PostContentChanged",
+          aggregateType: "Post",
+          aggregateId: postId,
+          payload: { postId, authorId: userId },
+        });
+      } else {
+        await this.outboxService.emit(tx, {
+          eventType: "PostUpdated",
+          aggregateType: "Post",
+          aggregateId: postId,
+          payload: { postId, authorId: userId },
+        });
+      }
 
       return updated;
     });
@@ -252,11 +280,11 @@ export class PostsService {
     });
 
     if (!post || post.deletedAt) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     if (post.authorId !== userId) {
-      throw new ForbiddenException('Not the post author');
+      throw new ForbiddenException("Not the post author");
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -266,23 +294,18 @@ export class PostsService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'PostDeleted',
-        aggregateType: 'Post',
+        eventType: "PostDeleted",
+        aggregateType: "Post",
         aggregateId: postId,
         payload: { postId, authorId: userId },
       });
     });
   }
 
-  async listComments(
-    viewerId: string | undefined,
-    postId: string,
-    limit: number,
-    cursor?: string,
-  ) {
+  async listComments(viewerId: string | undefined, postId: string, limit: number, cursor?: string) {
     const canView = await this.postsPolicy.canViewPost(viewerId, postId);
     if (!canView) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     const where: Record<string, unknown> = {
@@ -300,7 +323,7 @@ export class PostsService {
 
     const rows = await this.prisma.comment.findMany({
       where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
       include: {
         author: {
@@ -308,7 +331,7 @@ export class PostsService {
         },
         replies: {
           where: { deletedAt: null },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: "asc" },
           include: {
             author: {
               select: { id: true, email: true, displayName: true },
@@ -326,7 +349,7 @@ export class PostsService {
   async createComment(userId: string, postId: string, dto: CreateCommentDto) {
     const canView = await this.postsPolicy.canViewPost(userId, postId);
     if (!canView) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     if (dto.parentId) {
@@ -335,7 +358,7 @@ export class PostsService {
         select: { postId: true, deletedAt: true },
       });
       if (!parent || parent.deletedAt || parent.postId !== postId) {
-        throw new BadRequestException('Invalid parent comment');
+        throw new BadRequestException("Invalid parent comment");
       }
     }
 
@@ -355,8 +378,8 @@ export class PostsService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'CommentAdded',
-        aggregateType: 'Comment',
+        eventType: "CommentAdded",
+        aggregateType: "Comment",
         aggregateId: comment.id,
         payload: {
           commentId: comment.id,
@@ -370,22 +393,18 @@ export class PostsService {
     });
   }
 
-  async updateComment(
-    userId: string,
-    commentId: string,
-    dto: UpdateCommentDto,
-  ) {
+  async updateComment(userId: string, commentId: string, dto: UpdateCommentDto) {
     const comment = await this.prisma.comment.findUnique({
       where: { id: commentId },
       select: { authorId: true, deletedAt: true },
     });
 
     if (!comment || comment.deletedAt) {
-      throw new NotFoundException('Comment not found');
+      throw new NotFoundException("Comment not found");
     }
 
     if (comment.authorId !== userId) {
-      throw new ForbiddenException('Not the comment author');
+      throw new ForbiddenException("Not the comment author");
     }
 
     return this.prisma.comment.update({
@@ -401,7 +420,7 @@ export class PostsService {
     });
 
     if (!comment || comment.deletedAt) {
-      throw new NotFoundException('Comment not found');
+      throw new NotFoundException("Comment not found");
     }
 
     const post = await this.prisma.post.findUnique({
@@ -410,7 +429,7 @@ export class PostsService {
     });
 
     if (comment.authorId !== userId && post?.authorId !== userId) {
-      throw new ForbiddenException('Not authorized');
+      throw new ForbiddenException("Not authorized");
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -429,7 +448,7 @@ export class PostsService {
   async addReaction(userId: string, postId: string, dto: CreateReactionDto) {
     const canView = await this.postsPolicy.canViewPost(userId, postId);
     if (!canView) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     return this.prisma.$transaction(async (tx) => {
@@ -444,8 +463,8 @@ export class PostsService {
           data: { reactionCount: { decrement: 1 } },
         });
         await this.outboxService.emit(tx, {
-          eventType: 'ReactionRemoved',
-          aggregateType: 'Reaction',
+          eventType: "ReactionRemoved",
+          aggregateType: "Reaction",
           aggregateId: existing.id,
           payload: {
             reactionId: existing.id,
@@ -454,7 +473,7 @@ export class PostsService {
             type: dto.type,
           },
         });
-        return { action: 'removed' as const, reaction: null };
+        return { action: "removed" as const, reaction: null };
       }
 
       const otherReaction = await tx.reaction.findFirst({
@@ -467,8 +486,8 @@ export class PostsService {
           data: { type: dto.type },
         });
         await this.outboxService.emit(tx, {
-          eventType: 'ReactionAdded',
-          aggregateType: 'Reaction',
+          eventType: "ReactionAdded",
+          aggregateType: "Reaction",
           aggregateId: updated.id,
           payload: {
             reactionId: updated.id,
@@ -477,7 +496,7 @@ export class PostsService {
             type: dto.type,
           },
         });
-        return { action: 'updated' as const, reaction: updated };
+        return { action: "updated" as const, reaction: updated };
       }
 
       const reaction = await tx.reaction.create({
@@ -490,8 +509,8 @@ export class PostsService {
       });
 
       await this.outboxService.emit(tx, {
-        eventType: 'ReactionAdded',
-        aggregateType: 'Reaction',
+        eventType: "ReactionAdded",
+        aggregateType: "Reaction",
         aggregateId: reaction.id,
         payload: {
           reactionId: reaction.id,
@@ -501,7 +520,7 @@ export class PostsService {
         },
       });
 
-      return { action: 'created' as const, reaction };
+      return { action: "created" as const, reaction };
     });
   }
 
@@ -512,11 +531,11 @@ export class PostsService {
     });
 
     if (!reaction) {
-      throw new NotFoundException('Reaction not found');
+      throw new NotFoundException("Reaction not found");
     }
 
     if (reaction.authorId !== userId) {
-      throw new ForbiddenException('Not your reaction');
+      throw new ForbiddenException("Not your reaction");
     }
 
     await this.prisma.$transaction(async (tx) => {
@@ -526,8 +545,8 @@ export class PostsService {
         data: { reactionCount: { decrement: 1 } },
       });
       await this.outboxService.emit(tx, {
-        eventType: 'ReactionRemoved',
-        aggregateType: 'Reaction',
+        eventType: "ReactionRemoved",
+        aggregateType: "Reaction",
         aggregateId: reactionId,
         payload: {
           reactionId,
@@ -542,7 +561,7 @@ export class PostsService {
   async savePost(userId: string, postId: string) {
     const canView = await this.postsPolicy.canViewPost(userId, postId);
     if (!canView) {
-      throw new NotFoundException('Post not found');
+      throw new NotFoundException("Post not found");
     }
 
     return this.prisma.savedPost.upsert({
