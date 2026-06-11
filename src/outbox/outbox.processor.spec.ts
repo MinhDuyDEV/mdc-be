@@ -51,6 +51,8 @@ describe("OutboxProcessor", () => {
       processApplicationNoteAdded: jest.fn().mockResolvedValue(undefined),
       processRecruiterSeatAllocated: jest.fn().mockResolvedValue(undefined),
       processUserStatusChanged: jest.fn().mockResolvedValue(undefined),
+      processCandidateSaved: jest.fn().mockResolvedValue(undefined),
+      processCandidateAddedToTalentPool: jest.fn().mockResolvedValue(undefined),
     };
     const mockPostInteraction = {
       processPostCreated: jest.fn(),
@@ -479,10 +481,11 @@ describe("OutboxProcessor", () => {
     expect(delay5).toBeLessThanOrEqual(60000);
   });
 
-  describe("Phase 4 event types", () => {
-    const DEFERRED_EVENTS = [
+  describe("Candidate notification routing (Phase B T5)", () => {
+    const CANDIDATE_EVENTS = [
       {
         eventType: "CandidateSaved",
+        method: "processCandidateSaved",
         payload: {
           savedCandidateId: "saved-1",
           companyId: "company-1",
@@ -492,6 +495,7 @@ describe("OutboxProcessor", () => {
       },
       {
         eventType: "CandidateAddedToTalentPool",
+        method: "processCandidateAddedToTalentPool",
         payload: {
           talentPoolCandidateId: "tpc-1",
           talentPoolId: "pool-1",
@@ -501,11 +505,11 @@ describe("OutboxProcessor", () => {
       },
     ] as const;
 
-    it.each(DEFERRED_EVENTS)(
-      "logs deferred handler for $eventType and does not warn (no-handler)",
-      async ({ eventType, payload }) => {
-        const { processor, mockLogger } = createProcessor();
-        const event = { id: "evt-id", eventType, payload, attempts: 0 };
+    it.each(CANDIDATE_EVENTS)(
+      "routes $eventType to notification.$method",
+      async ({ eventType, method, payload }) => {
+        const { processor, mockNotification } = createProcessor();
+        const event = { id: "evt-1", eventType, payload, attempts: 0 };
 
         await (
           processor as unknown as {
@@ -513,14 +517,14 @@ describe("OutboxProcessor", () => {
           }
         ).dispatch(event);
 
-        const debugCalls = mockLogger.debug.mock.calls.map((c: unknown[]) => String(c[0]));
-        expect(debugCalls.some((m) => m.includes("Deferred handler"))).toBe(true);
-
-        const warnCalls = mockLogger.warn.mock.calls.map((c: unknown[]) => String(c[0]));
-        expect(warnCalls.some((m) => m.includes("No handler for event type"))).toBe(false);
+        expect((mockNotification as Record<string, jest.Mock>)[method]).toHaveBeenCalledWith(
+          expect.objectContaining(payload),
+        );
       },
     );
+  });
 
+  describe("Analytics / external actions", () => {
     it("handles ExternalApplyClicked by incrementing job click count", async () => {
       const { processor, mockPrisma, mockLogger } = createProcessor();
       const event = {

@@ -422,10 +422,23 @@ export class OutboxProcessor implements OnApplicationShutdown {
         return;
       }
       case "CandidateSaved":
+        await this.notification.processCandidateSaved(
+          payload as {
+            savedCandidateId: string;
+            companyId: string;
+            candidateUserId: string;
+            savedByUserId: string;
+          },
+        );
+        return;
       case "CandidateAddedToTalentPool":
-        // Deferred to Phase 4: notify candidate via email + in-app notification
-        this.logger.debug(
-          `Deferred handler for ${event.eventType} (id=${event.id}) — candidate notification in Phase 4`,
+        await this.notification.processCandidateAddedToTalentPool(
+          payload as {
+            talentPoolCandidateId: string;
+            talentPoolId: string;
+            companyId: string;
+            candidateUserId: string;
+          },
         );
         return;
       // Posts domain — Phase 6
