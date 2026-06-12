@@ -103,8 +103,8 @@ export class RecruitingPolicyService {
     }
 
     // 4. OPT_IN: candidate's profile is recruitingEligible.
-    const profile = await this.prisma.profile.findUnique({
-      where: { userId: candidateUserId },
+    const profile = await this.prisma.profile.findFirst({
+      where: { userId: candidateUserId, deletedAt: null },
       select: { recruitingEligible: true },
     });
     if (!profile) {

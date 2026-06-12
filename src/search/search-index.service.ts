@@ -404,7 +404,7 @@ export class SearchIndexService {
 
   private async bulkReindexProfiles(targetIndex: string): Promise<number> {
     const profiles = await this.prisma.profile.findMany({
-      where: { visibility: 'PUBLIC' },
+      where: { visibility: 'PUBLIC', deletedAt: null },
       include: {
         user: { select: { displayName: true } },
         skills: { select: { name: true } },

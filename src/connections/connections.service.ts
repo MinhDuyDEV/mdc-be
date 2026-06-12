@@ -22,6 +22,7 @@ const CONNECTION_INCLUDE = {
       id: true,
       email: true,
       profile: {
+        where: { deletedAt: null },
         select: { firstName: true, lastName: true, headline: true },
       },
     },
@@ -31,6 +32,7 @@ const CONNECTION_INCLUDE = {
       id: true,
       email: true,
       profile: {
+        where: { deletedAt: null },
         select: { firstName: true, lastName: true, headline: true },
       },
     },

@@ -27,6 +27,9 @@ const POST_INCLUDE = {
       id: true,
       email: true,
       profile: {
+        // Soft-deleted profiles (moderation REMOVE_CONTENT) must not
+        // surface their headline next to the post.
+        where: { deletedAt: null },
         select: { headline: true },
       },
     },
@@ -154,10 +157,11 @@ export class PostsService {
     return post;
   }
 
+  // fallow-ignore-next-line complexity
   async updatePost(userId: string, postId: string, dto: UpdatePostDto) {
     const post = await this.prisma.post.findUnique({
       where: { id: postId },
-      select: { authorId: true, deletedAt: true },
+      select: { authorId: true, deletedAt: true, content: true },
     });
 
     if (!post || post.deletedAt) {
@@ -167,6 +171,13 @@ export class PostsService {
     if (post.authorId !== userId) {
       throw new ForbiddenException('Not the post author');
     }
+
+    // Detect whether content actually changed (avoid no-op mention churn
+    // and search re-indexing for identical-content PATCHes).
+    const contentChanged =
+      dto.content !== undefined && dto.content !== post.content;
+    // Content is guaranteed to be a string inside the contentChanged block.
+    const newContent = dto.content as string;
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.post.update({
@@ -178,7 +189,7 @@ export class PostsService {
         include: POST_INCLUDE,
       });
 
-      if (dto.content !== undefined) {
+      if (contentChanged) {
         const oldLinks = await tx.postHashtag.findMany({
           where: { postId },
           select: { hashtagId: true },
@@ -193,7 +204,7 @@ export class PostsService {
           }
         }
 
-        const hashtags = extractHashtags(dto.content);
+        const hashtags = extractHashtags(newContent);
         for (const tagName of hashtags) {
           const hashtag = await tx.hashtag.upsert({
             where: { name: tagName },
@@ -205,8 +216,29 @@ export class PostsService {
           });
         }
 
+        // Emit MentionRemoved for each existing mention BEFORE deleting them.
+        // This ensures consumers can react to the removal (e.g. retract
+        // notifications, update mention-tracking systems).
+        const existingMentions = await tx.mention.findMany({
+          where: { postId },
+          select: { id: true, mentionedUserId: true, mentionerUserId: true },
+        });
+        for (const m of existingMentions) {
+          await this.outboxService.emit(tx, {
+            eventType: 'MentionRemoved',
+            aggregateType: 'Mention',
+            aggregateId: postId,
+            payload: {
+              postId,
+              mentionId: m.id,
+              mentionedUserId: m.mentionedUserId,
+              mentionerUserId: m.mentionerUserId,
+            },
+          });
+        }
+
         await tx.mention.deleteMany({ where: { postId } });
-        const mentions = extractMentions(dto.content);
+        const mentions = extractMentions(newContent);
         for (const username of mentions) {
           const mentionedUser = await tx.user.findUnique({
             where: { handle: username },
@@ -234,12 +266,24 @@ export class PostsService {
         }
       }
 
-      await this.outboxService.emit(tx, {
-        eventType: 'PostUpdated',
-        aggregateType: 'Post',
-        aggregateId: postId,
-        payload: { postId, authorId: userId },
-      });
+      // Granular event: PostContentChanged (when content changed) gives
+      // the search indexer a re-index signal; PostUpdated (when only
+      // visibility changed) keeps the generic metadata-update channel.
+      if (contentChanged) {
+        await this.outboxService.emit(tx, {
+          eventType: 'PostContentChanged',
+          aggregateType: 'Post',
+          aggregateId: postId,
+          payload: { postId, authorId: userId },
+        });
+      } else {
+        await this.outboxService.emit(tx, {
+          eventType: 'PostUpdated',
+          aggregateType: 'Post',
+          aggregateId: postId,
+          payload: { postId, authorId: userId },
+        });
+      }
 
       return updated;
     });

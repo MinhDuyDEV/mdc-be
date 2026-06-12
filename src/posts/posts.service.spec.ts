@@ -38,7 +38,11 @@ describe('PostsService', () => {
         deleteMany: jest.fn(),
       },
       postMedia: { createMany: jest.fn() },
-      mention: { create: jest.fn(), deleteMany: jest.fn() },
+      mention: {
+        create: jest.fn(),
+        findMany: jest.fn(),
+        deleteMany: jest.fn(),
+      },
       user: { findUnique: jest.fn(), findFirst: jest.fn() },
       savedPost: { upsert: jest.fn(), updateMany: jest.fn() },
       hiddenPost: {
@@ -163,22 +167,72 @@ describe('PostsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('should update post and emit PostUpdated event', async () => {
+    it('should emit PostContentChanged + MentionRemoved when content changes', async () => {
       prisma.post.findUnique.mockResolvedValue({
         authorId: 'user1',
         deletedAt: null,
       });
       prisma.post.update.mockResolvedValue({ id: 'post1', content: 'new' });
       prisma.postHashtag.findMany.mockResolvedValue([]);
-      prisma.mention.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.mention.findMany.mockResolvedValue([
+        {
+          id: 'm1',
+          postId: 'post1',
+          mentionedUserId: 'user2',
+          mentionerUserId: 'user1',
+        },
+      ]);
+      prisma.mention.deleteMany.mockResolvedValue({ count: 1 });
+      prisma.user.findUnique.mockResolvedValue(null);
 
       await service.updatePost('user1', 'post1', { content: 'new' });
 
       expect(prisma.post.update).toHaveBeenCalled();
       expect(outbox.emit).toHaveBeenCalledWith(
         expect.anything(),
+        expect.objectContaining({
+          eventType: 'MentionRemoved',
+          payload: expect.objectContaining({
+            postId: 'post1',
+            mentionedUserId: 'user2',
+            mentionerUserId: 'user1',
+          }),
+        }),
+      );
+      expect(outbox.emit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ eventType: 'PostContentChanged' }),
+      );
+      expect(outbox.emit).not.toHaveBeenCalledWith(
+        expect.anything(),
         expect.objectContaining({ eventType: 'PostUpdated' }),
       );
+    });
+
+    it('should emit PostUpdated (not PostContentChanged) when only visibility changes', async () => {
+      prisma.post.findUnique.mockResolvedValue({
+        authorId: 'user1',
+        deletedAt: null,
+      });
+      prisma.post.update.mockResolvedValue({
+        id: 'post1',
+        content: 'original',
+        visibility: 'CONNECTIONS_ONLY',
+      });
+
+      await service.updatePost('user1', 'post1', {
+        visibility: 'CONNECTIONS_ONLY' as any,
+      });
+
+      expect(outbox.emit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ eventType: 'PostUpdated' }),
+      );
+      expect(outbox.emit).not.toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ eventType: 'PostContentChanged' }),
+      );
+      expect(prisma.mention.findMany).not.toHaveBeenCalled();
     });
   });
 

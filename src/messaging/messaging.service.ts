@@ -219,6 +219,7 @@ export class MessagingService {
               select: {
                 id: true,
                 profile: {
+                  where: { deletedAt: null },
                   select: { headline: true },
                 },
               },
@@ -268,6 +269,7 @@ export class MessagingService {
               select: {
                 id: true,
                 profile: {
+                  where: { deletedAt: null },
                   select: { headline: true },
                 },
               },
@@ -396,6 +398,11 @@ export class MessagingService {
     const limit = Math.min(query.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
     const where: Record<string, unknown> = {
       conversationId,
+      // Soft-deleted messages (e.g. removed by moderation REMOVE_CONTENT)
+      // are hidden from history reads. The MessageRemoved outbox event
+      // can be consumed by future consumers (analytics, audit) but the
+      // content itself should never resurface to readers.
+      deletedAt: null,
     };
 
     if (query.cursor) {

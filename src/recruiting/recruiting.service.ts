@@ -84,8 +84,9 @@ export class RecruitingService {
     await this.assertEmployerRole(companyId, userId);
 
     // Verify candidate Profile exists and recruitingEligible=true.
-    const profile = await this.prisma.profile.findUnique({
-      where: { userId: dto.candidateUserId },
+    // Filter out soft-deleted profiles (e.g. removed by moderation).
+    const profile = await this.prisma.profile.findFirst({
+      where: { userId: dto.candidateUserId, deletedAt: null },
       select: { recruitingEligible: true },
     });
     if (!profile || !profile.recruitingEligible) {

@@ -23,9 +23,11 @@ export class ModerationPolicyService {
     this.validators = {
       POST: (id) => this.targetExists(this.prisma.post, id),
       COMMENT: (id) => this.targetExists(this.prisma.comment, id),
-      MESSAGE: (id) => this.targetExists(this.prisma.message, id),
-      PROFILE: (id) => this.targetExists(this.prisma.profile, id),
-      COMPANY: (id) => this.targetExists(this.prisma.company, id),
+      // MESSAGE / PROFILE / COMPANY use a soft-deletable existence check
+      // so we cannot re-report (or re-remove) already-removed content.
+      MESSAGE: (id) => this.targetExistsNotDeleted(this.prisma.message, id),
+      PROFILE: (id) => this.targetExistsNotDeleted(this.prisma.profile, id),
+      COMPANY: (id) => this.targetExistsNotDeleted(this.prisma.company, id),
       JOB: (id) => this.targetExists(this.prisma.job, id),
     };
   }
@@ -51,6 +53,30 @@ export class ModerationPolicyService {
   ): Promise<boolean> {
     const record = await delegate.findUnique({
       where: { id },
+      select: { id: true },
+    });
+    return record !== null;
+  }
+
+  /**
+   * Existence check that excludes soft-deleted rows.
+   *
+   * Used for entities that have a `deletedAt` column (Profile, Company,
+   * Message). The where-clause is annotated loosely because Prisma's
+   * delegate types differ across models, but the runtime query is
+   * always `{ id, deletedAt: null }`.
+   */
+  private async targetExistsNotDeleted(
+    delegate: {
+      findFirst(args: {
+        where: { id: string; deletedAt: null };
+        select: { id: true };
+      }): Promise<{ id: string } | null>;
+    },
+    id: string,
+  ): Promise<boolean> {
+    const record = await delegate.findFirst({
+      where: { id, deletedAt: null },
       select: { id: true },
     });
     return record !== null;

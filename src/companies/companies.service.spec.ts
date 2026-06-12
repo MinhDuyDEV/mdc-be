@@ -40,7 +40,9 @@ describe('CompaniesService', () => {
       recruiterSeat: {
         findFirst: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn(),
       },
       memberInvitation: {
         findUnique: jest.fn(),
@@ -297,6 +299,129 @@ describe('CompaniesService', () => {
         mockPrismaValue,
         expect.objectContaining({ eventType: 'CompanyUnfollowed' }),
       );
+    });
+  });
+
+  describe('inviteMember', () => {
+    beforeEach(() => {
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'company-1' });
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: 'm1',
+        role: CompanyRole.ADMIN,
+      });
+      mockPrismaValue.memberInvitation.create.mockResolvedValue({
+        id: 'inv-1',
+        email: 'new@test.com',
+        role: 'MEMBER',
+        token: 'tok-1',
+      });
+    });
+
+    it('writes audit log on invite', async () => {
+      await service.inviteMember('user-1', 'company-1', {
+        email: 'new@test.com',
+        role: 'MEMBER',
+      });
+
+      expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'user-1',
+          action: 'company.member.invite',
+          entityType: 'Company',
+          entityId: 'company-1',
+          metadata: expect.objectContaining({
+            companyId: 'company-1',
+            email: 'new@test.com',
+            role: 'MEMBER',
+          }),
+        }),
+      });
+    });
+  });
+
+  describe('allocateRecruiterSeat', () => {
+    beforeEach(() => {
+      mockPrismaValue.companyEntitlement = {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'ent-1',
+          creditsRemaining: 5,
+          entitlementType: 'recruiter_seats',
+        }),
+      };
+      mockPrismaValue.company.findFirst.mockResolvedValue({ id: 'company-1' });
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: 'm1',
+        role: CompanyRole.ADMIN,
+      });
+      mockPrismaValue.user.findUnique.mockResolvedValue({ id: 'target-1' });
+      mockPrismaValue.recruiterSeat.findFirst.mockResolvedValue({
+        id: 'seat-1',
+        status: 'available',
+      });
+      mockPrismaValue.recruiterSeat.updateMany.mockResolvedValue({ count: 1 });
+      mockPrismaValue.recruiterSeat.findUniqueOrThrow.mockResolvedValue({
+        id: 'seat-1',
+        userId: 'target-1',
+        status: 'allocated',
+        companyId: 'company-1',
+      });
+    });
+
+    it('writes audit log on seat allocation', async () => {
+      await service.allocateRecruiterSeat('user-1', 'company-1', 'target-1');
+
+      expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'user-1',
+          action: 'company.recruiter_seat.allocate',
+          entityType: 'Company',
+          entityId: 'company-1',
+          metadata: expect.objectContaining({
+            companyId: 'company-1',
+            seatId: 'seat-1',
+            recruiterUserId: 'target-1',
+          }),
+        }),
+      });
+    });
+  });
+
+  describe('deallocateRecruiterSeat', () => {
+    beforeEach(() => {
+      mockPrismaValue.companyMember.findUnique.mockResolvedValue({
+        id: 'm1',
+        role: CompanyRole.ADMIN,
+      });
+      mockPrismaValue.recruiterSeat.findUnique.mockResolvedValue({
+        id: 'seat-1',
+        companyId: 'company-1',
+        status: 'allocated',
+        userId: 'target-1',
+      });
+      mockPrismaValue.recruiterSeat.update.mockResolvedValue({
+        id: 'seat-1',
+        status: 'available',
+        userId: null,
+        allocatedAt: null,
+      });
+    });
+
+    it('writes audit log on seat deallocation', async () => {
+      await service.deallocateRecruiterSeat('user-1', 'company-1', 'seat-1');
+
+      expect(mockPrismaValue.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'user-1',
+          action: 'company.recruiter_seat.deallocate',
+          entityType: 'Company',
+          entityId: 'company-1',
+          metadata: expect.objectContaining({
+            companyId: 'company-1',
+            seatId: 'seat-1',
+            previousUserId: 'target-1',
+          }),
+        }),
+      });
     });
   });
 });

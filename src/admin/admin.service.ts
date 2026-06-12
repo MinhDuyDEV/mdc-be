@@ -1,19 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { DeadLetterService } from '../outbox';
+import { OutboxService } from '../outbox/outbox.service';
 import type {
   AdminDeadLetterQueryDto,
   AdminUserQueryDto,
   UpdateUserStatusDto,
   VerifyCompanyDto,
 } from './dto';
+import { assertValidUserStatusTransition } from './user-status.machine';
 
 @Injectable()
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly deadLetter: DeadLetterService,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async listUsers(query: AdminUserQueryDto) {
@@ -38,7 +41,29 @@ export class AdminService {
     dto: UpdateUserStatusDto,
     adminId: string,
   ): Promise<void> {
+    // fallow-ignore-next-line complexity
     await this.prisma.$transaction(async (tx) => {
+      // Read current status so we can validate the transition and
+      // record previousStatus for downstream consumers / auditors.
+      const current = await tx.user.findUnique({
+        where: { id: userId },
+        select: { status: true },
+      });
+      if (!current) {
+        throw new NotFoundException('User not found');
+      }
+
+      // No-op short-circuit: same-status updates write nothing and
+      // emit no event (avoids noisy "transition ACTIVE → ACTIVE"
+      // audit / outbox spam from repeated admin clicks).
+      if (current.status === dto.status) {
+        return;
+      }
+
+      // Validate the transition against the state machine.
+      // Throws BadRequestException for any disallowed edge.
+      assertValidUserStatusTransition(current.status, dto.status);
+
       await tx.user.update({
         where: { id: userId },
         data: { status: dto.status },
@@ -50,7 +75,11 @@ export class AdminService {
           action: 'admin.user.status_change',
           entityType: 'User',
           entityId: userId,
-          metadata: { newStatus: dto.status, reason: dto.reason },
+          metadata: {
+            previousStatus: current.status,
+            newStatus: dto.status,
+            reason: dto.reason ?? null,
+          },
         },
       });
 
@@ -60,6 +89,23 @@ export class AdminService {
           data: { revokedAt: new Date() },
         });
       }
+
+      // Emit domain event so downstream consumers (analytics, audit
+      // pipeline, notification fan-out) can react to status changes.
+      // Note: UserStatus.DELETED can be reached from any status, so
+      // we emit in the same transaction as the user update.
+      await this.outboxService.emit(tx, {
+        eventType: 'UserStatusChanged',
+        aggregateType: 'User',
+        aggregateId: userId,
+        payload: {
+          userId,
+          previousStatus: current.status,
+          newStatus: dto.status,
+          changedBy: adminId,
+          reason: dto.reason ?? null,
+        },
+      });
     });
   }
 

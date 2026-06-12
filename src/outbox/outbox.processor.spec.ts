@@ -50,12 +50,16 @@ describe('OutboxProcessor', () => {
       processApplicationStatusChanged: jest.fn().mockResolvedValue(undefined),
       processApplicationNoteAdded: jest.fn().mockResolvedValue(undefined),
       processRecruiterSeatAllocated: jest.fn().mockResolvedValue(undefined),
+      processUserStatusChanged: jest.fn().mockResolvedValue(undefined),
+      processCandidateSaved: jest.fn().mockResolvedValue(undefined),
+      processCandidateAddedToTalentPool: jest.fn().mockResolvedValue(undefined),
     };
     const mockPostInteraction = {
       processPostCreated: jest.fn(),
       processCommentAdded: jest.fn(),
       processReactionAdded: jest.fn(),
       processMentionCreated: jest.fn(),
+      processMentionRemoved: jest.fn(),
     };
 
     const mockPostSearchIndex = {
@@ -70,6 +74,7 @@ describe('OutboxProcessor', () => {
 
     const mockProfileSearchIndex = {
       processProfileUpdated: jest.fn(),
+      processProfileRemoved: jest.fn(),
     };
     const mockProfileCreation = {
       processUserRegistered: jest.fn().mockResolvedValue(undefined),
@@ -127,6 +132,8 @@ describe('OutboxProcessor', () => {
       mockJobSearchIndex,
       mockApplicationEmail,
       mockNotification,
+      mockPostInteraction,
+      mockPostSearchIndex,
       mockProfileCreation,
       mockMetrics,
       mockLogger,
@@ -501,10 +508,11 @@ describe('OutboxProcessor', () => {
     expect(delay5).toBeLessThanOrEqual(60000);
   });
 
-  describe('Phase 4 event types', () => {
-    const DEFERRED_EVENTS = [
+  describe('Candidate notification routing (Phase B T5)', () => {
+    const CANDIDATE_EVENTS = [
       {
         eventType: 'CandidateSaved',
+        method: 'processCandidateSaved',
         payload: {
           savedCandidateId: 'saved-1',
           companyId: 'company-1',
@@ -514,6 +522,7 @@ describe('OutboxProcessor', () => {
       },
       {
         eventType: 'CandidateAddedToTalentPool',
+        method: 'processCandidateAddedToTalentPool',
         payload: {
           talentPoolCandidateId: 'tpc-1',
           talentPoolId: 'pool-1',
@@ -523,11 +532,11 @@ describe('OutboxProcessor', () => {
       },
     ] as const;
 
-    it.each(DEFERRED_EVENTS)(
-      'logs deferred handler for $eventType and does not warn (no-handler)',
-      async ({ eventType, payload }) => {
-        const { processor, mockLogger } = createProcessor();
-        const event = { id: 'evt-id', eventType, payload, attempts: 0 };
+    it.each(CANDIDATE_EVENTS)(
+      'routes $eventType to notification.$method',
+      async ({ eventType, method, payload }) => {
+        const { processor, mockNotification } = createProcessor();
+        const event = { id: 'evt-1', eventType, payload, attempts: 0 };
 
         await (
           processor as unknown as {
@@ -535,22 +544,14 @@ describe('OutboxProcessor', () => {
           }
         ).dispatch(event);
 
-        const debugCalls = mockLogger.debug.mock.calls.map((c: unknown[]) =>
-          String(c[0]),
-        );
-        expect(debugCalls.some((m) => m.includes('Deferred handler'))).toBe(
-          true,
-        );
-
-        const warnCalls = mockLogger.warn.mock.calls.map((c: unknown[]) =>
-          String(c[0]),
-        );
         expect(
-          warnCalls.some((m) => m.includes('No handler for event type')),
-        ).toBe(false);
+          (mockNotification as Record<string, jest.Mock>)[method],
+        ).toHaveBeenCalledWith(expect.objectContaining(payload));
       },
     );
+  });
 
+  describe('Analytics / external actions', () => {
     it('handles ExternalApplyClicked by incrementing job click count', async () => {
       const { processor, mockPrisma, mockLogger } = createProcessor();
       const event = {
@@ -683,6 +684,81 @@ describe('OutboxProcessor', () => {
 
       expect(mockNotification.processApplicationNoteAdded).toHaveBeenCalledWith(
         expect.objectContaining({ noteId: 'note-1' }),
+      );
+    });
+
+    it('MentionRemoved routes to postInteraction.processMentionRemoved', async () => {
+      const { processor, mockPostInteraction } = createProcessor();
+      const event = {
+        id: 'evt-mr',
+        eventType: 'MentionRemoved',
+        payload: {
+          postId: 'post-1',
+          mentionedUserId: 'user-2',
+          mentionerUserId: 'user-1',
+          mentionId: 'mention-1',
+        },
+        attempts: 0,
+      };
+
+      await (
+        processor as unknown as {
+          dispatch: (e: typeof event) => Promise<void>;
+        }
+      ).dispatch(event);
+
+      expect(mockPostInteraction.processMentionRemoved).toHaveBeenCalledWith(
+        expect.objectContaining({ postId: 'post-1' }),
+      );
+    });
+
+    it('PostContentChanged routes to postSearchIndex.processPostUpdated', async () => {
+      const { processor, mockPostSearchIndex } = createProcessor();
+      const event = {
+        id: 'evt-pcc',
+        eventType: 'PostContentChanged',
+        payload: { postId: 'post-1', authorId: 'user-1' },
+        attempts: 0,
+      };
+
+      await (
+        processor as unknown as {
+          dispatch: (e: typeof event) => Promise<void>;
+        }
+      ).dispatch(event);
+
+      expect(mockPostSearchIndex.processPostUpdated).toHaveBeenCalledWith(
+        expect.objectContaining({ postId: 'post-1' }),
+      );
+    });
+
+    it('UserStatusChanged routes to notification.processUserStatusChanged', async () => {
+      const { processor, mockNotification } = createProcessor();
+      const event = {
+        id: 'evt-usc',
+        eventType: 'UserStatusChanged',
+        payload: {
+          userId: 'user-1',
+          previousStatus: 'ACTIVE',
+          newStatus: 'SUSPENDED',
+          changedBy: 'admin-1',
+          reason: 'spam',
+        },
+        attempts: 0,
+      };
+
+      await (
+        processor as unknown as {
+          dispatch: (e: typeof event) => Promise<void>;
+        }
+      ).dispatch(event);
+
+      expect(mockNotification.processUserStatusChanged).toHaveBeenCalledWith(
+        expect.objectContaining({
+          userId: 'user-1',
+          previousStatus: 'ACTIVE',
+          newStatus: 'SUSPENDED',
+        }),
       );
     });
   });

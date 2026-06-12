@@ -426,6 +426,17 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
+      case 'UserStatusChanged':
+        await this.notification.processUserStatusChanged(
+          payload as {
+            userId: string;
+            previousStatus: string;
+            newStatus: string;
+            changedBy: string;
+            reason?: string | null;
+          },
+        );
+        return;
       case 'ExternalApplyClicked': {
         const { jobId, companyId } = payload as {
           jobId: string;
@@ -441,10 +452,23 @@ export class OutboxProcessor implements OnApplicationShutdown {
         return;
       }
       case 'CandidateSaved':
+        await this.notification.processCandidateSaved(
+          payload as {
+            savedCandidateId: string;
+            companyId: string;
+            candidateUserId: string;
+            savedByUserId: string;
+          },
+        );
+        return;
       case 'CandidateAddedToTalentPool':
-        // Deferred to Phase 4: notify candidate via email + in-app notification
-        this.logger.debug(
-          `Deferred handler for ${event.eventType} (id=${event.id}) — candidate notification in Phase 4`,
+        await this.notification.processCandidateAddedToTalentPool(
+          payload as {
+            talentPoolCandidateId: string;
+            talentPoolId: string;
+            companyId: string;
+            candidateUserId: string;
+          },
         );
         return;
       // Posts domain — Phase 6
@@ -461,6 +485,11 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'PostUpdated':
+        await this.postSearchIndex.processPostUpdated(
+          payload as { postId: string },
+        );
+        return;
+      case 'PostContentChanged':
         await this.postSearchIndex.processPostUpdated(
           payload as { postId: string },
         );
@@ -496,6 +525,32 @@ export class OutboxProcessor implements OnApplicationShutdown {
             mentionedUserId: string;
             mentionerUserId: string;
           },
+        );
+        return;
+      case 'MentionRemoved':
+        await this.postInteraction.processMentionRemoved(
+          payload as {
+            postId: string;
+            mentionedUserId: string;
+            mentionerUserId: string;
+            mentionId: string;
+          },
+        );
+        return;
+      // Moderation domain — Phase B (T4)
+      case 'ProfileRemoved':
+        await this.profileSearchIndex.processProfileRemoved(
+          payload as { profileId: string },
+        );
+        return;
+      case 'CompanyRemoved':
+        this.logger.debug(
+          `CompanyRemoved: company ${(payload as { companyId: string }).companyId} removed (no consumer — deferred)`,
+        );
+        return;
+      case 'MessageRemoved':
+        this.logger.debug(
+          `MessageRemoved: message ${(payload as { messageId: string }).messageId} removed (no consumer — deferred)`,
         );
         return;
       // Messaging domain — Phase 7

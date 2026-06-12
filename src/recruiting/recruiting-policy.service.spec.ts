@@ -8,7 +8,7 @@ interface MockPrisma {
   recruiterSeat: { findMany: jest.Mock };
   application: { findFirst: jest.Mock };
   talentPoolCandidate: { findFirst: jest.Mock };
-  profile: { findUnique: jest.Mock };
+  profile: { findUnique: jest.Mock; findFirst: jest.Mock };
 }
 
 interface MockConnectionsPolicy {
@@ -21,7 +21,10 @@ function buildMockPrisma(): MockPrisma {
     recruiterSeat: { findMany: jest.fn().mockResolvedValue([]) },
     application: { findFirst: jest.fn().mockResolvedValue(null) },
     talentPoolCandidate: { findFirst: jest.fn().mockResolvedValue(null) },
-    profile: { findUnique: jest.fn().mockResolvedValue(null) },
+    profile: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
   };
 }
 
@@ -81,7 +84,7 @@ describe('RecruitingPolicyService', () => {
       prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
       // application.findFirst should be called with status notIn list
       prisma.application.findFirst.mockResolvedValue(null);
-      prisma.profile.findUnique.mockResolvedValue({
+      prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: false,
       });
 
@@ -112,7 +115,7 @@ describe('RecruitingPolicyService', () => {
       prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
       prisma.application.findFirst.mockResolvedValue(null);
       prisma.talentPoolCandidate.findFirst.mockResolvedValue(null);
-      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+      prisma.profile.findFirst.mockResolvedValue({ recruitingEligible: true });
 
       const decision = await service.canMessageCandidate('rec', 'cand');
       expect(decision).toEqual({ allowed: true, reason: 'OPT_IN' });
@@ -120,7 +123,7 @@ describe('RecruitingPolicyService', () => {
 
     it('denies CANDIDATE_NOT_OPTED_IN when profile.recruitingEligible=false', async () => {
       prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
-      prisma.profile.findUnique.mockResolvedValue({
+      prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: false,
       });
 
@@ -133,7 +136,7 @@ describe('RecruitingPolicyService', () => {
 
     it('denies CANDIDATE_NOT_OPTED_IN when profile is missing entirely', async () => {
       prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
-      prisma.profile.findUnique.mockResolvedValue(null);
+      prisma.profile.findFirst.mockResolvedValue(null);
 
       const decision = await service.canMessageCandidate('rec', 'cand');
       expect(decision).toEqual({
@@ -148,7 +151,7 @@ describe('RecruitingPolicyService', () => {
       prisma.companyMember.findMany.mockResolvedValue([{ companyId: 'c-1' }]);
       prisma.application.findFirst.mockResolvedValue(null);
       prisma.talentPoolCandidate.findFirst.mockResolvedValue(null);
-      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+      prisma.profile.findFirst.mockResolvedValue({ recruitingEligible: true });
       connectionsPolicy.isBlocked.mockResolvedValue(true);
 
       const decision = await service.canMessageCandidate('rec', 'cand');
@@ -162,7 +165,7 @@ describe('RecruitingPolicyService', () => {
         { companyId: 'c-admin' },
       ]);
       prisma.recruiterSeat.findMany.mockResolvedValue([]);
-      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+      prisma.profile.findFirst.mockResolvedValue({ recruitingEligible: true });
 
       const decision = await service.canMessageCandidate('rec', 'cand');
       expect(decision.allowed).toBe(true);
@@ -173,7 +176,7 @@ describe('RecruitingPolicyService', () => {
       prisma.recruiterSeat.findMany.mockResolvedValue([
         { companyId: 'c-seat' },
       ]);
-      prisma.profile.findUnique.mockResolvedValue({ recruitingEligible: true });
+      prisma.profile.findFirst.mockResolvedValue({ recruitingEligible: true });
 
       const decision = await service.canMessageCandidate('rec', 'cand');
       expect(decision.allowed).toBe(true);

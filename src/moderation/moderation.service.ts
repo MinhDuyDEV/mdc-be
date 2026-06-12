@@ -233,12 +233,79 @@ export class ModerationService {
           data: { contentStatus: 'HIDDEN' },
         });
         break;
-      case 'PROFILE':
-      case 'COMPANY':
-      case 'MESSAGE':
-        throw new NotImplementedException(
-          `Content removal not supported for entity type ${targetEntity}`,
-        );
+      case 'PROFILE': {
+        const profile = await tx.profile.findUnique({
+          where: { id: targetId },
+          select: { userId: true },
+        });
+        if (!profile) {
+          throw new NotFoundException('Profile not found');
+        }
+        const updated = await tx.profile.updateMany({
+          where: { id: targetId, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        if (updated.count === 0) {
+          // Already soft-deleted — idempotent no-op.
+          return;
+        }
+        await this.outbox.emit(tx, {
+          eventType: 'ProfileRemoved',
+          aggregateType: 'Profile',
+          aggregateId: targetId,
+          payload: { profileId: targetId, userId: profile.userId },
+        });
+        break;
+      }
+      case 'COMPANY': {
+        const company = await tx.company.findUnique({
+          where: { id: targetId },
+          select: { id: true },
+        });
+        if (!company) {
+          throw new NotFoundException('Company not found');
+        }
+        const updated = await tx.company.updateMany({
+          where: { id: targetId, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        if (updated.count === 0) {
+          return;
+        }
+        await this.outbox.emit(tx, {
+          eventType: 'CompanyRemoved',
+          aggregateType: 'Company',
+          aggregateId: targetId,
+          payload: { companyId: targetId },
+        });
+        break;
+      }
+      case 'MESSAGE': {
+        const message = await tx.message.findUnique({
+          where: { id: targetId },
+          select: { conversationId: true },
+        });
+        if (!message) {
+          throw new NotFoundException('Message not found');
+        }
+        const updated = await tx.message.updateMany({
+          where: { id: targetId, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+        if (updated.count === 0) {
+          return;
+        }
+        await this.outbox.emit(tx, {
+          eventType: 'MessageRemoved',
+          aggregateType: 'Message',
+          aggregateId: targetId,
+          payload: {
+            messageId: targetId,
+            conversationId: message.conversationId,
+          },
+        });
+        break;
+      }
       default:
         throw new NotImplementedException(
           `Content removal not supported for entity type ${targetEntity}`,
@@ -271,8 +338,8 @@ export class ModerationService {
         return comment.authorId;
       }
       case 'MESSAGE': {
-        const message = await tx.message.findUnique({
-          where: { id: targetId },
+        const message = await tx.message.findFirst({
+          where: { id: targetId, deletedAt: null },
           select: { senderId: true },
         });
         if (!message)
@@ -280,8 +347,8 @@ export class ModerationService {
         return message.senderId;
       }
       case 'PROFILE': {
-        const profile = await tx.profile.findUnique({
-          where: { id: targetId },
+        const profile = await tx.profile.findFirst({
+          where: { id: targetId, deletedAt: null },
           select: { userId: true },
         });
         if (!profile)

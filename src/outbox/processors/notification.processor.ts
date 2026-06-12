@@ -51,6 +51,20 @@ interface UserBlockedPayload {
   blockedUserId: string;
 }
 
+interface CandidateSavedPayload {
+  savedCandidateId: string;
+  companyId: string;
+  candidateUserId: string;
+  savedByUserId: string;
+}
+
+interface CandidateAddedToTalentPoolPayload {
+  talentPoolCandidateId: string;
+  talentPoolId: string;
+  companyId: string;
+  candidateUserId: string;
+}
+
 type PrismaForRecipients = Pick<
   PrismaService,
   'companyMember' | 'recruiterSeat'
@@ -266,6 +280,80 @@ export class NotificationProcessor {
     );
   }
 
+  /**
+   * Notify a candidate that a recruiter saved their profile.
+   *
+   * Idempotency is provided by `insertNotification` (via the
+   * `aggregateIdJsonField: "savedCandidateId"` dedup key). If the
+   * saved-candidate row has been soft-deleted between emit and
+   * process, we skip — the candidate no longer qualifies for the
+   * notification.
+   */
+  async processCandidateSaved(payload: CandidateSavedPayload): Promise<void> {
+    const saved = await this.prisma.savedCandidate.findFirst({
+      where: { id: payload.savedCandidateId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!saved) {
+      this.logger.debug(
+        `CandidateSaved: saved-candidate ${payload.savedCandidateId} not found or deleted — skipping`,
+      );
+      return;
+    }
+
+    const created = await this.insertNotification({
+      recipientUserId: payload.candidateUserId,
+      eventType: 'CandidateSaved',
+      aggregateId: payload.savedCandidateId,
+      type: 'CandidateSaved',
+      payloadJson: payload as unknown as Record<string, unknown>,
+      title: 'A recruiter saved your profile',
+      body: 'A recruiter has saved your profile',
+      actionUrl: '/recruiting/saved-candidates',
+      aggregateIdJsonField: 'savedCandidateId',
+    });
+
+    this.logger.debug(
+      `CandidateSaved: ${created ? 'inserted' : 'skipped (duplicate)'} notification for candidate=${payload.candidateUserId}`,
+    );
+  }
+
+  /**
+   * Notify a candidate that a recruiter added them to a talent pool.
+   *
+   * Same idempotency / soft-delete guard as `processCandidateSaved`.
+   */
+  async processCandidateAddedToTalentPool(
+    payload: CandidateAddedToTalentPoolPayload,
+  ): Promise<void> {
+    const membership = await this.prisma.talentPoolCandidate.findFirst({
+      where: { id: payload.talentPoolCandidateId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!membership) {
+      this.logger.debug(
+        `CandidateAddedToTalentPool: membership ${payload.talentPoolCandidateId} not found or deleted — skipping`,
+      );
+      return;
+    }
+
+    const created = await this.insertNotification({
+      recipientUserId: payload.candidateUserId,
+      eventType: 'CandidateAddedToTalentPool',
+      aggregateId: payload.talentPoolCandidateId,
+      type: 'CandidateAddedToTalentPool',
+      payloadJson: payload as unknown as Record<string, unknown>,
+      title: 'You were added to a talent pool',
+      body: 'A recruiter added you to a talent pool',
+      actionUrl: '/recruiting/talent-pools',
+      aggregateIdJsonField: 'talentPoolCandidateId',
+    });
+
+    this.logger.debug(
+      `CandidateAddedToTalentPool: ${created ? 'inserted' : 'skipped (duplicate)'} notification for candidate=${payload.candidateUserId}`,
+    );
+  }
+
   async processConnectionRequested(
     payload: ConnectionRequestedPayload,
   ): Promise<void> {
@@ -310,6 +398,22 @@ export class NotificationProcessor {
     // Phase 5 stub: log only, no notification sent to blocked user
     this.logger.debug(
       `UserBlocked: blocker=${payload.blockerUserId}, blocked=${payload.blockedUserId} (Phase 5 stub — no notification)`,
+    );
+    return Promise.resolve();
+  }
+
+  processUserStatusChanged(payload: {
+    userId: string;
+    previousStatus: string;
+    newStatus: string;
+    changedBy: string;
+    reason?: string | null;
+  }): Promise<void> {
+    // No notification is sent to the user themselves when their status
+    // changes (the action is administrative, not user-facing). The event
+    // itself is consumed by analytics and audit consumers.
+    this.logger.debug(
+      `UserStatusChanged: user=${payload.userId} ${payload.previousStatus}→${payload.newStatus} by ${payload.changedBy} (no-op)`,
     );
     return Promise.resolve();
   }

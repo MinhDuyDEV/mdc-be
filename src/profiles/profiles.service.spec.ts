@@ -26,6 +26,7 @@ describe('ProfilesService', () => {
     mockPrismaValue = {
       profile: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -118,12 +119,19 @@ describe('ProfilesService', () => {
         endorsements: [],
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(profile as never);
 
       const result = await service.getOwnProfile(user);
       expect(result).toEqual(profile);
-      expect(prisma.profile.findUnique).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { userId: 'user-123' } }),
+      expect(prisma.profile.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            userId: 'user-123',
+            deletedAt: null,
+          }),
+        }),
       );
     });
 
@@ -150,10 +158,10 @@ describe('ProfilesService', () => {
       };
 
       jest
-        .spyOn(prisma.profile, 'findUnique')
+        .spyOn(prisma.profile, 'findFirst')
         .mockResolvedValueOnce(null)
-        .mockResolvedValue(created);
-      jest.spyOn(prisma.profile, 'create').mockResolvedValue(created);
+        .mockResolvedValue(created as never);
+      jest.spyOn(prisma.profile, 'create').mockResolvedValue(created as never);
 
       const result = await service.getOwnProfile(user);
       expect(result).toEqual(created);
@@ -193,9 +201,11 @@ describe('ProfilesService', () => {
         endorsements: [],
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(existing);
-      jest.spyOn(prisma.profile, 'update').mockResolvedValue(updated);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(final);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profile, 'update').mockResolvedValue(updated as never);
+      jest.spyOn(prisma.profile, 'findFirst').mockResolvedValue(final as never);
 
       const result = await service.updateOwnProfile(user, {
         headline: 'New Headline',
@@ -232,10 +242,10 @@ describe('ProfilesService', () => {
       };
 
       jest
-        .spyOn(prisma.profile, 'findUnique')
+        .spyOn(prisma.profile, 'findFirst')
         .mockResolvedValueOnce(null)
-        .mockResolvedValue(created);
-      jest.spyOn(prisma.profile, 'create').mockResolvedValue(created);
+        .mockResolvedValue(created as never);
+      jest.spyOn(prisma.profile, 'create').mockResolvedValue(created as never);
 
       const result = await service.updateOwnProfile(user, {
         headline: 'Headline',
@@ -264,8 +274,10 @@ describe('ProfilesService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(existing);
-      jest.spyOn(prisma.profile, 'update').mockResolvedValue(existing);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profile, 'update').mockResolvedValue(existing as never);
       jest
         .spyOn(prisma.profileSkill, 'deleteMany')
         .mockResolvedValue({ count: 1 });
@@ -323,8 +335,10 @@ describe('ProfilesService', () => {
         updatedAt: new Date(),
       };
 
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(existing);
-      jest.spyOn(prisma.profile, 'update').mockResolvedValue(existing);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(existing as never);
+      jest.spyOn(prisma.profile, 'update').mockResolvedValue(existing as never);
       jest
         .spyOn(prisma.experience, 'deleteMany')
         .mockResolvedValue({ count: 1 });
@@ -391,7 +405,9 @@ describe('ProfilesService', () => {
         id: 'user-123',
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(profile as never);
 
       const result = await service.getPublicProfile('user-123');
       expect(result).toEqual(
@@ -432,7 +448,9 @@ describe('ProfilesService', () => {
         id: 'user-123',
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(profile as never);
 
       const result = await service.getPublicProfile('user-123');
       expect(result).toEqual(
@@ -476,7 +494,9 @@ describe('ProfilesService', () => {
         id: 'user-123',
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(profile as never);
 
       const result = await service.getPublicProfile('user-123');
       expect(result).toEqual(
@@ -515,7 +535,9 @@ describe('ProfilesService', () => {
         id: 'user-123',
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(profile);
+      jest
+        .spyOn(prisma.profile, 'findFirst')
+        .mockResolvedValue(profile as never);
 
       const currentUser = { id: 'user-123', email: 'test@example.com' };
       const result = await service.getPublicProfile('user-123', currentUser);
@@ -549,7 +571,7 @@ describe('ProfilesService', () => {
         id: 'user-123',
         status: 'ACTIVE',
       } as any);
-      jest.spyOn(prisma.profile, 'findUnique').mockResolvedValue(null);
+      jest.spyOn(prisma.profile, 'findFirst').mockResolvedValue(null);
 
       await expect(service.getPublicProfile('user-123')).rejects.toThrow(
         NotFoundException,

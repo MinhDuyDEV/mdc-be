@@ -5,6 +5,8 @@ interface MockPrisma {
   application: { findUnique: jest.Mock };
   companyMember: { findMany: jest.Mock };
   recruiterSeat: { findMany: jest.Mock; findFirst: jest.Mock };
+  savedCandidate: { findFirst: jest.Mock };
+  talentPoolCandidate: { findFirst: jest.Mock };
   notification: { create: jest.Mock; findFirst: jest.Mock };
 }
 
@@ -26,6 +28,10 @@ function createProcessor() {
     recruiterSeat: {
       findMany: jest.fn().mockResolvedValue([]),
       findFirst: jest.fn(),
+    },
+    savedCandidate: { findFirst: jest.fn().mockResolvedValue({ id: 'sc-1' }) },
+    talentPoolCandidate: {
+      findFirst: jest.fn().mockResolvedValue({ id: 'tpc-1' }),
     },
     notification: {
       create: jest.fn().mockResolvedValue({
@@ -257,6 +263,80 @@ describe('NotificationProcessor', () => {
         'Notification',
         'user-99:RecruiterSeatAllocated:seat-42',
       );
+    });
+  });
+
+  describe('processCandidateSaved', () => {
+    it('inserts a notification for the candidate when the saved row exists', async () => {
+      const { processor, prisma } = createProcessor();
+      prisma.savedCandidate.findFirst.mockResolvedValue({ id: 'sc-1' });
+
+      await processor.processCandidateSaved({
+        savedCandidateId: 'sc-1',
+        companyId: 'company-1',
+        candidateUserId: 'candidate-1',
+        savedByUserId: 'recruiter-1',
+      });
+
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'candidate-1',
+            type: 'CandidateSaved',
+          }),
+        }),
+      );
+    });
+
+    it('skips when the saved-candidate row is missing or soft-deleted', async () => {
+      const { processor, prisma } = createProcessor();
+      prisma.savedCandidate.findFirst.mockResolvedValue(null);
+
+      await processor.processCandidateSaved({
+        savedCandidateId: 'sc-1',
+        companyId: 'company-1',
+        candidateUserId: 'candidate-1',
+        savedByUserId: 'recruiter-1',
+      });
+
+      expect(prisma.notification.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('processCandidateAddedToTalentPool', () => {
+    it('inserts a notification for the candidate when the membership exists', async () => {
+      const { processor, prisma } = createProcessor();
+      prisma.talentPoolCandidate.findFirst.mockResolvedValue({ id: 'tpc-1' });
+
+      await processor.processCandidateAddedToTalentPool({
+        talentPoolCandidateId: 'tpc-1',
+        talentPoolId: 'pool-1',
+        companyId: 'company-1',
+        candidateUserId: 'candidate-1',
+      });
+
+      expect(prisma.notification.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'candidate-1',
+            type: 'CandidateAddedToTalentPool',
+          }),
+        }),
+      );
+    });
+
+    it('skips when the membership is missing or soft-deleted', async () => {
+      const { processor, prisma } = createProcessor();
+      prisma.talentPoolCandidate.findFirst.mockResolvedValue(null);
+
+      await processor.processCandidateAddedToTalentPool({
+        talentPoolCandidateId: 'tpc-1',
+        talentPoolId: 'pool-1',
+        companyId: 'company-1',
+        candidateUserId: 'candidate-1',
+      });
+
+      expect(prisma.notification.create).not.toHaveBeenCalled();
     });
   });
 });

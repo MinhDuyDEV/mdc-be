@@ -43,8 +43,11 @@ export class ProfilesService {
   ) {}
 
   async getOwnProfile(user: AuthenticatedUser) {
-    let profile = await this.prisma.profile.findUnique({
-      where: { userId: user.id },
+    // Filter out soft-deleted profiles (e.g. removed by moderation). A
+    // soft-deleted row is treated as "not present" and triggers the
+    // auto-create path below so the user gets a fresh profile.
+    let profile = await this.prisma.profile.findFirst({
+      where: { userId: user.id, deletedAt: null },
       include: PROFILE_INCLUDES,
     });
 
@@ -69,8 +72,8 @@ export class ProfilesService {
     } = data;
 
     await this.prisma.$transaction(async (tx) => {
-      let profile = await tx.profile.findUnique({
-        where: { userId: user.id },
+      let profile = await tx.profile.findFirst({
+        where: { userId: user.id, deletedAt: null },
       });
 
       if (!profile) {
@@ -106,8 +109,8 @@ export class ProfilesService {
       return profile.id;
     });
 
-    return this.prisma.profile.findUnique({
-      where: { userId: user.id },
+    return this.prisma.profile.findFirst({
+      where: { userId: user.id, deletedAt: null },
       include: PROFILE_INCLUDES,
     });
   }
@@ -128,8 +131,11 @@ export class ProfilesService {
       throw new NotFoundException('User not found');
     }
 
-    const profile = await this.prisma.profile.findUnique({
-      where: { userId: targetUserId },
+    // Soft-deleted profiles (e.g. removed by moderation) are hidden from
+    // public reads. We use findFirst instead of findUnique so the
+    // deletedAt filter is applied to the same query.
+    const profile = await this.prisma.profile.findFirst({
+      where: { userId: targetUserId, deletedAt: null },
       include: PROFILE_INCLUDES,
     });
 

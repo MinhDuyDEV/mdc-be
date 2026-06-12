@@ -5,6 +5,7 @@ describe('ProfileCreationProcessor', () => {
   let prisma: {
     profile: {
       findUnique: jest.Mock;
+      findFirst: jest.Mock;
       create: jest.Mock;
     };
   };
@@ -14,6 +15,7 @@ describe('ProfileCreationProcessor', () => {
     prisma = {
       profile: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         create: jest.fn(),
       },
     };
@@ -23,7 +25,7 @@ describe('ProfileCreationProcessor', () => {
   });
 
   it('creates a profile shell for a new registered user', async () => {
-    prisma.profile.findUnique.mockResolvedValue(null);
+    prisma.profile.findFirst.mockResolvedValue(null);
     prisma.profile.create.mockResolvedValue({ id: 'profile-1' });
 
     await processor.processUserRegistered({
@@ -31,8 +33,8 @@ describe('ProfileCreationProcessor', () => {
       email: 'user@example.com',
     });
 
-    expect(prisma.profile.findUnique).toHaveBeenCalledWith({
-      where: { userId: 'user-1' },
+    expect(prisma.profile.findFirst).toHaveBeenCalledWith({
+      where: { userId: 'user-1', deletedAt: null },
       select: { id: true },
     });
     expect(prisma.profile.create).toHaveBeenCalledWith({
@@ -42,7 +44,7 @@ describe('ProfileCreationProcessor', () => {
   });
 
   it('skips when a profile already exists for the user', async () => {
-    prisma.profile.findUnique.mockResolvedValue({ id: 'profile-1' });
+    prisma.profile.findFirst.mockResolvedValue({ id: 'profile-1' });
 
     await processor.processUserRegistered({
       userId: 'user-1',

@@ -378,6 +378,21 @@ export class CompaniesService {
         },
       });
 
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'company.member.invite',
+          entityType: 'Company',
+          entityId: companyId,
+          metadata: {
+            companyId,
+            email: data.email,
+            role: data.role,
+            invitationId: invitation.id,
+          },
+        },
+      });
+
       await this.outboxService.emit(tx, {
         eventType: 'MemberInvited',
         aggregateType: 'Company',
@@ -575,6 +590,20 @@ export class CompaniesService {
         tx,
       );
 
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'company.recruiter_seat.allocate',
+          entityType: 'Company',
+          entityId: companyId,
+          metadata: {
+            companyId,
+            seatId: seat.id,
+            recruiterUserId: targetUserId,
+          },
+        },
+      });
+
       await this.outboxService.emit(tx, {
         eventType: 'RecruiterSeatAllocated',
         aggregateType: 'Company',
@@ -630,6 +659,16 @@ export class CompaniesService {
           userId: null,
           status: 'available',
           allocatedAt: null,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorUserId: userId,
+          action: 'company.recruiter_seat.deallocate',
+          entityType: 'Company',
+          entityId: companyId,
+          metadata: { companyId, seatId, previousUserId: seat.userId },
         },
       });
 

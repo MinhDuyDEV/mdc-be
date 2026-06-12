@@ -21,8 +21,23 @@ describe('ModerationService', () => {
       moderationAction: { create: jest.fn() },
       post: { update: jest.fn(), findUnique: jest.fn() },
       comment: { findUnique: jest.fn() },
-      message: { findUnique: jest.fn() },
-      profile: { findUnique: jest.fn() },
+      message: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      profile: {
+        findUnique: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      company: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       auditLog: { create: jest.fn() },
       $transaction: jest.fn(),
       $queryRaw: jest.fn(),
@@ -104,6 +119,192 @@ describe('ModerationService', () => {
 
       expect(result.status).toBe('UNDER_REVIEW');
       expect(prisma.$queryRaw).toHaveBeenCalled();
+    });
+  });
+
+  describe('applyContentRemoval for PROFILE / COMPANY / MESSAGE', () => {
+    it('soft-deletes PROFILE and emits ProfileRemoved', async () => {
+      prisma.report.findUnique.mockResolvedValue({
+        id: 'report-1',
+        targetEntity: ReportEntityType.PROFILE,
+        targetId: 'profile-1',
+      });
+      prisma.profile.findUnique.mockResolvedValue({
+        id: 'profile-1',
+        userId: 'user-1',
+        deletedAt: null,
+      });
+
+      await service.applyModerationAction(
+        {
+          reportId: 'report-1',
+          actionType: 'REMOVE_CONTENT',
+          targetEntity: ReportEntityType.PROFILE,
+          targetId: 'profile-1',
+          reason: 'Inappropriate',
+        },
+        'mod-1',
+      );
+
+      expect(prisma.profile.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'profile-1', deletedAt: null },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          eventType: 'ProfileRemoved',
+          payload: expect.objectContaining({
+            profileId: 'profile-1',
+            userId: 'user-1',
+          }),
+        }),
+      );
+      expect(prisma.moderationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actionType: 'REMOVE_CONTENT',
+          }),
+        }),
+      );
+      expect(prisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'report-1' },
+          data: expect.objectContaining({
+            status: 'RESOLVED_ACTIONED',
+          }),
+        }),
+      );
+    });
+
+    it('soft-deletes COMPANY and emits CompanyRemoved', async () => {
+      prisma.report.findUnique.mockResolvedValue({
+        id: 'report-2',
+        targetEntity: ReportEntityType.COMPANY,
+        targetId: 'company-1',
+      });
+      prisma.company.findUnique.mockResolvedValue({
+        id: 'company-1',
+      });
+
+      await service.applyModerationAction(
+        {
+          reportId: 'report-2',
+          actionType: 'REMOVE_CONTENT',
+          targetEntity: ReportEntityType.COMPANY,
+          targetId: 'company-1',
+          reason: 'Spam',
+        },
+        'mod-1',
+      );
+
+      expect(prisma.company.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'company-1', deletedAt: null },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          eventType: 'CompanyRemoved',
+          payload: expect.objectContaining({ companyId: 'company-1' }),
+        }),
+      );
+      expect(prisma.moderationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actionType: 'REMOVE_CONTENT',
+          }),
+        }),
+      );
+      expect(prisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'report-2' },
+          data: expect.objectContaining({
+            status: 'RESOLVED_ACTIONED',
+          }),
+        }),
+      );
+    });
+
+    it('soft-deletes MESSAGE and emits MessageRemoved', async () => {
+      prisma.report.findUnique.mockResolvedValue({
+        id: 'report-3',
+        targetEntity: ReportEntityType.MESSAGE,
+        targetId: 'message-1',
+      });
+      prisma.message.findUnique.mockResolvedValue({
+        id: 'message-1',
+        conversationId: 'conv-1',
+      });
+
+      await service.applyModerationAction(
+        {
+          reportId: 'report-3',
+          actionType: 'REMOVE_CONTENT',
+          targetEntity: ReportEntityType.MESSAGE,
+          targetId: 'message-1',
+          reason: 'Harassment',
+        },
+        'mod-1',
+      );
+
+      expect(prisma.message.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'message-1', deletedAt: null },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({
+          eventType: 'MessageRemoved',
+          payload: expect.objectContaining({
+            messageId: 'message-1',
+            conversationId: 'conv-1',
+          }),
+        }),
+      );
+      expect(prisma.moderationAction.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            actionType: 'REMOVE_CONTENT',
+          }),
+        }),
+      );
+      expect(prisma.report.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'report-3' },
+          data: expect.objectContaining({
+            status: 'RESOLVED_ACTIONED',
+          }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException when PROFILE does not exist', async () => {
+      prisma.report.findUnique.mockResolvedValue({
+        id: 'report-1',
+        targetEntity: ReportEntityType.PROFILE,
+        targetId: 'missing',
+      });
+      prisma.profile.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.applyModerationAction(
+          {
+            reportId: 'report-1',
+            actionType: 'REMOVE_CONTENT',
+            targetEntity: ReportEntityType.PROFILE,
+            targetId: 'missing',
+            reason: 'x',
+          },
+          'mod-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 });

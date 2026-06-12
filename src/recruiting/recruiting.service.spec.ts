@@ -13,7 +13,7 @@ interface MockPrisma {
   company: { findFirst: jest.Mock };
   companyMember: { findUnique: jest.Mock };
   recruiterSeat: { findFirst: jest.Mock };
-  profile: { findUnique: jest.Mock };
+  profile: { findUnique: jest.Mock; findFirst: jest.Mock };
   savedCandidate: {
     findFirst: jest.Mock;
     findMany: jest.Mock;
@@ -40,7 +40,7 @@ function buildMockPrisma(): MockPrisma {
     company: { findFirst: jest.fn().mockResolvedValue({ id: 'c-1' }) },
     companyMember: { findUnique: jest.fn() },
     recruiterSeat: { findFirst: jest.fn() },
-    profile: { findUnique: jest.fn() },
+    profile: { findUnique: jest.fn(), findFirst: jest.fn() },
     savedCandidate: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -136,7 +136,7 @@ describe('RecruitingService', () => {
     });
 
     it('rejects when candidate Profile.recruitingEligible=false', async () => {
-      prisma.profile.findUnique.mockResolvedValue({
+      prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: false,
       });
 
@@ -150,7 +150,7 @@ describe('RecruitingService', () => {
     });
 
     it('is idempotent — returns existing active row', async () => {
-      prisma.profile.findUnique.mockResolvedValue({
+      prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: true,
       });
       const existing = {
@@ -169,7 +169,7 @@ describe('RecruitingService', () => {
     });
 
     it('creates new SavedCandidate, audits, emits CandidateSaved', async () => {
-      prisma.profile.findUnique.mockResolvedValue({
+      prisma.profile.findFirst.mockResolvedValue({
         recruitingEligible: true,
       });
       prisma.savedCandidate.findFirst.mockResolvedValue(null);

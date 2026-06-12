@@ -25,6 +25,7 @@ interface MentionCreatedPayload {
   postId: string;
   mentionedUserId: string;
   mentionerUserId: string;
+  mentionId?: string;
 }
 
 @Injectable()
@@ -149,6 +150,19 @@ export class PostInteractionProcessor {
     this.logger.debug(
       `MentionCreated: ${created ? 'inserted' : 'skipped'} notification for mentioned user=${payload.mentionedUserId}`,
     );
+  }
+
+  processMentionRemoved(payload: MentionCreatedPayload): Promise<void> {
+    // MentionRemoved is currently an analytics/audit signal only.
+    // We do not retract the MentionCreated notification because:
+    //   1. The user was genuinely mentioned at the time the notification
+    //      was sent, and deserves to retain that signal.
+    //   2. Future consumers (analytics, GDPR export reconciliation) may
+    //      subscribe to this event for their own bookkeeping.
+    this.logger.debug(
+      `MentionRemoved: post=${payload.postId} mentionedUser=${payload.mentionedUserId} (no-op — analytics/audit only)`,
+    );
+    return Promise.resolve();
   }
 
   private async insertNotification(opts: {

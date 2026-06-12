@@ -26,8 +26,12 @@ export class ProfileCreationProcessor {
    * Called by the main outbox processor when a UserRegistered event is encountered.
    */
   async processUserRegistered(payload: UserRegisteredPayload): Promise<void> {
-    const existing = await this.prisma.profile.findUnique({
-      where: { userId: payload.userId },
+    // Filter out soft-deleted profiles (e.g. previously removed by
+    // moderation) so we can re-create a fresh shell for the new user.
+    // Without this filter, a soft-deleted row would be returned and
+    // we'd incorrectly skip shell creation.
+    const existing = await this.prisma.profile.findFirst({
+      where: { userId: payload.userId, deletedAt: null },
       select: { id: true },
     });
 

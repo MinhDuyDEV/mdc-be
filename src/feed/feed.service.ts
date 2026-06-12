@@ -21,6 +21,10 @@ const POST_INCLUDE = {
       id: true,
       email: true,
       profile: {
+        // Filter out soft-deleted profiles (e.g. removed by moderation
+        // REMOVE_CONTENT) so readers never see a tombstoned profile's
+        // name/headline alongside the post.
+        where: { deletedAt: null },
         select: { firstName: true, lastName: true, headline: true },
       },
     },

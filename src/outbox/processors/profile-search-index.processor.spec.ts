@@ -1,7 +1,7 @@
 import { ProfileSearchIndexProcessor } from './profile-search-index.processor';
 
 interface MockPrisma {
-  profile: { findUnique: jest.Mock };
+  profile: { findUnique: jest.Mock; findFirst: jest.Mock };
 }
 
 interface MockSearchIndex {
@@ -10,13 +10,14 @@ interface MockSearchIndex {
 }
 
 function createProcessor(overrides?: {
-  findUniqueResult?: Record<string, unknown> | null;
+  findFirstResult?: Record<string, unknown> | null;
 }) {
   const prisma: MockPrisma = {
     profile: {
-      findUnique: jest.fn().mockResolvedValue(
-        overrides?.findUniqueResult !== undefined
-          ? overrides.findUniqueResult
+      findUnique: jest.fn(),
+      findFirst: jest.fn().mockResolvedValue(
+        overrides?.findFirstResult !== undefined
+          ? overrides.findFirstResult
           : {
               id: 'profile-1',
               userId: 'user-1',
@@ -67,7 +68,7 @@ describe('ProfileSearchIndexProcessor', () => {
 
     it('should remove non-public profile from ES', async () => {
       const { processor, searchIndex } = createProcessor({
-        findUniqueResult: {
+        findFirstResult: {
           id: 'profile-1',
           userId: 'user-1',
           visibility: 'PRIVATE',
@@ -94,7 +95,7 @@ describe('ProfileSearchIndexProcessor', () => {
 
     it('should skip when profile not found', async () => {
       const { processor, searchIndex } = createProcessor({
-        findUniqueResult: null,
+        findFirstResult: null,
       });
 
       await processor.processProfileUpdated({

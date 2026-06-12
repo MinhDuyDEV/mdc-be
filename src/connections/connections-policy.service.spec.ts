@@ -53,6 +53,30 @@ describe('ConnectionsPolicyService', () => {
       const result = await service.isBlocked('user-a', 'user-b');
       expect(result).toBe(false);
     });
+
+    it('uses a symmetric OR covering both blocker directions (defensive invariant)', async () => {
+      // Lock the symmetry invariant: any future regression that drops one
+      // direction (e.g. removing the reverse OR) will break this test.
+      prisma.block.findFirst.mockResolvedValue(null);
+      await service.isBlocked('user-a', 'user-b');
+
+      expect(prisma.block.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                blockerId: 'user-a',
+                blockedId: 'user-b',
+              }),
+              expect.objectContaining({
+                blockerId: 'user-b',
+                blockedId: 'user-a',
+              }),
+            ]),
+          }),
+        }),
+      );
+    });
   });
 
   describe('isFollowing', () => {
