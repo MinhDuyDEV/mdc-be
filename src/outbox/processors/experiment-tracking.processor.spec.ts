@@ -45,19 +45,22 @@ describe('ExperimentTrackingProcessor', () => {
     });
   });
 
-  it('handles duplicate key error idempotently', async () => {
-    const prismaError = Object.assign(new Error('Unique violation'), {
-      code: 'P2002',
+  it('allows duplicate rows (append-only analytics)', async () => {
+    // The schema has no @@unique([experimentId, userId]) — a returning
+    // user can be re-bucketed, so duplicate rows are valid. The insert
+    // is unconditional; if the DB ever does throw P2002, it should
+    // propagate (no silent dedup).
+    (prisma.experimentImpression.create as jest.Mock).mockResolvedValue({
+      id: 'impression-1',
     });
-    (prisma.experimentImpression.create as jest.Mock).mockRejectedValue(
-      prismaError,
-    );
 
     await expect(processor.process(mockPayload)).resolves.toBeUndefined();
   });
 
-  it('rethrows non-duplicate errors', async () => {
-    const dbError = new Error('Connection lost');
+  it('rethrows Prisma errors (no silent swallowing)', async () => {
+    const dbError = Object.assign(new Error('Connection lost'), {
+      code: 'P2002',
+    });
     (prisma.experimentImpression.create as jest.Mock).mockRejectedValue(
       dbError,
     );

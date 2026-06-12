@@ -53,8 +53,7 @@ export class PushService {
 
     const androidTokens = devices
       .filter((d) => d.deviceType === 'android')
-      .map((d) => d.deviceToken!)
-      .filter(Boolean);
+      .flatMap((d) => (d.deviceToken !== null ? [d.deviceToken] : []));
 
     const iosDevices = devices.filter((d) => d.deviceType === 'ios');
     const webDevices = devices.filter((d) => d.deviceType === 'web');
@@ -86,13 +85,13 @@ export class PushService {
             });
           }
         } catch (err) {
-          this.logger.error('FCM send failed for user %s: %s', userId, err);
+          this.logger.error({ err, userId }, 'FCM send failed');
           failed += androidTokens.length;
         }
       } else {
         this.logger.debug(
-          'FCM disabled — skipping %d Android device(s)',
-          androidTokens.length,
+          { count: androidTokens.length },
+          'FCM disabled — skipping Android devices',
         );
       }
     }
@@ -103,9 +102,10 @@ export class PushService {
     if (iosDevices.length > 0) {
       if (this.apnsService.isEnabled) {
         for (const device of iosDevices) {
+          if (device.deviceToken === null) continue;
           try {
             const result = await this.apnsService.send(
-              device.deviceToken!,
+              device.deviceToken,
               { title: notification.title, body: notification.body },
               notification.data,
             );
@@ -118,22 +118,18 @@ export class PushService {
                 result.reason === 'BadDeviceToken' ||
                 result.statusCode === 410
               ) {
-                invalidTokens.push(device.deviceToken!);
+                invalidTokens.push(device.deviceToken);
               }
             }
           } catch (err) {
-            this.logger.error(
-              'APNs send failed for device %s: %s',
-              device.id,
-              err,
-            );
+            this.logger.error({ err, deviceId: device.id }, 'APNs send failed');
             failed++;
           }
         }
       } else {
         this.logger.debug(
-          'APNs disabled — skipping %d iOS device(s)',
-          iosDevices.length,
+          { count: iosDevices.length },
+          'APNs disabled — skipping iOS devices',
         );
       }
     }
@@ -143,7 +139,9 @@ export class PushService {
     // ----------------
     if (webDevices.length > 0) {
       if (this.fcmService.isEnabled) {
-        const webTokens = webDevices.map((d) => d.deviceToken!).filter(Boolean);
+        const webTokens = webDevices.flatMap((d) =>
+          d.deviceToken !== null ? [d.deviceToken] : [],
+        );
         try {
           for (let i = 0; i < webTokens.length; i += 100) {
             const batch = webTokens.slice(i, i + 100);
@@ -165,17 +163,13 @@ export class PushService {
             });
           }
         } catch (err) {
-          this.logger.error(
-            'FCM send failed for web devices of user %s: %s',
-            userId,
-            err,
-          );
+          this.logger.error({ err, userId }, 'FCM send failed for web devices');
           failed += webTokens.length;
         }
       } else {
         this.logger.debug(
-          'FCM disabled — skipping %d web device(s)',
-          webDevices.length,
+          { count: webDevices.length },
+          'FCM disabled — skipping web devices',
         );
       }
     }
@@ -189,9 +183,8 @@ export class PushService {
         data: { deviceToken: null },
       });
       this.logger.warn(
-        'Cleaned up %d invalid device token(s) for user %s',
-        invalidTokens.length,
-        userId,
+        { count: invalidTokens.length, userId },
+        'Cleaned up invalid device tokens',
       );
     }
 

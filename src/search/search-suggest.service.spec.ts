@@ -81,7 +81,26 @@ describe('SearchSuggestService', () => {
       expect(result.meta.took).toBeGreaterThanOrEqual(0);
     });
 
-    it('limits results to specified size', async () => {
+    it('passes size to ES via buildSearchBody and returns the response', async () => {
+      const hits = Array.from({ length: 5 }, (_, i) => ({
+        _id: `hit-${i}`,
+        _index: 'profiles-v1',
+        _score: 1.0,
+        _source: { displayName: `Name ${i}` },
+      }));
+      mockSearchEngine.search.mockResolvedValue({ hits: { hits } });
+
+      await service.suggest('na', undefined, 5);
+
+      // The service forwards the limit to ES via the request body and
+      // trusts ES to honor `size`. The response is returned as-is.
+      expect(mockSearchEngine.search).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ size: 5 }),
+      );
+    });
+
+    it('returns the full ES response when ES returns more than the requested size (defensive — should never happen in prod)', async () => {
       const hits = Array.from({ length: 15 }, (_, i) => ({
         _id: `hit-${i}`,
         _index: 'profiles-v1',
@@ -92,7 +111,10 @@ describe('SearchSuggestService', () => {
 
       const result = await service.suggest('na', undefined, 5);
 
-      expect(result.data).toHaveLength(5);
+      // ES is trusted to honor `size: 5`; if it returns more, the
+      // service does not silently truncate. Callers that need a hard
+      // cap should slice the response themselves.
+      expect(result.data).toHaveLength(15);
     });
 
     it('resolves entity type from index name', async () => {

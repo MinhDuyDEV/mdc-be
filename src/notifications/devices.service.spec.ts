@@ -127,17 +127,13 @@ describe('DevicesService', () => {
       const devices = [
         {
           id: 'd1',
-          userId: 'user-1',
           deviceType: 'ios',
-          deviceToken: 'token-1',
           lastSeenAt: new Date('2024-02-01'),
           createdAt: new Date('2024-01-01'),
         },
         {
           id: 'd2',
-          userId: 'user-1',
           deviceType: 'android',
-          deviceToken: 'token-2',
           lastSeenAt: new Date('2024-01-15'),
           createdAt: new Date('2024-01-01'),
         },
@@ -146,16 +142,14 @@ describe('DevicesService', () => {
 
       const result = await service.list('user-1');
 
-      // The mock returns the full row; in production Prisma's `select`
-      // filters out `deviceToken` server-side. This test verifies the
-      // call args (the `select` clause) — the actual filtering is
-      // exercised by integration tests against a real DB.
+      // `userId` and `deviceToken` are filtered server-side: userId is
+      // already known via the JWT, and deviceToken is a secret used
+      // to address the device for push delivery.
       expect(mockPrisma.userDevice.findMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
         orderBy: { lastSeenAt: 'desc' },
         select: {
           id: true,
-          userId: true,
           deviceType: true,
           lastSeenAt: true,
           createdAt: true,

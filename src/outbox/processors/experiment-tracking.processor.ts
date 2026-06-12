@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
 
 export interface ExperimentImpressionPayload {
@@ -8,36 +8,25 @@ export interface ExperimentImpressionPayload {
   timestamp: string;
 }
 
+/**
+ * Append-only analytics: a returning user can be re-bucketed (no
+ * `@@unique([experimentId, userId])` on the schema), so duplicate rows
+ * are valid and the insert is intentionally unconditional. The outbox
+ * processor is still idempotent at the dispatch level — the outbox
+ * row's `status` transition is gated by SKIP LOCKED.
+ */
 @Injectable()
 export class ExperimentTrackingProcessor {
-  private readonly logger = new Logger(ExperimentTrackingProcessor.name);
-
   constructor(private readonly prisma: PrismaService) {}
 
   async process(payload: ExperimentImpressionPayload): Promise<void> {
-    try {
-      await this.prisma.experimentImpression.create({
-        data: {
-          experimentId: payload.experimentId,
-          userId: payload.userId,
-          variant: payload.variant,
-          impressedAt: new Date(payload.timestamp),
-        },
-      });
-    } catch (err: unknown) {
-      // Prisma P2002 = unique constraint violation — idempotent, safe to ignore
-      if (
-        typeof err === 'object' &&
-        err !== null &&
-        'code' in err &&
-        (err as { code: string }).code === 'P2002'
-      ) {
-        this.logger.debug(
-          `Duplicate experiment impression (${payload.experimentId}, ${payload.userId}) — ignoring`,
-        );
-        return;
-      }
-      throw err;
-    }
+    await this.prisma.experimentImpression.create({
+      data: {
+        experimentId: payload.experimentId,
+        userId: payload.userId,
+        variant: payload.variant,
+        impressedAt: new Date(payload.timestamp),
+      },
+    });
   }
 }

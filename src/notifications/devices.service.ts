@@ -3,12 +3,14 @@ import { PrismaService } from '../infra/prisma/prisma.service';
 import type { RegisterDeviceDto } from './dto/device.dto';
 
 /**
- * Public-facing device record. The internal `deviceToken` (a secret) is
- * intentionally excluded to prevent token leakage to clients.
+ * Public-facing device record. Two pieces of internal data are intentionally
+ * excluded:
+ *  - `deviceToken` — a secret used by FCM/APNS to address the device.
+ *  - `userId` — derived from the JWT, not interesting to the caller and
+ *    reduces PII surface in the response.
  */
 export interface DeviceListItem {
   id: string;
-  userId: string;
   deviceType: string;
   lastSeenAt: Date;
   createdAt: Date;
@@ -69,7 +71,8 @@ export class DevicesService {
   /**
    * List all devices registered to a user. Returns a sanitised view —
    * `deviceToken` is omitted because it is a secret that can be used to
-   * send push notifications to the user's device.
+   * send push notifications to the user's device, and `userId` is
+   * omitted because it is already known to the caller via the JWT.
    */
   async list(userId: string): Promise<DeviceListItem[]> {
     const rows = await this.prisma.userDevice.findMany({
@@ -77,7 +80,6 @@ export class DevicesService {
       orderBy: { lastSeenAt: 'desc' },
       select: {
         id: true,
-        userId: true,
         deviceType: true,
         lastSeenAt: true,
         createdAt: true,

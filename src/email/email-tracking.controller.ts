@@ -10,10 +10,14 @@ import {
   Res,
   ParseUUIDPipe,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { Public } from '../common/auth';
 import type { Response } from 'express';
 import { EmailTrackingService } from './email-tracking.service';
 import type { UnsubscribeResponseDto } from './dto/email-tracking.dto';
+
+/** Max length of a valid unsubscribe token (base64url(JSON).base64url(HMAC-SHA256)). */
+const MAX_UNSUBSCRIBE_TOKEN_LENGTH = 4096;
 
 /**
  * CNIL-compliant email tracking and unsubscribe endpoints.
@@ -45,12 +49,13 @@ export class EmailTrackingController {
     @Headers('user-agent') userAgent?: string,
     @Ip() ipAddress?: string,
   ): Buffer {
-    // Fire-and-forget — never block the pixel response on DB
+    // Fire-and-forget: service.recordOpen already swallows expected errors,
+    // but a chained .catch() prevents an unhandled rejection from crashing
+    // the process if the service contract is ever violated (e.g. logger
+    // itself throws, or a future refactor stops swallowing).
     void this.trackingService
       .recordOpen(emailId, userAgent, ipAddress)
-      .catch(() => {
-        /* best-effort */
-      });
+      .catch(() => undefined);
 
     return EmailTrackingService.getPixelGif();
   }
@@ -73,12 +78,11 @@ export class EmailTrackingController {
   ): void {
     const target = this.validateRedirect(redirect);
 
-    // Fire-and-forget — record the click, then redirect.
+    // Fire-and-forget: see note in trackOpen — defensive .catch() to keep
+    // an unhandled rejection from crashing the worker process.
     void this.trackingService
       .recordClick(emailId, target, userAgent, ipAddress)
-      .catch(() => {
-        /* best-effort */
-      });
+      .catch(() => undefined);
 
     res.redirect(302, target);
   }
@@ -115,13 +119,20 @@ export class EmailTrackingController {
    * Optional `reason` query parameter.
    *
    * Token format: `<base64url(JSON{userId, exp})>.<base64url(hmacSha256)>`
+   *
+   * Throttled (60/min) to mitigate DoS / HMAC brute-force.
+   * `:token` length is capped to prevent memory exhaustion via huge strings.
    */
   @Get('unsubscribe/:token')
   @Public()
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
   async unsubscribe(
     @Param('token') token: string,
     @Query('reason') reason?: string,
   ): Promise<UnsubscribeResponseDto> {
+    if (token.length > MAX_UNSUBSCRIBE_TOKEN_LENGTH) {
+      throw new BadRequestException('Invalid unsubscribe token');
+    }
     return this.trackingService.unsubscribe(token, reason);
   }
 }

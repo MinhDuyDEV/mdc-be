@@ -7,7 +7,51 @@ import {
   MaxLength,
   Min,
   MinLength,
+  registerDecorator,
+  type ValidationOptions,
 } from 'class-validator';
+
+export const SUGGEST_ENTITY_TYPES = [
+  'profile',
+  'company',
+  'job',
+  'post',
+] as const;
+export type SuggestEntityType = (typeof SUGGEST_ENTITY_TYPES)[number];
+
+/**
+ * Comma-separated allowlist validator: the value must be a string of
+ * one or more entries from `SUGGEST_ENTITY_TYPES`, optionally separated
+ * by commas (e.g. `"profile"`, `"profile,company"`).
+ */
+function IsCommaSeparatedEntityTypes(validationOptions?: ValidationOptions) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'IsCommaSeparatedEntityTypes',
+      target: object.constructor,
+      propertyName,
+      options: validationOptions,
+      validator: {
+        validate(value: unknown): boolean {
+          if (typeof value !== 'string') return false;
+          const segments = value
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          return (
+            segments.length > 0 &&
+            segments.every((s) =>
+              (SUGGEST_ENTITY_TYPES as readonly string[]).includes(s),
+            )
+          );
+        },
+        defaultMessage(): string {
+          return `type must be a comma-separated list of: ${SUGGEST_ENTITY_TYPES.join(', ')}`;
+        },
+      },
+    });
+  };
+}
 
 export class SuggestQueryDto {
   @IsString()
@@ -17,6 +61,8 @@ export class SuggestQueryDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(50)
+  @IsCommaSeparatedEntityTypes()
   type?: string;
 
   @IsOptional()

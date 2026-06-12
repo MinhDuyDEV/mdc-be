@@ -4,6 +4,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PinoLogger } from 'nestjs-pino';
 import { type Unleash, startUnleash } from 'unleash-client';
 import type { AppConfig } from '../config/app-config';
 
@@ -21,11 +22,15 @@ export class FeatureFlagsService implements OnModuleInit, OnModuleDestroy {
   private readonly apiToken: string;
   private readonly appName: string;
 
-  constructor(config: ConfigService<AppConfig, true>) {
+  constructor(
+    config: ConfigService<AppConfig, true>,
+    private readonly logger: PinoLogger,
+  ) {
     this.enabled = config.get('unleashEnabled', { infer: true });
     this.url = config.get('unleashUrl', { infer: true });
     this.apiToken = config.get('unleashApiToken', { infer: true });
     this.appName = config.get('unleashAppName', { infer: true });
+    this.logger.setContext(FeatureFlagsService.name);
   }
 
   async onModuleInit(): Promise<void> {
@@ -44,9 +49,9 @@ export class FeatureFlagsService implements OnModuleInit, OnModuleDestroy {
       // Fail-closed: if Unleash server is unreachable, the service stays
       // disabled and `isEnabled()` returns false. Surface a loud warning so
       // operators notice the misconfiguration.
-
-      console.warn(
-        `[FeatureFlagsService] Unleash init failed, staying disabled: ${String(error)}`,
+      this.logger.warn(
+        { err: error },
+        'Unleash init failed, staying disabled (fail-closed)',
       );
       this.unleash = null;
     }

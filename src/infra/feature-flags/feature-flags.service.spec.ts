@@ -5,14 +5,26 @@ import type { AppConfig } from '../config/app-config';
 describe('FeatureFlagsService', () => {
   let service: FeatureFlagsService;
   let configGet: jest.Mock;
+  const loggerMock = {
+    setContext: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    trace: jest.fn(),
+    fatal: jest.fn(),
+  };
 
   const buildService = (config: Partial<AppConfig>) => {
     configGet = jest.fn(
       (key: string) => (config as Record<string, unknown>)[key],
     );
-    return new FeatureFlagsService({
-      get: configGet,
-    } as unknown as ConfigService<AppConfig, true>);
+    return new FeatureFlagsService(
+      {
+        get: configGet,
+      } as unknown as ConfigService<AppConfig, true>,
+      loggerMock as any,
+    );
   };
 
   describe('when Unleash is disabled', () => {

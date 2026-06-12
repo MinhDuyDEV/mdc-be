@@ -60,7 +60,10 @@ describe('EmailTrackingController', () => {
       );
     });
 
-    it('should not throw when recordOpen fails (fire-and-forget)', () => {
+    it('should still return GIF when recordOpen rejects (service is expected to swallow internally)', () => {
+      // recordOpen contract: it should never throw — it owns its own try/catch.
+      // The controller's `void` discards the promise; we test that the response
+      // is still a GIF buffer even if a misbehaving service throws.
       trackingService.recordOpen.mockRejectedValue(new Error('DB error'));
 
       const result = controller.trackOpen(
@@ -161,6 +164,13 @@ describe('EmailTrackingController', () => {
         'some-token',
         undefined,
       );
+    });
+
+    it('should reject tokens longer than the cap (DoS mitigation)', async () => {
+      const oversized = 'a'.repeat(4097);
+
+      await expect(controller.unsubscribe(oversized)).rejects.toThrow();
+      expect(trackingService.unsubscribe).not.toHaveBeenCalled();
     });
   });
 });

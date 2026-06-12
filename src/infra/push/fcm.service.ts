@@ -12,6 +12,9 @@ import {
   initializeApp,
   type App,
 } from 'firebase-admin/app';
+
+/** Stable name so test fixtures and prod both reference the same FCM app. */
+const FCM_APP_NAME = 'mdc-fcm';
 import {
   getMessaging,
   type BatchResponse,
@@ -51,11 +54,13 @@ export class FcmService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      // Avoid duplicate initialisation during testing
+      // Use a named app so tests can reference the exact same instance via
+      // `getApp(FCM_APP_NAME)`, and so multiple FCM credentials in the
+      // same process (future-proofing) don't collide.
+      const existing = getApps().find((a) => a.name === FCM_APP_NAME);
       const app: App =
-        getApps().length > 0
-          ? getApps()[0]
-          : initializeApp({ credential: cert(serviceAccountPath) });
+        existing ??
+        initializeApp({ credential: cert(serviceAccountPath) }, FCM_APP_NAME);
       this.messaging = getMessaging(app);
       this.logger.info('FCM initialised');
     } catch (err) {

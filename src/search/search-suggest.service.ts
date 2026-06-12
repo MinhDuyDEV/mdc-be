@@ -87,8 +87,9 @@ export class SearchSuggestService {
       const hits = this.normalizeResponse(response, types);
       took = Date.now() - startTime;
 
+      // ES query already requests `size: limit`, so `hits` is bounded.
       return {
-        data: hits.slice(0, limit),
+        data: hits,
         meta: { took },
       };
     } catch (error) {

@@ -362,8 +362,20 @@ export function validateEnv(env: RawEnv): AppConfig {
     emailTrackingBaseUrl:
       parseOptionalString(env, 'EMAIL_TRACKING_BASE_URL') ||
       'http://localhost:3000',
-    emailUnsubscribeSecret:
-      parseOptionalString(env, 'EMAIL_UNSUBSCRIBE_SECRET') ||
-      'change-me-in-production',
+    // Email unsubscribe HMAC secret. Required in production (otherwise an
+    // attacker could forge unsubscribe tokens for arbitrary userIds).
+    // In dev/test we fall back to a clearly-marked placeholder so local
+    // developers don't have to configure it, but the app refuses to
+    // start in production with the placeholder.
+    emailUnsubscribeSecret: (() => {
+      const provided = parseOptionalString(env, 'EMAIL_UNSUBSCRIBE_SECRET');
+      const isPlaceholder = !provided || provided === 'change-me-in-production';
+      if (isPlaceholder && nodeEnv === 'production') {
+        throw new Error(
+          'EMAIL_UNSUBSCRIBE_SECRET is required in production (used to sign unsubscribe tokens).',
+        );
+      }
+      return provided || 'dev-only-change-me-in-production';
+    })(),
   };
 }
