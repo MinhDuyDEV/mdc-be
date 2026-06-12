@@ -152,7 +152,7 @@ export class PostInteractionProcessor {
     );
   }
 
-  processMentionRemoved(payload: MentionCreatedPayload): void {
+  processMentionRemoved(payload: MentionCreatedPayload): Promise<void> {
     // MentionRemoved is currently an analytics/audit signal only.
     // We do not retract the MentionCreated notification because:
     //   1. The user was genuinely mentioned at the time the notification
@@ -162,6 +162,7 @@ export class PostInteractionProcessor {
     this.logger.debug(
       `MentionRemoved: post=${payload.postId} mentionedUser=${payload.mentionedUserId} (no-op — analytics/audit only)`,
     );
+    return Promise.resolve();
   }
 
   private async insertNotification(opts: {

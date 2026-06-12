@@ -427,7 +427,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'UserStatusChanged':
-        this.notification.processUserStatusChanged(
+        await this.notification.processUserStatusChanged(
           payload as {
             userId: string;
             previousStatus: string;
@@ -528,7 +528,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'MentionRemoved':
-        this.postInteraction.processMentionRemoved(
+        await this.postInteraction.processMentionRemoved(
           payload as {
             postId: string;
             mentionedUserId: string;

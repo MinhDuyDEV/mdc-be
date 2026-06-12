@@ -25,13 +25,19 @@ describe('ModerationService', () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
       profile: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
-      company: { findUnique: jest.fn(), update: jest.fn() },
+      company: {
+        findUnique: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       auditLog: { create: jest.fn() },
       $transaction: jest.fn(),
       $queryRaw: jest.fn(),
@@ -140,9 +146,9 @@ describe('ModerationService', () => {
         'mod-1',
       );
 
-      expect(prisma.profile.update).toHaveBeenCalledWith(
+      expect(prisma.profile.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'profile-1' },
+          where: { id: 'profile-1', deletedAt: null },
           data: expect.objectContaining({ deletedAt: expect.any(Date) }),
         }),
       );
@@ -181,7 +187,6 @@ describe('ModerationService', () => {
       });
       prisma.company.findUnique.mockResolvedValue({
         id: 'company-1',
-        deletedAt: null,
       });
 
       await service.applyModerationAction(
@@ -195,9 +200,9 @@ describe('ModerationService', () => {
         'mod-1',
       );
 
-      expect(prisma.company.update).toHaveBeenCalledWith(
+      expect(prisma.company.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'company-1' },
+          where: { id: 'company-1', deletedAt: null },
           data: expect.objectContaining({ deletedAt: expect.any(Date) }),
         }),
       );
@@ -234,7 +239,6 @@ describe('ModerationService', () => {
       prisma.message.findUnique.mockResolvedValue({
         id: 'message-1',
         conversationId: 'conv-1',
-        deletedAt: null,
       });
 
       await service.applyModerationAction(
@@ -248,9 +252,9 @@ describe('ModerationService', () => {
         'mod-1',
       );
 
-      expect(prisma.message.update).toHaveBeenCalledWith(
+      expect(prisma.message.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'message-1' },
+          where: { id: 'message-1', deletedAt: null },
           data: expect.objectContaining({ deletedAt: expect.any(Date) }),
         }),
       );

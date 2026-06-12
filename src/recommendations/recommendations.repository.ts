@@ -12,7 +12,10 @@ export function decodeScoreCursor(
   try {
     const decoded = JSON.parse(
       Buffer.from(cursor, 'base64').toString('utf8'),
-    ) as { score?: number; id?: string };
+    ) as {
+      score?: number;
+      id?: string;
+    };
     if (typeof decoded?.score !== 'number' || !decoded?.id) return null;
     return { score: decoded.score, id: decoded.id };
   } catch {
@@ -90,7 +93,7 @@ export class RecommendationsRepository {
           sd.mutual_count::float AS score
         FROM second_degree sd
         JOIN users u ON u.id = sd.candidate_id
-        JOIN profiles p ON p.user_id = u.id
+        JOIN profiles p ON p.user_id = u.id AND p.deleted_at IS NULL
         WHERE u.status = 'ACTIVE'
           AND p.visibility IN ('PUBLIC', 'CONNECTIONS_ONLY')
           ${decoded ? Prisma.sql`AND (sd.mutual_count < ${decoded.score} OR (sd.mutual_count = ${decoded.score} AND sd.candidate_id < ${decoded.id}::uuid))` : Prisma.empty}

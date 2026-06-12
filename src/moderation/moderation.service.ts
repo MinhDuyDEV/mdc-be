@@ -236,19 +236,19 @@ export class ModerationService {
       case 'PROFILE': {
         const profile = await tx.profile.findUnique({
           where: { id: targetId },
-          select: { userId: true, deletedAt: true },
+          select: { userId: true },
         });
         if (!profile) {
           throw new NotFoundException('Profile not found');
         }
-        if (profile.deletedAt) {
-          // Idempotent: already removed; nothing to do.
-          return;
-        }
-        await tx.profile.update({
-          where: { id: targetId },
+        const updated = await tx.profile.updateMany({
+          where: { id: targetId, deletedAt: null },
           data: { deletedAt: new Date() },
         });
+        if (updated.count === 0) {
+          // Already soft-deleted — idempotent no-op.
+          return;
+        }
         await this.outbox.emit(tx, {
           eventType: 'ProfileRemoved',
           aggregateType: 'Profile',
@@ -260,18 +260,18 @@ export class ModerationService {
       case 'COMPANY': {
         const company = await tx.company.findUnique({
           where: { id: targetId },
-          select: { deletedAt: true },
+          select: { id: true },
         });
         if (!company) {
           throw new NotFoundException('Company not found');
         }
-        if (company.deletedAt) {
-          return;
-        }
-        await tx.company.update({
-          where: { id: targetId },
+        const updated = await tx.company.updateMany({
+          where: { id: targetId, deletedAt: null },
           data: { deletedAt: new Date() },
         });
+        if (updated.count === 0) {
+          return;
+        }
         await this.outbox.emit(tx, {
           eventType: 'CompanyRemoved',
           aggregateType: 'Company',
@@ -283,18 +283,18 @@ export class ModerationService {
       case 'MESSAGE': {
         const message = await tx.message.findUnique({
           where: { id: targetId },
-          select: { conversationId: true, deletedAt: true },
+          select: { conversationId: true },
         });
         if (!message) {
           throw new NotFoundException('Message not found');
         }
-        if (message.deletedAt) {
-          return;
-        }
-        await tx.message.update({
-          where: { id: targetId },
+        const updated = await tx.message.updateMany({
+          where: { id: targetId, deletedAt: null },
           data: { deletedAt: new Date() },
         });
+        if (updated.count === 0) {
+          return;
+        }
         await this.outbox.emit(tx, {
           eventType: 'MessageRemoved',
           aggregateType: 'Message',
