@@ -41,7 +41,6 @@ export class AuthService {
     private readonly outboxService: OutboxService,
   ) {}
 
-  // fallow-ignore-next-line complexity — intentional retry loop for handle uniqueness
   async register(dto: RegisterDto, ip?: string, userAgent?: string) {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
@@ -59,7 +58,6 @@ export class AuthService {
 
     const passwordHash = await this.passwordService.hash(dto.password);
 
-    // fallow-ignore-next-line complexity — intentional: TOCTOU-safe handle retry inside tx
     const result = await this.prisma.$transaction(async (tx) => {
       // Generate unique handle inside transaction (TOCTOU-safe)
       let user: Awaited<ReturnType<typeof tx.user.create>> | null = null;

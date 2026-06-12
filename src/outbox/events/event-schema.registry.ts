@@ -104,6 +104,36 @@ export const outboxEventSchemas = {
     userId: z.string().nullable(),
     occurredAt: z.string(),
   }),
+  InterviewScheduled: payload.extend({
+    interviewId: z.string(),
+    applicationId: z.string(),
+    companyId: z.string(),
+    scheduledAt: z.string(),
+    scheduledByUserId: z.string(),
+  }),
+  InterviewCompleted: payload.extend({
+    interviewId: z.string(),
+    applicationId: z.string(),
+    companyId: z.string(),
+  }),
+  ScorecardSubmitted: payload.extend({
+    scorecardId: z.string(),
+    interviewId: z.string(),
+    applicationId: z.string(),
+    companyId: z.string(),
+    submittedByUserId: z.string(),
+  }),
+  OfferSent: payload.extend({
+    offerId: z.string(),
+    applicationId: z.string(),
+    companyId: z.string(),
+  }),
+  OfferResponded: payload.extend({
+    offerId: z.string(),
+    applicationId: z.string(),
+    companyId: z.string(),
+    accepted: z.boolean(),
+  }),
   JobClosed: payload.extend({
     jobId: z.string(),
     companyId: z.string(),
@@ -164,6 +194,16 @@ export const outboxEventSchemas = {
     mentionedUserId: z.string(),
     mentionerUserId: z.string(),
   }),
+  MessageEdited: payload.extend({
+    messageId: z.string(),
+    conversationId: z.string(),
+    editorId: z.string(),
+  }),
+  MessageDeleted: payload.extend({
+    messageId: z.string(),
+    conversationId: z.string(),
+    deleterId: z.string(),
+  }),
   MessageSent: payload.extend({
     messageId: z.string(),
     conversationId: z.string(),
@@ -191,6 +231,12 @@ export const outboxEventSchemas = {
   PostUpdated: payload.extend({
     postId: z.string(),
     authorId: z.string(),
+  }),
+  ShareCreated: payload.extend({
+    postId: z.string(),
+    sharedPostId: z.string(),
+    authorId: z.string(),
+    originalAuthorId: z.string(),
   }),
   ProfileUpdated: payload.extend({
     profileId: z.string(),

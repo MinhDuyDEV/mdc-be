@@ -32,7 +32,6 @@ export class EmailProcessor {
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async pollPending(): Promise<void> {
-    // fallow-ignore-next-line complexity — intentional: SMTP send inside FOR UPDATE tx
     const deliveries = await this.prisma.$transaction(async (tx) => {
       const locked: Array<{ id: string }> = await tx.$queryRaw`
         SELECT id FROM email_deliveries

@@ -16,6 +16,8 @@ interface MockService {
   unblockUser: jest.Mock;
   listConnections: jest.Mock;
   listPendingRequests: jest.Mock;
+  getMutualConnections: jest.Mock;
+  getMutualConnectionCount: jest.Mock;
 }
 
 describe('ConnectionsController', () => {
@@ -39,6 +41,8 @@ describe('ConnectionsController', () => {
       unblockUser: jest.fn().mockResolvedValue(undefined),
       listConnections: jest.fn().mockResolvedValue({ data: [], meta: {} }),
       listPendingRequests: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+      getMutualConnections: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+      getMutualConnectionCount: jest.fn().mockResolvedValue(0),
     };
     controller = new ConnectionsController(
       service as unknown as ConnectionsService,
@@ -100,6 +104,8 @@ describe('ConnectionsUsersController', () => {
       unblockUser: jest.fn().mockResolvedValue(undefined),
       listConnections: jest.fn(),
       listPendingRequests: jest.fn(),
+      getMutualConnections: jest.fn().mockResolvedValue({ data: [], meta: {} }),
+      getMutualConnectionCount: jest.fn().mockResolvedValue(0),
     };
     controller = new ConnectionsUsersController(
       service as unknown as ConnectionsService,

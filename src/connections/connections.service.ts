@@ -12,8 +12,9 @@ import { ConnectionsPolicyService } from './connections-policy.service';
 import type { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 import {
   decodeCursor,
-  buildCursorWhere,
+  encodeCursor,
   paginateRows,
+  resolveCursorFilter,
 } from '../common/pagination/cursor';
 
 const CONNECTION_INCLUDE = {
@@ -38,6 +39,14 @@ const CONNECTION_INCLUDE = {
     },
   },
 } as const;
+
+export interface MutualConnectionRow {
+  id: string;
+  firstName: string | null;
+  lastName: string | null;
+  headline: string | null;
+  connectedAt: Date;
+}
 
 @Injectable()
 export class ConnectionsService {
@@ -209,14 +218,7 @@ export class ConnectionsService {
     query: { cursor?: string; limit?: number },
   ) {
     const limit = query.limit ?? 20;
-    let cursorWhere: Prisma.ConnectionWhereInput = {};
-
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.connection.findMany({
       where: {
@@ -243,14 +245,7 @@ export class ConnectionsService {
     query: { cursor?: string; limit?: number },
   ) {
     const limit = query.limit ?? 20;
-    let cursorWhere: Prisma.ConnectionWhereInput = {};
-
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.connection.findMany({
       where: {
@@ -331,6 +326,108 @@ export class ConnectionsService {
       where: { id: follow.id },
       data: { status: FollowStatus.INACTIVE },
     });
+  }
+
+  // ─────────────────────── Mutual connections ─────────────────────────────
+
+  async getMutualConnections(
+    userId: string,
+    targetUserId: string,
+    query: { cursor?: string; limit?: number },
+  ): Promise<{
+    data: MutualConnectionRow[];
+    meta: { nextCursor?: string; hasNextPage: boolean; limit: number };
+  }> {
+    const limit = query.limit ?? 20;
+
+    let cursorWhere = Prisma.empty;
+    if (query.cursor) {
+      const decoded = decodeCursor(query.cursor);
+      if (decoded) {
+        cursorWhere = Prisma.sql`
+          AND (c.created_at < ${decoded.createdAt} OR (c.created_at = ${decoded.createdAt} AND u.id < ${decoded.id}))
+        `;
+      }
+    }
+
+    const rows = await this.prisma.$queryRaw<MutualConnectionRow[]>(
+      Prisma.sql`
+        SELECT
+          u.id,
+          p.first_name AS "firstName",
+          p.last_name AS "lastName",
+          p.headline,
+          c.created_at AS "connectedAt"
+        FROM connections c
+        JOIN users u ON u.id = CASE
+          WHEN c.requester_id = ${userId} THEN c.addressee_id
+          ELSE c.requester_id
+        END
+        LEFT JOIN profiles p ON p.user_id = u.id AND p.deleted_at IS NULL
+        WHERE (c.requester_id = ${userId} OR c.addressee_id = ${userId})
+          AND c.status = 'ACCEPTED'
+          AND u.id IN (
+            SELECT CASE
+              WHEN c2.requester_id = ${targetUserId} THEN c2.addressee_id
+              ELSE c2.requester_id
+            END
+            FROM connections c2
+            WHERE (c2.requester_id = ${targetUserId} OR c2.addressee_id = ${targetUserId})
+              AND c2.status = 'ACCEPTED'
+          )
+          AND u.id <> ${userId}
+          AND u.id <> ${targetUserId}
+          ${cursorWhere}
+        ORDER BY c.created_at DESC, u.id DESC
+        LIMIT ${limit + 1}
+      `,
+    );
+
+    const hasNextPage = rows.length > limit;
+    const items: MutualConnectionRow[] = hasNextPage
+      ? rows.slice(0, limit)
+      : rows;
+    let nextCursor: string | undefined;
+    if (hasNextPage && items.length > 0) {
+      const last = items[items.length - 1];
+      nextCursor = encodeCursor(last.connectedAt, last.id);
+    }
+
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
+  }
+
+  async getMutualConnectionCount(
+    userId: string,
+    targetUserId: string,
+  ): Promise<number> {
+    const rows = await this.prisma.$queryRaw<{ count: bigint }[]>(
+      Prisma.sql`
+        SELECT COUNT(*)::bigint AS count
+        FROM (
+          SELECT u.id
+          FROM connections c
+          JOIN users u ON u.id = CASE
+            WHEN c.requester_id = ${userId} THEN c.addressee_id
+            ELSE c.requester_id
+          END
+          WHERE (c.requester_id = ${userId} OR c.addressee_id = ${userId})
+            AND c.status = 'ACCEPTED'
+            AND u.id IN (
+              SELECT CASE
+                WHEN c2.requester_id = ${targetUserId} THEN c2.addressee_id
+                ELSE c2.requester_id
+              END
+              FROM connections c2
+              WHERE (c2.requester_id = ${targetUserId} OR c2.addressee_id = ${targetUserId})
+                AND c2.status = 'ACCEPTED'
+            )
+            AND u.id <> ${userId}
+            AND u.id <> ${targetUserId}
+        ) sub
+      `,
+    );
+
+    return Number(rows[0]?.count ?? 0);
   }
 
   // ─────────────────────── Blocks ─────────────────────────────────────────

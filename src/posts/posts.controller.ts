@@ -22,6 +22,7 @@ import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { CreatePostDto } from './dto/create-post.dto';
 import { CreateReactionDto } from './dto/create-reaction.dto';
+import { SharePostDto } from './dto/share-post.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
 import { PostsService } from './posts.service';
@@ -71,6 +72,20 @@ export class PostsController {
     @Param('id', ParseUUIDPipe) postId: string,
   ) {
     await this.postsService.deletePost(user.id, postId);
+  }
+
+  // Share / Repost
+  @Post(':id/share')
+  @UseGuards(EmailVerifiedGuard)
+  @VerifiedEmail()
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  async sharePost(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) postId: string,
+    @Body() dto: SharePostDto,
+  ) {
+    return this.postsService.sharePost(user.id, postId, dto);
   }
 
   // Comments

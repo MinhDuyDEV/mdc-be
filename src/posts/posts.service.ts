@@ -11,6 +11,7 @@ import { OutboxService } from '../outbox/outbox.service';
 import type { CreateCommentDto } from './dto/create-comment.dto';
 import type { CreatePostDto } from './dto/create-post.dto';
 import type { CreateReactionDto } from './dto/create-reaction.dto';
+import type { SharePostDto } from './dto/share-post.dto';
 import type { UpdateCommentDto } from './dto/update-comment.dto';
 import type { UpdatePostDto } from './dto/update-post.dto';
 import { extractHashtags, extractMentions } from './mention-hashtag.util';
@@ -134,6 +135,57 @@ export class PostsService {
 
       return tx.post.findUniqueOrThrow({
         where: { id: post.id },
+        include: POST_INCLUDE,
+      });
+    });
+  }
+
+  async sharePost(userId: string, postId: string, dto: SharePostDto) {
+    const originalPost = await this.prisma.post.findUnique({
+      where: { id: postId },
+      select: { id: true, authorId: true, deletedAt: true, visibility: true },
+    });
+
+    if (!originalPost || originalPost.deletedAt) {
+      throw new NotFoundException('Post not found');
+    }
+
+    const canView = await this.postsPolicy.canViewPost(userId, postId);
+    if (!canView) {
+      throw new NotFoundException('Post not found');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const shared = await tx.post.create({
+        data: {
+          authorId: userId,
+          content: dto.content ?? '',
+          sharedPostId: postId,
+          visibility: PostVisibility.PUBLIC,
+          status: PostStatus.PUBLISHED,
+        },
+        include: POST_INCLUDE,
+      });
+
+      await tx.post.update({
+        where: { id: postId },
+        data: { shareCount: { increment: 1 } },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'ShareCreated',
+        aggregateType: 'Post',
+        aggregateId: shared.id,
+        payload: {
+          postId: shared.id,
+          sharedPostId: postId,
+          authorId: userId,
+          originalAuthorId: originalPost.authorId,
+        },
+      });
+
+      return tx.post.findUniqueOrThrow({
+        where: { id: shared.id },
         include: POST_INCLUDE,
       });
     });

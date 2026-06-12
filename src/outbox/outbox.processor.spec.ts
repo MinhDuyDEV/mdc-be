@@ -35,6 +35,9 @@ describe('OutboxProcessor', () => {
       processCompanyCreated: jest.fn().mockResolvedValue(undefined),
       processCompanyUpdated: jest.fn().mockResolvedValue(undefined),
     };
+    const mockJobAlertProcessor = {
+      processJobPublished: jest.fn().mockResolvedValue(undefined),
+    };
     const mockJobSearchIndex = {
       processJobCreated: jest.fn().mockResolvedValue(undefined),
       processJobUpdated: jest.fn().mockResolvedValue(undefined),
@@ -86,6 +89,13 @@ describe('OutboxProcessor', () => {
     const mockSubscriptionProcessor = {
       createFreeSubscription: jest.fn().mockResolvedValue(undefined),
     };
+    const mockRecruitingProcessor = {
+      processInterviewScheduled: jest.fn().mockResolvedValue(undefined),
+      processInterviewCompleted: jest.fn().mockResolvedValue(undefined),
+      processScorecardSubmitted: jest.fn().mockResolvedValue(undefined),
+      processOfferSent: jest.fn().mockResolvedValue(undefined),
+      processOfferResponded: jest.fn().mockResolvedValue(undefined),
+    };
     const mockRealtimeGateway = {
       pushNotification: jest.fn(),
     };
@@ -109,6 +119,7 @@ describe('OutboxProcessor', () => {
       mockConfig as any,
       mockDeadLetter as any,
       mockCompanySearchIndex as any,
+      mockJobAlertProcessor as any,
       mockJobSearchIndex as any,
       mockApplicationEmail as any,
       mockNotification as any,
@@ -119,6 +130,7 @@ describe('OutboxProcessor', () => {
       mockProfileSearchIndex as any,
       mockBillingProcessor as any,
       mockSubscriptionProcessor as any,
+      mockRecruitingProcessor as any,
       mockMetrics as any,
       mockRealtimeGateway as any,
       mockLogger as any,

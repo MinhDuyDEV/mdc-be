@@ -189,4 +189,26 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       .to(`conversation:${conversationId}`)
       .emit('message:new', message);
   }
+
+  // Called by MessagingProcessor when a message is edited (Gap 2)
+  pushMessageEdited(
+    conversationId: string,
+    messageId: string,
+    editorId: string,
+  ) {
+    this.server
+      .to(`conversation:${conversationId}`)
+      .emit('message:edited', { messageId, conversationId, editorId });
+  }
+
+  // Called by MessagingProcessor when a message is soft-deleted (Gap 2)
+  pushMessageDeleted(
+    conversationId: string,
+    messageId: string,
+    deleterId: string,
+  ) {
+    this.server
+      .to(`conversation:${conversationId}`)
+      .emit('message:deleted', { messageId, conversationId, deleterId });
+  }
 }

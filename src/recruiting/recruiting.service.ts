@@ -18,11 +18,11 @@ import type {
   CreateTalentPoolDto,
   UpdateTalentPoolDto,
 } from './dto/talent-pool.dto';
-import {
-  buildCursorWhere,
-  decodeCursor,
-  paginateRows,
-} from '../common/pagination/cursor';
+import type { ScheduleInterviewDto } from './dto/schedule-interview.dto';
+import type { UpdateInterviewDto } from './dto/update-interview.dto';
+import type { SubmitScorecardDto } from './dto/submit-scorecard.dto';
+import type { CreateOfferDto } from './dto/create-offer.dto';
+import { paginateRows, resolveCursorFilter } from '../common/pagination/cursor';
 
 /**
  * Recruiting domain service.
@@ -171,13 +171,7 @@ export class RecruitingService {
     await this.assertEmployerRole(companyId, userId);
     const limit = query.limit ?? 20;
 
-    let cursorWhere: Prisma.SavedCandidateWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.savedCandidate.findMany({
       where: { AND: [{ companyId, deletedAt: null }, cursorWhere] },
@@ -187,7 +181,7 @@ export class RecruitingService {
 
     const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasMore: hasNextPage } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   // ─────────────────────── Talent pools ───────────────────────────────────
@@ -358,6 +352,389 @@ export class RecruitingService {
     await this.prisma.talentPoolCandidate.update({
       where: { id: existing.id },
       data: { deletedAt: new Date() },
+    });
+  }
+
+  // ─────────────────────── Interview Scheduling (W2-T9) ──────────────────
+
+  async scheduleInterview(
+    userId: string,
+    companyId: string,
+    dto: ScheduleInterviewDto,
+  ) {
+    await this.assertEmployerRole(companyId, userId);
+
+    // Verify application exists and belongs to company
+    const application = await this.prisma.application.findFirst({
+      where: { id: dto.applicationId, job: { companyId } },
+      select: { id: true },
+    });
+    if (!application) {
+      throw new NotFoundException('APPLICATION_NOT_FOUND');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const interview = await tx.interview.create({
+        data: {
+          applicationId: dto.applicationId,
+          companyId,
+          scheduledAt: new Date(dto.scheduledAt),
+          durationMinutes: dto.durationMinutes ?? 60,
+          location: dto.location ?? null,
+          meetingUrl: dto.meetingUrl ?? null,
+          notes: dto.notes ?? null,
+          status: 'SCHEDULED',
+        },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'InterviewScheduled',
+        aggregateType: 'Interview',
+        aggregateId: interview.id,
+        payload: {
+          interviewId: interview.id,
+          applicationId: dto.applicationId,
+          companyId,
+          scheduledAt: dto.scheduledAt,
+          scheduledByUserId: userId,
+        },
+      });
+
+      return interview;
+    });
+  }
+
+  async updateInterview(
+    userId: string,
+    companyId: string,
+    interviewId: string,
+    dto: UpdateInterviewDto,
+  ) {
+    await this.assertEmployerRole(companyId, userId);
+
+    const interview = await this.prisma.interview.findFirst({
+      where: { id: interviewId, companyId },
+      select: { id: true, applicationId: true, status: true },
+    });
+    if (!interview) {
+      throw new NotFoundException('INTERVIEW_NOT_FOUND');
+    }
+
+    const data: Prisma.InterviewUpdateInput = {};
+    if (dto.scheduledAt !== undefined) {
+      data.scheduledAt = new Date(dto.scheduledAt);
+    }
+    if (dto.durationMinutes !== undefined) {
+      data.durationMinutes = dto.durationMinutes;
+    }
+    if (dto.location !== undefined) {
+      data.location = dto.location;
+    }
+    if (dto.meetingUrl !== undefined) {
+      data.meetingUrl = dto.meetingUrl;
+    }
+    if (dto.notes !== undefined) {
+      data.notes = dto.notes;
+    }
+    if (dto.status !== undefined) {
+      data.status = dto.status as
+        | 'SCHEDULED'
+        | 'COMPLETED'
+        | 'CANCELLED'
+        | 'NO_SHOW';
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.interview.update({
+        where: { id: interviewId },
+        data,
+      });
+
+      // Emit InterviewCompleted if status changed to COMPLETED
+      if (dto.status === 'COMPLETED' && interview.status !== 'COMPLETED') {
+        await this.outboxService.emit(tx, {
+          eventType: 'InterviewCompleted',
+          aggregateType: 'Interview',
+          aggregateId: interviewId,
+          payload: {
+            interviewId,
+            applicationId: interview.applicationId,
+            companyId,
+          },
+        });
+      }
+
+      return updated;
+    });
+  }
+
+  async addInterviewer(
+    userId: string,
+    companyId: string,
+    interviewId: string,
+    targetUserId: string,
+  ) {
+    await this.assertEmployerRole(companyId, userId);
+
+    const interview = await this.prisma.interview.findFirst({
+      where: { id: interviewId, companyId },
+      select: { id: true },
+    });
+    if (!interview) {
+      throw new NotFoundException('INTERVIEW_NOT_FOUND');
+    }
+
+    // Idempotent: check if already exists
+    const existing = await this.prisma.interviewer.findUnique({
+      where: {
+        interviewId_userId: { interviewId, userId: targetUserId },
+      },
+    });
+    if (existing) return existing;
+
+    return this.prisma.interviewer.create({
+      data: {
+        interviewId,
+        userId: targetUserId,
+      },
+    });
+  }
+
+  async listInterviews(
+    userId: string,
+    companyId: string,
+    query: { cursor?: string; limit?: number; applicationId?: string },
+  ) {
+    await this.assertEmployerRole(companyId, userId);
+    const limit = query.limit ?? 20;
+
+    const andClauses: Prisma.InterviewWhereInput[] = [{ companyId }];
+
+    if (query.applicationId) {
+      andClauses.push({ applicationId: query.applicationId });
+    }
+
+    const cursorWhere = resolveCursorFilter(query.cursor);
+
+    const rows = await this.prisma.interview.findMany({
+      where: { AND: [...andClauses, cursorWhere] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: { interviewers: true },
+    });
+
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
+  }
+
+  // ─────────────────────── Scorecard System (W2-T10) ─────────────────────
+
+  async submitScorecard(
+    userId: string,
+    companyId: string,
+    dto: SubmitScorecardDto,
+  ) {
+    await this.assertEmployerRole(companyId, userId);
+
+    // Verify interview exists and belongs to company
+    const interview = await this.prisma.interview.findFirst({
+      where: { id: dto.interviewId, companyId },
+      select: { id: true, applicationId: true },
+    });
+    if (!interview) {
+      throw new NotFoundException('INTERVIEW_NOT_FOUND');
+    }
+
+    // Verify user is an interviewer for this interview
+    const interviewer = await this.prisma.interviewer.findFirst({
+      where: { interviewId: dto.interviewId, userId },
+      select: { id: true },
+    });
+    if (!interviewer) {
+      throw new ForbiddenException('USER_NOT_INTERVIEWER');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const scorecard = await tx.scorecard.create({
+        data: {
+          interviewId: dto.interviewId,
+          applicationId: interview.applicationId,
+          companyId,
+          overallRating: dto.overallRating,
+          recommendation: dto.recommendation,
+          notes: dto.notes,
+          submittedByUserId: userId,
+          sections: {
+            create: dto.sections.map((s) => ({
+              name: s.name,
+              rating: s.rating,
+              notes: s.notes ?? null,
+            })),
+          },
+        },
+        include: { sections: true },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'ScorecardSubmitted',
+        aggregateType: 'Scorecard',
+        aggregateId: scorecard.id,
+        payload: {
+          scorecardId: scorecard.id,
+          interviewId: dto.interviewId,
+          applicationId: interview.applicationId,
+          companyId,
+          submittedByUserId: userId,
+        },
+      });
+
+      return scorecard;
+    });
+  }
+
+  async listScorecards(
+    userId: string,
+    companyId: string,
+    query: {
+      cursor?: string;
+      limit?: number;
+      interviewId?: string;
+      applicationId?: string;
+    },
+  ) {
+    await this.assertEmployerRole(companyId, userId);
+    const limit = query.limit ?? 20;
+
+    const andClauses: Prisma.ScorecardWhereInput[] = [{ companyId }];
+
+    if (query.interviewId) {
+      andClauses.push({ interviewId: query.interviewId });
+    }
+    if (query.applicationId) {
+      andClauses.push({ applicationId: query.applicationId });
+    }
+
+    const cursorWhere = resolveCursorFilter(query.cursor);
+
+    const rows = await this.prisma.scorecard.findMany({
+      where: { AND: [...andClauses, cursorWhere] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+      include: { sections: true },
+    });
+
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
+  }
+
+  // ─────────────────────── Offer Workflow (W2-T11) ───────────────────────
+
+  async createOffer(userId: string, companyId: string, dto: CreateOfferDto) {
+    await this.assertEmployerRole(companyId, userId);
+
+    // Verify application exists and belongs to company
+    const application = await this.prisma.application.findFirst({
+      where: { id: dto.applicationId, job: { companyId } },
+      select: { id: true },
+    });
+    if (!application) {
+      throw new NotFoundException('APPLICATION_NOT_FOUND');
+    }
+
+    return this.prisma.offer.create({
+      data: {
+        applicationId: dto.applicationId,
+        companyId,
+        position: dto.position,
+        salaryAmount: dto.salaryAmount,
+        currency: dto.currency ?? 'USD',
+        startDate: new Date(dto.startDate),
+        expiresAt: new Date(dto.expiresAt),
+        notes: dto.notes ?? null,
+        status: 'DRAFT',
+      },
+    });
+  }
+
+  async sendOffer(userId: string, companyId: string, offerId: string) {
+    await this.assertEmployerRole(companyId, userId);
+
+    const offer = await this.prisma.offer.findFirst({
+      where: { id: offerId, companyId },
+      select: { id: true, status: true, applicationId: true },
+    });
+    if (!offer) {
+      throw new NotFoundException('OFFER_NOT_FOUND');
+    }
+    if (offer.status !== 'DRAFT') {
+      throw new ConflictException('OFFER_NOT_DRAFT');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.offer.update({
+        where: { id: offerId },
+        data: { status: 'SENT' },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'OfferSent',
+        aggregateType: 'Offer',
+        aggregateId: offerId,
+        payload: {
+          offerId,
+          applicationId: offer.applicationId,
+          companyId,
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  async respondToOffer(userId: string, offerId: string, accepted: boolean) {
+    const newStatus = accepted ? 'ACCEPTED' : 'REJECTED';
+
+    return this.prisma.$transaction(async (tx) => {
+      // Read offer + verify candidate inside transaction to prevent TOCTOU race
+      const offer = await tx.offer.findFirst({
+        where: {
+          id: offerId,
+          status: 'SENT',
+          application: { userId },
+        },
+        select: { id: true, applicationId: true, companyId: true },
+      });
+
+      if (!offer) {
+        throw new NotFoundException('OFFER_NOT_FOUND_OR_NOT_SENT');
+      }
+
+      const updated = await tx.offer.update({
+        where: { id: offerId, status: 'SENT' },
+        data: { status: newStatus },
+      });
+
+      // Update application status accordingly (only if currently in a valid state)
+      await tx.application.update({
+        where: { id: offer.applicationId },
+        data: { status: accepted ? 'ACCEPTED' : 'REJECTED' },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'OfferResponded',
+        aggregateType: 'Offer',
+        aggregateId: offerId,
+        payload: {
+          offerId,
+          applicationId: offer.applicationId,
+          companyId: offer.companyId,
+          accepted,
+        },
+      });
+
+      return updated;
     });
   }
 }

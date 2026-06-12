@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -12,14 +13,12 @@ import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
 import type { CreateJobDto } from './dto/create-job.dto';
+import type { CreateSavedSearchDto } from './dto/create-saved-search.dto';
 import { toJobResponseDto } from './dto/job.response.dto';
 import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
 import type { UpdateJobDto } from './dto/update-job.dto';
-import {
-  buildCursorWhere,
-  decodeCursor,
-  paginateRows,
-} from '../common/pagination/cursor';
+import type { UpdateSavedSearchDto } from './dto/update-saved-search.dto';
+import { paginateRows, resolveCursorFilter } from '../common/pagination/cursor';
 
 /**
  * Validates the mutual exclusivity rule between Job.applyMode and Job.applyUrl.
@@ -336,15 +335,9 @@ export class JobsService {
       ...(query.skillId && { skills: { some: { skillId: query.skillId } } }),
     };
 
-    let cursorWhere: Prisma.JobWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
-
+    const cursorWhere = resolveCursorFilter(query.cursor);
     const limit = query.limit ?? 20;
+
     const rows = await this.prisma.job.findMany({
       where: { AND: [baseWhere, cursorWhere] },
       include: JOB_INCLUDES,
@@ -356,7 +349,7 @@ export class JobsService {
 
     return {
       data: items.map(toJobResponseDto),
-      meta: { nextCursor, hasMore: hasNextPage },
+      meta: { nextCursor, hasNextPage, limit },
     };
   }
 
@@ -609,15 +602,9 @@ export class JobsService {
   }
 
   async listSavedJobs(userId: string, query: CursorPaginationQueryDto) {
-    let cursorWhere: Prisma.SavedJobWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
-
+    const cursorWhere = resolveCursorFilter(query.cursor);
     const limit = query.limit ?? 20;
+
     const rows = await this.prisma.savedJob.findMany({
       where: { AND: [{ userId, deletedAt: null }, cursorWhere] },
       include: { job: { include: JOB_INCLUDES } },
@@ -633,7 +620,92 @@ export class JobsService {
         savedAt: row.createdAt,
         job: toJobResponseDto(row.job),
       })),
-      meta: { nextCursor, hasMore: hasNextPage },
+      meta: { nextCursor, hasNextPage, limit },
+    };
+  }
+
+  async createSavedSearch(userId: string, dto: CreateSavedSearchDto) {
+    if (dto.name) {
+      const existing = await this.prisma.savedSearch.findFirst({
+        where: { userId, name: dto.name, deletedAt: null },
+      });
+      if (existing) throw new ConflictException('SAVED_SEARCH_NAME_TAKEN');
+    }
+
+    return this.prisma.savedSearch.create({
+      data: {
+        userId,
+        name: dto.name ?? null,
+        query: dto.query as Prisma.InputJsonValue,
+        frequency: dto.frequency,
+      },
+    });
+  }
+
+  async updateSavedSearch(
+    userId: string,
+    savedSearchId: string,
+    dto: UpdateSavedSearchDto,
+  ) {
+    const saved = await this.prisma.savedSearch.findFirst({
+      where: { id: savedSearchId, deletedAt: null },
+    });
+    if (!saved) throw new NotFoundException('SAVED_SEARCH_NOT_FOUND');
+    if (saved.userId !== userId) throw new ForbiddenException('NOT_OWNER');
+
+    // If name is being updated, check for conflicts across other saved searches
+    if (dto.name && dto.name !== saved.name) {
+      const duplicate = await this.prisma.savedSearch.findFirst({
+        where: {
+          userId,
+          name: dto.name,
+          deletedAt: null,
+          id: { not: savedSearchId },
+        },
+      });
+      if (duplicate) throw new ConflictException('SAVED_SEARCH_NAME_TAKEN');
+    }
+
+    return this.prisma.savedSearch.update({
+      where: { id: savedSearchId },
+      data: {
+        ...(dto.name !== undefined && { name: dto.name }),
+        ...(dto.query !== undefined && {
+          query: dto.query as Prisma.InputJsonValue,
+        }),
+        ...(dto.frequency !== undefined && { frequency: dto.frequency }),
+      },
+    });
+  }
+
+  async deleteSavedSearch(userId: string, savedSearchId: string) {
+    const saved = await this.prisma.savedSearch.findFirst({
+      where: { id: savedSearchId, deletedAt: null },
+    });
+    if (!saved) throw new NotFoundException('SAVED_SEARCH_NOT_FOUND');
+    if (saved.userId !== userId) throw new ForbiddenException('NOT_OWNER');
+
+    await this.prisma.savedSearch.update({
+      where: { id: savedSearchId },
+      data: { deletedAt: new Date() },
+    });
+  }
+
+  async listSavedSearches(userId: string, query: CursorPaginationQueryDto) {
+    const cursorWhere = resolveCursorFilter(query.cursor);
+    const limit = query.limit ?? 20;
+
+    const rows = await this.prisma.savedSearch.findMany({
+      where: { AND: [{ userId, deletedAt: null }, cursorWhere] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: limit + 1,
+    });
+
+    const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
+
+    return {
+      data: items,
+      meta: { nextCursor, hasNextPage, limit },
     };
   }
 

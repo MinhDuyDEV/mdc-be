@@ -69,7 +69,6 @@ export class PasswordResetService {
     };
   }
 
-  // fallow-ignore-next-line complexity — intentional: bcrypt backward compat + timingSafeEqual
   async confirmReset(
     rawToken: string,
     newPassword: string,

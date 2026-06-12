@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +11,7 @@ import {
   JobStatus,
   WorkplaceType,
 } from '@prisma/client';
+import { AlertFrequency } from './dto/create-saved-search.dto';
 import type { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { PrismaService } from '../infra/prisma/prisma.service';
 import type { IdempotencyService } from '../outbox/idempotency.service';
@@ -34,6 +36,16 @@ interface MockPrisma {
   jobSkill: { deleteMany: jest.Mock; createMany: jest.Mock };
   $transaction: jest.Mock;
   $queryRaw: jest.Mock;
+  savedSearch: {
+    create: jest.Mock;
+    update: jest.Mock;
+    findMany: jest.Mock;
+    findFirst: jest.Mock;
+  };
+  savedSearchAlertDelivery: {
+    findFirst: jest.Mock;
+    create: jest.Mock;
+  };
 }
 
 function buildMockPrisma(): MockPrisma {
@@ -56,6 +68,16 @@ function buildMockPrisma(): MockPrisma {
     jobSkill: { deleteMany: jest.fn(), createMany: jest.fn() },
     $transaction: jest.fn(),
     $queryRaw: jest.fn(),
+    savedSearch: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findMany: jest.fn(),
+      findFirst: jest.fn(),
+    },
+    savedSearchAlertDelivery: {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+    },
   };
   prisma.$transaction.mockImplementation(
     async (cb: (tx: MockPrisma) => Promise<unknown>) => cb(prisma),
@@ -445,6 +467,250 @@ describe('JobsService', () => {
       const baseWhere = (call.where as { AND: Array<{ status: JobStatus }> })
         .AND[0];
       expect(baseWhere.status).toBe(JobStatus.PUBLISHED);
+    });
+  });
+
+  describe('createSavedSearch', () => {
+    const createDto = {
+      name: 'My Search',
+      query: { keywords: 'engineer' },
+      frequency: AlertFrequency.DAILY,
+    };
+
+    it('creates a saved search with all fields', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(null);
+      prisma.savedSearch.create.mockResolvedValue({
+        id: 'ss-1',
+        userId: 'user-1',
+        name: 'My Search',
+        query: { keywords: 'engineer' },
+        frequency: 'DAILY',
+        deletedAt: null,
+        createdAt: new Date('2026-05-01T00:00:00Z'),
+        updatedAt: new Date('2026-05-01T00:00:00Z'),
+      });
+
+      const result = await service.createSavedSearch('user-1', createDto);
+
+      expect(result.name).toBe('My Search');
+      expect(result.frequency).toBe('DAILY');
+      expect(prisma.savedSearch.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'user-1',
+            name: 'My Search',
+            query: { keywords: 'engineer' },
+            frequency: 'DAILY',
+          }),
+        }),
+      );
+    });
+
+    it('creates a saved search without name', async () => {
+      prisma.savedSearch.create.mockResolvedValue({
+        id: 'ss-2',
+        userId: 'user-1',
+        name: null,
+        query: { keywords: 'designer' },
+        frequency: 'WEEKLY',
+        deletedAt: null,
+        createdAt: new Date('2026-05-01T00:00:00Z'),
+        updatedAt: new Date('2026-05-01T00:00:00Z'),
+      });
+
+      const result = await service.createSavedSearch('user-1', {
+        query: { keywords: 'designer' },
+        frequency: AlertFrequency.WEEKLY,
+      });
+
+      expect(result.name).toBeNull();
+      expect(prisma.savedSearch.findFirst).not.toHaveBeenCalled();
+      expect(prisma.savedSearch.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ name: null }),
+        }),
+      );
+    });
+
+    it('rejects duplicate name with ConflictException', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue({
+        id: 'existing-ss',
+        userId: 'user-1',
+        name: 'My Search',
+      });
+
+      await expect(
+        service.createSavedSearch('user-1', createDto),
+      ).rejects.toThrow(new ConflictException('SAVED_SEARCH_NAME_TAKEN'));
+
+      expect(prisma.savedSearch.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('updateSavedSearch', () => {
+    const existingSearch = {
+      id: 'ss-1',
+      userId: 'user-1',
+      name: 'My Search',
+      query: { keywords: 'engineer' },
+      frequency: AlertFrequency.DAILY,
+      deletedAt: null,
+      createdAt: new Date('2026-05-01T00:00:00Z'),
+      updatedAt: new Date('2026-05-01T00:00:00Z'),
+    };
+
+    it('updates filters and frequency', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(existingSearch);
+      prisma.savedSearch.update.mockResolvedValue({
+        ...existingSearch,
+        query: { keywords: 'senior engineer' },
+        frequency: AlertFrequency.WEEKLY,
+      });
+
+      const result = await service.updateSavedSearch('user-1', 'ss-1', {
+        query: { keywords: 'senior engineer' },
+        frequency: AlertFrequency.WEEKLY,
+      });
+
+      expect(result.query).toEqual({ keywords: 'senior engineer' });
+      expect(result.frequency).toBe('WEEKLY');
+      expect(prisma.savedSearch.update).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'ss-1' } }),
+      );
+    });
+
+    it('throws NotFoundException when saved search does not exist', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateSavedSearch('user-1', 'nonexistent', { name: 'Nope' }),
+      ).rejects.toThrow(new NotFoundException('SAVED_SEARCH_NOT_FOUND'));
+
+      expect(prisma.savedSearch.update).not.toHaveBeenCalled();
+    });
+
+    it('throws ForbiddenException when userId does not match', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(existingSearch);
+
+      await expect(
+        service.updateSavedSearch('other-user', 'ss-1', { name: 'Hacked' }),
+      ).rejects.toThrow(new ForbiddenException('NOT_OWNER'));
+
+      expect(prisma.savedSearch.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects name update that conflicts with another saved search', async () => {
+      prisma.savedSearch.findFirst
+        .mockResolvedValueOnce(existingSearch)
+        .mockResolvedValueOnce({ id: 'ss-2', name: 'New Name' });
+
+      await expect(
+        service.updateSavedSearch('user-1', 'ss-1', { name: 'New Name' }),
+      ).rejects.toThrow(new ConflictException('SAVED_SEARCH_NAME_TAKEN'));
+
+      expect(prisma.savedSearch.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteSavedSearch', () => {
+    const existingSearch = {
+      id: 'ss-1',
+      userId: 'user-1',
+      name: 'My Search',
+      query: { keywords: 'engineer' },
+      frequency: 'DAILY',
+      deletedAt: null,
+      createdAt: new Date('2026-05-01T00:00:00Z'),
+      updatedAt: new Date('2026-05-01T00:00:00Z'),
+    };
+
+    it('soft-deletes by setting deletedAt', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(existingSearch);
+      prisma.savedSearch.update.mockResolvedValue({
+        ...existingSearch,
+        deletedAt: new Date('2026-06-01T00:00:00Z'),
+      });
+
+      await service.deleteSavedSearch('user-1', 'ss-1');
+
+      expect(prisma.savedSearch.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'ss-1' },
+          data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+        }),
+      );
+    });
+
+    it('throws NotFoundException when saved search does not exist', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.deleteSavedSearch('user-1', 'nonexistent'),
+      ).rejects.toThrow(new NotFoundException('SAVED_SEARCH_NOT_FOUND'));
+
+      expect(prisma.savedSearch.update).not.toHaveBeenCalled();
+    });
+
+    it('throws ForbiddenException when userId does not match', async () => {
+      prisma.savedSearch.findFirst.mockResolvedValue(existingSearch);
+
+      await expect(
+        service.deleteSavedSearch('other-user', 'ss-1'),
+      ).rejects.toThrow(new ForbiddenException('NOT_OWNER'));
+
+      expect(prisma.savedSearch.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('listSavedSearches', () => {
+    const savedSearches = [
+      {
+        id: 'ss-1',
+        userId: 'user-1',
+        name: 'Search 1',
+        query: { keywords: 'engineer' },
+        frequency: 'DAILY',
+        deletedAt: null,
+        createdAt: new Date('2026-05-02T00:00:00Z'),
+        updatedAt: new Date('2026-05-02T00:00:00Z'),
+      },
+      {
+        id: 'ss-2',
+        userId: 'user-1',
+        name: 'Search 2',
+        query: { keywords: 'designer' },
+        frequency: 'WEEKLY',
+        deletedAt: null,
+        createdAt: new Date('2026-05-01T00:00:00Z'),
+        updatedAt: new Date('2026-05-01T00:00:00Z'),
+      },
+    ];
+
+    it('returns paginated list of saved searches', async () => {
+      prisma.savedSearch.findMany.mockResolvedValue(savedSearches);
+
+      const result = await service.listSavedSearches('user-1', { limit: 20 });
+
+      expect(result.data).toHaveLength(2);
+      expect(result.data[0].name).toBe('Search 1');
+      expect(prisma.savedSearch.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            AND: [{ userId: 'user-1', deletedAt: null }, {}],
+          },
+          take: 21,
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        }),
+      );
+    });
+
+    it('returns empty list when no saved searches exist', async () => {
+      prisma.savedSearch.findMany.mockResolvedValue([]);
+
+      const result = await service.listSavedSearches('user-1', { limit: 20 });
+
+      expect(result.data).toHaveLength(0);
+      expect(result.meta.hasNextPage).toBe(false);
     });
   });
 });

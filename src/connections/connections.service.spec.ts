@@ -29,6 +29,7 @@ interface MockPrisma {
     create: jest.Mock;
     delete: jest.Mock;
   };
+  $queryRaw: jest.Mock;
   $transaction: jest.Mock;
 }
 
@@ -53,6 +54,7 @@ function buildMockPrisma(): MockPrisma {
       create: jest.fn(),
       delete: jest.fn(),
     },
+    $queryRaw: jest.fn(),
     $transaction: jest.fn(),
   };
   prisma.$transaction.mockImplementation(
@@ -264,6 +266,89 @@ describe('ConnectionsService', () => {
           status: FollowStatus.ACTIVE,
         },
       });
+    });
+  });
+
+  describe('getMutualConnections', () => {
+    const mutualUser = {
+      id: 'user-mutual',
+      email: 'mutual@test.com',
+      firstName: 'M',
+      lastName: 'U',
+      headline: 'Developer',
+      connectedAt: new Date('2025-01-15'),
+    };
+
+    it('returns mutual connections between two users', async () => {
+      prisma.$queryRaw.mockResolvedValue([mutualUser]);
+
+      const result = await service.getMutualConnections('user-1', 'user-2', {});
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toEqual(mutualUser);
+      expect(result.meta.hasNextPage).toBe(false);
+      expect(result.meta.nextCursor).toBeUndefined();
+      expect(result.meta.limit).toBe(20);
+      expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns empty array when there are no mutual connections', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      const result = await service.getMutualConnections('user-1', 'user-2', {});
+
+      expect(result.data).toEqual([]);
+      expect(result.meta.hasNextPage).toBe(false);
+      expect(result.meta.nextCursor).toBeUndefined();
+    });
+
+    it('handles cursor pagination correctly', async () => {
+      const cursorDate = new Date('2025-01-01');
+      const cursor = Buffer.from(
+        JSON.stringify({
+          createdAt: cursorDate.toISOString(),
+          id: 'last-item',
+        }),
+      ).toString('base64');
+
+      const rows = Array.from({ length: 25 }, (_, i) => ({
+        id: `user-${i}`,
+        email: `user${i}@test.com`,
+        firstName: 'First',
+        lastName: `Last${i}`,
+        headline: `Headline ${i}`,
+        connectedAt: new Date(2025, 0, 30 - i),
+      }));
+
+      prisma.$queryRaw.mockResolvedValue(rows);
+
+      const result = await service.getMutualConnections('user-1', 'user-2', {
+        cursor,
+        limit: 20,
+      });
+
+      expect(result.data).toHaveLength(20);
+      expect(result.meta.hasNextPage).toBe(true);
+      expect(result.meta.nextCursor).toBeDefined();
+      expect(result.meta.limit).toBe(20);
+    });
+  });
+
+  describe('getMutualConnectionCount', () => {
+    it('returns the count of mutual connections', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ count: 3n }]);
+
+      const result = await service.getMutualConnectionCount('user-1', 'user-2');
+
+      expect(result).toBe(3);
+    });
+
+    it('returns 0 when no mutual connections exist', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      const result = await service.getMutualConnectionCount('user-1', 'user-2');
+
+      expect(result).toBe(0);
     });
   });
 });

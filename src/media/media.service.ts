@@ -141,6 +141,29 @@ export class MediaService {
     return updated;
   }
 
+  /**
+   * Validate that all media asset IDs exist and are owned by the specified user.
+   * Returns the validated asset IDs. Throws if any are missing or not owned.
+   */
+  async validateOwnership(
+    ownerId: string,
+    mediaAssetIds: string[],
+  ): Promise<string[]> {
+    const assets = await this.prisma.mediaAsset.findMany({
+      where: {
+        id: { in: mediaAssetIds },
+        ownerId,
+      },
+      select: { id: true },
+    });
+
+    if (assets.length !== mediaAssetIds.length) {
+      throw new BadRequestException('INVALID_ATTACHMENTS');
+    }
+
+    return assets.map((a) => a.id);
+  }
+
   private getMaxSizeBytes(purpose: string): number {
     switch (purpose) {
       case 'avatar':

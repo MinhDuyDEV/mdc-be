@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'node:crypto';
 import {
   DEFAULT_PAGE_LIMIT,
@@ -10,12 +12,17 @@ import {
   type CursorPaginationQueryDto,
 } from '../common/pagination/cursor-pagination.dto';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { MediaService } from '../media/media.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { RecruitingPolicyService } from '../recruiting/recruiting-policy.service';
 import type { CreateConversationDto } from './dto/create-conversation.dto';
+import type { CreateGroupConversationDto } from './dto/create-group-conversation.dto';
 import type { CreateRecruitingConversationDto } from './dto/create-recruiting-conversation.dto';
+import type { EditMessageDto } from './dto/edit-message.dto';
+import type { SearchMessagesDto } from './dto/search-messages.dto';
 import type { SendMessageDto } from './dto/send-message.dto';
+import type { UpdateGroupConversationDto } from './dto/update-group-conversation.dto';
 import { MessagingPolicyService } from './messaging-policy.service';
 import {
   decodeCursor,
@@ -32,6 +39,7 @@ export class MessagingService {
     private readonly idempotencyService: IdempotencyService,
     private readonly messagingPolicy: MessagingPolicyService,
     private readonly recruitingPolicy: RecruitingPolicyService,
+    private readonly mediaService: MediaService,
   ) {}
 
   async createConversation(userId: string, dto: CreateConversationDto) {
@@ -333,6 +341,11 @@ export class MessagingService {
       .digest('hex');
     const idempotencyKey = `${conversationId}:${userId}:${contentHash}`;
 
+    // If attachmentIds provided, validate each media asset exists and is owned by sender
+    if (dto.attachmentIds?.length) {
+      await this.mediaService.validateOwnership(userId, dto.attachmentIds);
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await this.idempotencyService.claim(tx, 'Message:send', idempotencyKey);
 
@@ -342,7 +355,29 @@ export class MessagingService {
           senderId: userId,
           content: dto.content,
           type: 'TEXT',
+          ...(dto.attachmentIds?.length
+            ? {
+                attachments: {
+                  createMany: {
+                    data: dto.attachmentIds.map((mediaAssetId) => ({
+                      mediaAssetId,
+                    })),
+                  },
+                },
+              }
+            : {}),
         },
+        include: dto.attachmentIds?.length
+          ? {
+              attachments: {
+                include: {
+                  mediaAsset: {
+                    select: { id: true, filename: true, contentType: true },
+                  },
+                },
+              },
+            }
+          : undefined,
       });
 
       const preview =
@@ -424,6 +459,13 @@ export class MessagingService {
         type: true,
         createdAt: true,
         updatedAt: true,
+        attachments: {
+          include: {
+            mediaAsset: {
+              select: { id: true, filename: true, contentType: true },
+            },
+          },
+        },
       },
     });
 
@@ -455,5 +497,331 @@ export class MessagingService {
     });
 
     return { ok: true };
+  }
+
+  async createGroupConversation(
+    userId: string,
+    dto: CreateGroupConversationDto,
+  ) {
+    // Check that no participant is blocked by the creator
+    for (const participantId of dto.participantIds) {
+      if (participantId === userId) continue;
+      const canCreate = await this.messagingPolicy.canCreateConversation(
+        userId,
+        participantId,
+      );
+      if (!canCreate) {
+        throw new BadRequestException('BLOCKED_USER');
+      }
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await this.idempotencyService.claim(tx, 'Conversation:group', dto.title);
+
+      const conversation = await tx.conversation.create({
+        data: {
+          type: 'GROUP',
+          title: dto.title,
+          participants: {
+            createMany: {
+              data: [
+                { userId, role: 'ADMIN' },
+                ...dto.participantIds
+                  .filter((id) => id !== userId)
+                  .map((participantId) => ({
+                    userId: participantId,
+                    role: 'MEMBER' as const,
+                  })),
+              ],
+            },
+          },
+        },
+        include: {
+          participants: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  profile: {
+                    where: { deletedAt: null },
+                    select: { headline: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'ConversationCreated',
+        aggregateType: 'Conversation',
+        aggregateId: conversation.id,
+        payload: {
+          conversationId: conversation.id,
+          participantIds: [userId, ...dto.participantIds],
+        },
+      });
+
+      return conversation;
+    });
+  }
+
+  async updateGroupConversation(
+    userId: string,
+    conversationId: string,
+    dto: UpdateGroupConversationDto,
+  ) {
+    const participant = await this.prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    });
+
+    if (!participant || participant.role !== 'ADMIN') {
+      throw new ForbiddenException('NOT_ADMIN');
+    }
+
+    return this.prisma.conversation.update({
+      where: { id: conversationId },
+      data: { title: dto.title },
+    });
+  }
+
+  async addParticipant(
+    userId: string,
+    conversationId: string,
+    participantId: string,
+  ) {
+    const participant = await this.prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    });
+
+    if (!participant || participant.role !== 'ADMIN') {
+      throw new ForbiddenException('NOT_ADMIN');
+    }
+
+    const conversation = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conversation || conversation.type !== 'GROUP') {
+      throw new BadRequestException('NOT_A_GROUP_CONVERSATION');
+    }
+
+    return this.prisma.conversationParticipant.create({
+      data: {
+        conversationId,
+        userId: participantId,
+        role: 'MEMBER',
+      },
+    });
+  }
+
+  async removeParticipant(
+    userId: string,
+    conversationId: string,
+    participantId: string,
+  ) {
+    const isSelfLeave = userId === participantId;
+
+    if (isSelfLeave) {
+      // Self-leave: set leftAt to now
+      await this.prisma.conversationParticipant.update({
+        where: {
+          conversationId_userId: { conversationId, userId },
+        },
+        data: { leftAt: new Date() },
+      });
+      return { ok: true };
+    }
+
+    // Admin removes another participant
+    const participant = await this.prisma.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId, userId } },
+    });
+
+    if (!participant || participant.role !== 'ADMIN') {
+      throw new ForbiddenException('NOT_ADMIN');
+    }
+
+    await this.prisma.conversationParticipant.delete({
+      where: {
+        conversationId_userId: {
+          conversationId,
+          userId: participantId,
+        },
+      },
+    });
+
+    return { ok: true };
+  }
+
+  async editMessage(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+    dto: EditMessageDto,
+  ) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message || message.conversationId !== conversationId) {
+      throw new NotFoundException('MESSAGE_NOT_FOUND');
+    }
+
+    if (message.senderId !== userId) {
+      throw new ForbiddenException('NOT_MESSAGE_SENDER');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.message.update({
+        where: { id: messageId },
+        data: {
+          content: dto.content,
+          editedAt: new Date(),
+        },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'MessageEdited',
+        aggregateType: 'Conversation',
+        aggregateId: conversationId,
+        payload: {
+          messageId,
+          conversationId,
+          editorId: userId,
+        },
+      });
+
+      return updated;
+    });
+  }
+
+  async deleteMessage(
+    userId: string,
+    conversationId: string,
+    messageId: string,
+  ) {
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+    });
+
+    if (!message || message.conversationId !== conversationId) {
+      throw new NotFoundException('MESSAGE_NOT_FOUND');
+    }
+
+    // Check if user is sender or conversation ADMIN
+    const isSender = message.senderId === userId;
+    let isAdmin = false;
+
+    if (!isSender) {
+      const participant = await this.prisma.conversationParticipant.findUnique({
+        where: { conversationId_userId: { conversationId, userId } },
+      });
+      isAdmin = participant?.role === 'ADMIN';
+    }
+
+    if (!isSender && !isAdmin) {
+      throw new ForbiddenException('NOT_AUTHORIZED');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.message.update({
+        where: { id: messageId },
+        data: { deletedAt: new Date() },
+      });
+
+      await this.outboxService.emit(tx, {
+        eventType: 'MessageDeleted',
+        aggregateType: 'Conversation',
+        aggregateId: conversationId,
+        payload: {
+          messageId,
+          conversationId,
+          deleterId: userId,
+        },
+      });
+
+      return { ok: true };
+    });
+  }
+
+  async searchMessages(userId: string, dto: SearchMessagesDto) {
+    const limit = Math.min(dto.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT);
+
+    // Safe-substitute the search query for to_tsquery: strip non-word chars
+    const sanitized = dto.q.replace(/[^\w\s-]/g, '').trim();
+    if (!sanitized) {
+      return {
+        data: [],
+        meta: { nextCursor: undefined, hasNextPage: false, limit },
+      };
+    }
+
+    const tsquery = sanitized
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((word) => `${word}:*`)
+      .join(' & ');
+
+    // Build cursor condition using parameterized Prisma.sql fragments
+    const cursorParts: Prisma.Sql[] = [];
+    if (dto.cursor) {
+      const decoded = decodeCursor(dto.cursor);
+      if (decoded) {
+        cursorParts.push(Prisma.sql`AND csi.created_at < ${decoded.createdAt}`);
+      }
+    }
+
+    const conversationParts: Prisma.Sql[] = [];
+    if (dto.conversationId) {
+      conversationParts.push(
+        Prisma.sql`AND csi.conversation_id = ${dto.conversationId}::uuid`,
+      );
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: string;
+        conversation_id: string;
+        message_id: string;
+        created_at: Date;
+        content: string;
+        sender_id: string;
+        message_created_at: Date;
+      }>
+    >`
+      SELECT csi.id, csi.conversation_id, csi.message_id, csi.created_at,
+             m.content, m.sender_id, m.created_at AS message_created_at
+      FROM conversation_search_index csi
+      JOIN messages m ON m.id = csi.message_id AND m.deleted_at IS NULL
+      JOIN conversation_participants cp ON cp.conversation_id = csi.conversation_id
+        AND cp.user_id = ${userId}::uuid AND cp.left_at IS NULL
+      WHERE csi.text_content @@ to_tsquery('english', ${tsquery})
+        ${conversationParts.length > 0 ? Prisma.join(conversationParts) : Prisma.empty}
+        ${cursorParts.length > 0 ? Prisma.join(cursorParts) : Prisma.empty}
+      ORDER BY csi.created_at DESC
+      LIMIT ${limit + 1}
+    `;
+
+    const hasNextPage = rows.length > limit;
+    const items = hasNextPage ? rows.slice(0, limit) : rows;
+
+    const last = items.at(-1);
+    const nextCursor =
+      hasNextPage && last ? encodeCursor(last.created_at, last.id) : undefined;
+
+    return {
+      data: items.map((row) => ({
+        id: row.id,
+        conversationId: row.conversation_id,
+        messageId: row.message_id,
+        content: row.content,
+        senderId: row.sender_id,
+        messageCreatedAt: row.message_created_at,
+        searchIndexCreatedAt: row.created_at,
+      })),
+      meta: { nextCursor, hasNextPage, limit },
+    };
   }
 }

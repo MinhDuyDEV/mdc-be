@@ -5,9 +5,13 @@ import { PrismaService } from '../infra/prisma/prisma.service';
 import { readCount, type CountResult } from '../common/db/bigint';
 import {
   AnalyticsEventType,
+  type ConversionRate,
   type DashboardMetricsDto,
   type EntityAnalyticsDto,
+  type PipelineCount,
   type RecordEventDto,
+  type RecruitingMetricsDto,
+  type TransitionTime,
 } from './dto';
 
 const SLOT_COUNT = 20;
@@ -202,12 +206,41 @@ export class AnalyticsService {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const [users, posts, jobs, applications, reports] = await Promise.all([
+    const now = Date.now();
+    const since24h = new Date(now - 24 * 60 * 60 * 1000);
+    const since7d = new Date(now - 7 * 24 * 60 * 60 * 1000);
+    const since30d = new Date(now - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      users,
+      posts,
+      jobs,
+      applications,
+      reports,
+      totalActiveJobs,
+      totalCompanies,
+      totalConnections,
+      messageVolume24h,
+      messageVolume7d,
+      messageVolume30d,
+    ] = await Promise.all([
       this.prisma.user.count({ where: { createdAt: { gte: today } } }),
       this.prisma.post.count({ where: { createdAt: { gte: today } } }),
       this.prisma.job.count({ where: { createdAt: { gte: today } } }),
       this.prisma.application.count({ where: { submittedAt: { gte: today } } }),
       this.prisma.report.count({ where: { createdAt: { gte: today } } }),
+      this.prisma.job.count({
+        where: { status: 'PUBLISHED', deletedAt: null },
+      }),
+      this.prisma.company.count({
+        where: { deletedAt: null },
+      }),
+      this.prisma.connection.count({
+        where: { status: 'ACCEPTED' },
+      }),
+      this.prisma.message.count({ where: { createdAt: { gte: since24h } } }),
+      this.prisma.message.count({ where: { createdAt: { gte: since7d } } }),
+      this.prisma.message.count({ where: { createdAt: { gte: since30d } } }),
     ]);
 
     return {
@@ -216,6 +249,113 @@ export class AnalyticsService {
       dailyNewJobs: jobs,
       dailyApplications: applications,
       dailyReports: reports,
+      totalActiveJobs,
+      totalCompanies,
+      totalConnections,
+      messageVolume24h,
+      messageVolume7d,
+      messageVolume30d,
+    };
+  }
+
+  async getRecruitingMetrics(): Promise<RecruitingMetricsDto> {
+    const [
+      pipelineCounts,
+      avgTransitionTimes,
+      transitionCounts,
+      statusReachRaw,
+    ] = await Promise.all([
+      this.prisma.application.groupBy({
+        by: ['status'],
+        _count: { id: true },
+      }),
+      this.prisma.$queryRaw<
+        {
+          from_status: string;
+          to_status: string;
+          avg_hours: bigint;
+          count: bigint;
+        }[]
+      >`
+          SELECT
+            from_status,
+            to_status,
+            AVG(EXTRACT(EPOCH FROM (created_at - prev_created_at)) / 3600) AS avg_hours,
+            COUNT(*) AS count
+          FROM (
+            SELECT
+              from_status,
+              to_status,
+              created_at,
+              LAG(created_at) OVER (PARTITION BY application_id ORDER BY created_at) AS prev_created_at
+            FROM application_status_events
+          ) sub
+          WHERE prev_created_at IS NOT NULL
+            AND from_status IS NOT NULL
+          GROUP BY from_status, to_status
+          ORDER BY from_status, to_status
+        `,
+      this.prisma.$queryRaw<
+        { from_status: string; to_status: string; count: bigint }[]
+      >`
+          SELECT from_status, to_status, CAST(COUNT(DISTINCT application_id) AS BIGINT) AS count
+          FROM application_status_events
+          WHERE from_status IS NOT NULL
+          GROUP BY from_status, to_status
+          ORDER BY from_status, to_status
+        `,
+      this.prisma.$queryRaw<{ to_status: string; count: bigint }[]>`
+          SELECT to_status, CAST(COUNT(DISTINCT application_id) AS BIGINT) AS count
+          FROM application_status_events
+          GROUP BY to_status
+        `,
+    ]);
+
+    const formattedPipeline: PipelineCount[] = pipelineCounts.map((p) => ({
+      status: p.status,
+      count: p._count.id,
+    }));
+
+    const formattedTransitionTimes: TransitionTime[] = avgTransitionTimes.map(
+      (t) => ({
+        fromStatus: t.from_status,
+        toStatus: t.to_status,
+        avgHours: Number(t.avg_hours),
+        count: Number(t.count),
+      }),
+    );
+
+    // Build per-status reach counts for conversion rate denominators
+    const totalApps = pipelineCounts.reduce((sum, p) => sum + p._count.id, 0);
+    const reachedStatus = new Map<string, number>();
+    reachedStatus.set('SUBMITTED', totalApps);
+    for (const row of statusReachRaw) {
+      const status = row.to_status;
+      const count = Number(row.count);
+      reachedStatus.set(
+        status,
+        Math.max(reachedStatus.get(status) ?? 0, count),
+      );
+    }
+
+    const formattedConversionRates: ConversionRate[] = transitionCounts.map(
+      (item) => {
+        const fromCount = reachedStatus.get(item.from_status) ?? 0;
+        const transitionCount = Number(item.count);
+        return {
+          fromStatus: item.from_status,
+          toStatus: item.to_status,
+          rate: fromCount > 0 ? transitionCount / fromCount : 0,
+          fromCount,
+          transitionCount,
+        };
+      },
+    );
+
+    return {
+      pipelineCounts: formattedPipeline,
+      avgTransitionTimes: formattedTransitionTimes,
+      conversionRates: formattedConversionRates,
     };
   }
 }

@@ -264,6 +264,39 @@ enum PostStatus {
   REMOVED_BY_MODERATOR
 }
 
+// region: Phase C enums
+
+enum AlertFrequency {
+  REALTIME
+  DAILY
+  WEEKLY
+}
+
+enum InterviewStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum Recommendation {
+  STRONG_HIRE
+  HIRE
+  NEUTRAL
+  NO_HIRE
+  STRONG_NO_HIRE
+}
+
+enum OfferStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+// endregion
+
 enum PostVisibility {
   PUBLIC
   CONNECTIONS
@@ -348,6 +381,9 @@ model User {
   profileViewsByUser       ProfileView[]             @relation("ProfileViewsByUser")
   companyViewsByUser       CompanyView[]             @relation("CompanyViewsByUser")
   postImpressionsByUser    PostImpression[]          @relation("PostImpressionsByUser")
+  savedSearches            SavedSearch[]
+  interviews               Interviewer[]
+  submittedScorecards      Scorecard[]
 
   @@map("users")
 }
@@ -641,6 +677,9 @@ model Company {
   entitlementGrants EntitlementGrant[]
   creditTransactions CreditTransaction[]
   invoices          Invoice[]
+  interviews        Interview[]
+  scorecards        Scorecard[]
+  offers            Offer[]
 
   @@index([slug])
   @@index([industry])
@@ -1141,6 +1180,40 @@ model JobView {
   @@map("job_views")
 }
 
+model SavedSearch {
+  id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String         @map("user_id") @db.Uuid
+  name      String?        @db.VarChar(255)
+  query     Json
+  frequency AlertFrequency @default(DAILY)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt DateTime?      @map("deleted_at") @db.Timestamptz(3)
+
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deliveries JobAlertDelivery[]
+
+  @@unique([userId, name], name: "unique_saved_search_name")
+  @@index([userId])
+  @@index([frequency])
+  @@map("saved_searches")
+}
+
+model JobAlertDelivery {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  savedSearchId String      @map("saved_search_id") @db.Uuid
+  userId        String      @map("user_id") @db.Uuid
+  deliveredAt   DateTime    @default(now()) @map("delivered_at") @db.Timestamptz(3)
+  jobIds        Json
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  savedSearch SavedSearch @relation(fields: [savedSearchId], references: [id], onDelete: Cascade)
+
+  @@index([savedSearchId])
+  @@index([userId, deliveredAt])
+  @@map("job_alert_deliveries")
+}
+
 model Application {
   id                 String            @id @default(uuid()) @db.Uuid
   jobId              String            @map("job_id") @db.Uuid
@@ -1161,6 +1234,8 @@ model Application {
   attachments  ApplicationAttachment[]
   statusEvents ApplicationStatusEvent[]
   notes        ApplicationNote[]
+  interviews   Interview[]
+  offers       Offer[]
 
   @@index([jobId, status, submittedAt(sort: Desc)])
   @@index([userId, submittedAt(sort: Desc)])
@@ -1324,6 +1399,101 @@ model CandidateNote {
   @@map("candidate_notes")
 }
 
+model Interview {
+  id              String          @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId   String          @map("application_id") @db.Uuid
+  companyId       String          @map("company_id") @db.Uuid
+  scheduledAt     DateTime        @map("scheduled_at") @db.Timestamptz(3)
+  durationMinutes Int             @default(60) @map("duration_minutes")
+  location        String?         @db.Text
+  meetingUrl      String?         @map("meeting_url") @db.Text
+  notes           String?         @db.Text
+  status          InterviewStatus @default(SCHEDULED)
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime        @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  application   Application     @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  company       Company         @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  interviewers  Interviewer[]
+  scorecards    Scorecard[]
+
+  @@index([applicationId])
+  @@index([companyId])
+  @@index([scheduledAt])
+  @@map("interviews")
+}
+
+model Interviewer {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  interviewId String   @map("interview_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  feedback    String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  interview Interview @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([interviewId, userId])
+  @@map("interviewers")
+}
+
+model Scorecard {
+  id                String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  interviewId       String         @map("interview_id") @db.Uuid
+  applicationId     String         @map("application_id") @db.Uuid
+  companyId         String         @map("company_id") @db.Uuid
+  overallRating     Int            @map("overall_rating")
+  recommendation    Recommendation
+  notes             String         @db.Text
+  submittedByUserId String         @map("submitted_by_user_id") @db.Uuid
+  createdAt         DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  interview    Interview          @relation(fields: [interviewId], references: [id], onDelete: Cascade)
+  company      Company            @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  submittedBy  User               @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+  sections     ScorecardSection[]
+
+  @@unique([interviewId, submittedByUserId])
+  @@index([applicationId])
+  @@map("scorecards")
+}
+
+model ScorecardSection {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  scorecardId String    @map("scorecard_id") @db.Uuid
+  name        String    @db.VarChar(255)
+  rating      Int
+  notes       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  scorecard Scorecard @relation(fields: [scorecardId], references: [id], onDelete: Cascade)
+
+  @@map("scorecard_sections")
+}
+
+model Offer {
+  id            String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  applicationId String      @map("application_id") @db.Uuid
+  companyId     String      @map("company_id") @db.Uuid
+  position      String      @db.VarChar(255)
+  salaryAmount  Decimal     @map("salary_amount") @db.Decimal(12, 2)
+  currency      String      @default("USD") @db.VarChar(3)
+  startDate     DateTime    @map("start_date") @db.Date
+  expiresAt     DateTime    @map("expires_at") @db.Timestamptz(3)
+  status        OfferStatus @default(DRAFT)
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt     DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  company     Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId])
+  @@index([companyId])
+  @@map("offers")
+}
+
 // endregion
 
 // region: Notifications and social graph
@@ -1414,18 +1584,22 @@ model Post {
   contentStatus PostStatus?                @map("content_status")
   commentCount  Int                        @default(0) @map("comment_count")
   reactionCount Int                        @default(0) @map("reaction_count")
+  shareCount    Int                        @default(0) @map("share_count")
+  sharedPostId  String?                    @map("shared_post_id") @db.Uuid
   searchVector  Unsupported("tsvector")?   @default(dbgenerated("''::tsvector")) @map("search_vector")
   deletedAt     DateTime?                  @map("deleted_at") @db.Timestamptz(3)
   createdAt     DateTime                   @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt     DateTime                   @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  author    User         @relation("PostsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  comments  Comment[]
-  reactions Reaction[]
-  hashtags  PostHashtag[]
-  media     PostMedia[]
-  savedBy   SavedPost[]
-  hiddenBy  HiddenPost[]
+  author      User         @relation("PostsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  sharedPost  Post?        @relation("SharedPost", fields: [sharedPostId], references: [id])
+  shares      Post[]       @relation("SharedPost")
+  comments    Comment[]
+  reactions   Reaction[]
+  hashtags    PostHashtag[]
+  media       PostMedia[]
+  savedBy     SavedPost[]
+  hiddenBy    HiddenPost[]
   mentions    Mention[]
   impressions PostImpression[]
 
@@ -1481,10 +1655,26 @@ model Hashtag {
   postCount Int      @default(0) @map("post_count")
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  posts PostHashtag[]
+  posts          PostHashtag[]
+  trendingEntries TrendingHashtag[]
 
   @@index([postCount(sort: Desc)])
   @@map("hashtags")
+}
+
+model TrendingHashtag {
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  hashtagId   String   @map("hashtag_id") @db.Uuid
+  score       Float
+  windowStart DateTime @map("window_start") @db.Timestamptz(3)
+  windowEnd   DateTime @map("window_end") @db.Timestamptz(3)
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  hashtag Hashtag @relation(fields: [hashtagId], references: [id], onDelete: Cascade)
+
+  @@index([score(sort: Desc)])
+  @@index([windowEnd])
+  @@map("trending_hashtags")
 }
 
 model PostHashtag {
@@ -1610,6 +1800,7 @@ model Message {
   senderId       String      @map("sender_id") @db.Uuid
   content        String      @db.Text
   type           MessageType @default(TEXT)
+  editedAt       DateTime?   @map("edited_at") @db.Timestamptz(3)
   deletedAt      DateTime?   @map("deleted_at") @db.Timestamptz(3)
   createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
@@ -1656,6 +1847,19 @@ model MessageReadState {
   @@index([messageId])
   @@index([userId])
   @@map("message_read_states")
+}
+
+model ConversationSearchIndex {
+  id             String                 @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  conversationId String                 @map("conversation_id") @db.Uuid
+  messageId      String                 @map("message_id") @db.Uuid
+  textContent    Unsupported("tsvector")
+  createdAt      DateTime               @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@unique([messageId])
+  @@index([conversationId])
+  @@index([textContent], type: Gin)
+  @@map("conversation_search_index")
 }
 
 // endregion

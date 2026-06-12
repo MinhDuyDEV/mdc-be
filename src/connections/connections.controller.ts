@@ -14,12 +14,17 @@ import {
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { ConnectionsPolicyService } from './connections-policy.service';
 import { ConnectionsService } from './connections.service';
+import { MutualConnectionsQueryDto } from './dto/mutual-connections-query.dto';
 import { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 @Controller('connections')
 export class ConnectionsController {
-  constructor(private readonly connectionsService: ConnectionsService) {}
+  constructor(
+    private readonly connectionsService: ConnectionsService,
+    private readonly connectionsPolicy: ConnectionsPolicyService,
+  ) {}
 
   /** POST /api/v1/connections — Send a connection request */
   @Post()
@@ -47,6 +52,20 @@ export class ConnectionsController {
     @Query() query: CursorPaginationQueryDto,
   ) {
     return this.connectionsService.listPendingRequests(user.id, query);
+  }
+
+  /** GET /api/v1/connections/mutual/:userId — List mutual connections */
+  @Get('mutual/:userId')
+  async getMutualConnections(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
+    @Query() query: MutualConnectionsQueryDto,
+  ) {
+    return this.connectionsPolicy.getMutualConnectionsWithPolicy(
+      user.id,
+      targetUserId,
+      query,
+    );
   }
 
   /** PATCH /api/v1/connections/:id/accept — Accept a pending request */

@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { MessagingService } from './messaging.service';
@@ -24,14 +28,19 @@ describe('MessagingService', () => {
       conversationParticipant: {
         createMany: jest.fn(),
         findFirst: jest.fn(),
+        findUnique: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn(),
+        create: jest.fn(),
       },
       message: {
         create: jest.fn(),
         findMany: jest.fn(),
+        findUnique: jest.fn(),
         update: jest.fn(),
       },
       user: { findUnique: jest.fn() },
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     outbox = { emit: jest.fn() };
@@ -46,12 +55,16 @@ describe('MessagingService', () => {
         .fn()
         .mockResolvedValue({ allowed: true, reason: 'OPT_IN' }),
     };
+    const mediaService = {
+      validateOwnership: jest.fn().mockResolvedValue([]),
+    } as any;
     service = new MessagingService(
       prisma,
       outbox,
       idempotency,
       messagingPolicy,
       recruitingPolicy,
+      mediaService,
     );
   });
 
@@ -258,6 +271,462 @@ describe('MessagingService', () => {
       const result = await service.markRead('user-1', 'conv-1');
       expect(result).toEqual({ ok: true });
       expect(prisma.conversationParticipant.update).toHaveBeenCalled();
+    });
+  });
+
+  describe('createGroupConversation', () => {
+    it('creates group conversation with correct participants and emits event', async () => {
+      const dto = { title: 'Group Chat', participantIds: ['user-2', 'user-3'] };
+      const mockConv = {
+        id: 'conv-g1',
+        type: 'GROUP',
+        title: 'Group Chat',
+        participants: [],
+      };
+      prisma.conversation.create.mockResolvedValue(mockConv);
+
+      const result = await service.createGroupConversation('user-1', dto);
+
+      expect(prisma.conversation.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'GROUP',
+            title: 'Group Chat',
+            participants: {
+              createMany: {
+                data: [
+                  { userId: 'user-1', role: 'ADMIN' },
+                  { userId: 'user-2', role: 'MEMBER' },
+                  { userId: 'user-3', role: 'MEMBER' },
+                ],
+              },
+            },
+          }),
+        }),
+      );
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ eventType: 'ConversationCreated' }),
+      );
+      expect(result).toBe(mockConv);
+    });
+  });
+
+  describe('updateGroupConversation', () => {
+    it('updates title for admin', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        role: 'ADMIN',
+      });
+      prisma.conversation.update.mockResolvedValue({
+        id: 'conv-g1',
+        title: 'New Title',
+      });
+
+      const result = await service.updateGroupConversation(
+        'user-1',
+        'conv-g1',
+        {
+          title: 'New Title',
+        },
+      );
+
+      expect(prisma.conversation.update).toHaveBeenCalledWith({
+        where: { id: 'conv-g1' },
+        data: { title: 'New Title' },
+      });
+      expect(result.title).toBe('New Title');
+    });
+
+    it('rejects non-admin with NOT_ADMIN', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-2',
+        role: 'MEMBER',
+      });
+
+      await expect(
+        service.updateGroupConversation('user-2', 'conv-g1', {
+          title: 'New Title',
+        }),
+      ).rejects.toThrow(new ForbiddenException('NOT_ADMIN'));
+    });
+
+    it('rejects when participant not found', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateGroupConversation('user-2', 'conv-g1', {
+          title: 'New Title',
+        }),
+      ).rejects.toThrow(new ForbiddenException('NOT_ADMIN'));
+    });
+  });
+
+  describe('addParticipant', () => {
+    it('adds participant with MEMBER role', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        role: 'ADMIN',
+      });
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'conv-g1',
+        type: 'GROUP',
+      });
+      const newParticipant = {
+        conversationId: 'conv-g1',
+        userId: 'user-4',
+        role: 'MEMBER',
+      };
+      prisma.conversationParticipant.create.mockResolvedValue(newParticipant);
+
+      const result = await service.addParticipant(
+        'user-1',
+        'conv-g1',
+        'user-4',
+      );
+
+      expect(prisma.conversationParticipant.create).toHaveBeenCalledWith({
+        data: {
+          conversationId: 'conv-g1',
+          userId: 'user-4',
+          role: 'MEMBER',
+        },
+      });
+      expect(result).toEqual(newParticipant);
+    });
+
+    it('rejects non-admin with NOT_ADMIN', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-2',
+        role: 'MEMBER',
+      });
+
+      await expect(
+        service.addParticipant('user-2', 'conv-g1', 'user-4'),
+      ).rejects.toThrow(new ForbiddenException('NOT_ADMIN'));
+    });
+
+    it('rejects non-group conversation with NOT_A_GROUP_CONVERSATION', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        role: 'ADMIN',
+      });
+      prisma.conversation.findUnique.mockResolvedValue({
+        id: 'conv-d1',
+        type: 'DIRECT',
+      });
+
+      await expect(
+        service.addParticipant('user-1', 'conv-d1', 'user-4'),
+      ).rejects.toThrow(new BadRequestException('NOT_A_GROUP_CONVERSATION'));
+    });
+  });
+
+  describe('removeParticipant', () => {
+    it('self-leave sets leftAt and returns ok', async () => {
+      const result = await service.removeParticipant(
+        'user-1',
+        'conv-g1',
+        'user-1',
+      );
+
+      expect(prisma.conversationParticipant.update).toHaveBeenCalledWith({
+        where: {
+          conversationId_userId: {
+            conversationId: 'conv-g1',
+            userId: 'user-1',
+          },
+        },
+        data: { leftAt: expect.any(Date) },
+      });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('admin removes other participant and returns ok', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        role: 'ADMIN',
+      });
+
+      const result = await service.removeParticipant(
+        'user-1',
+        'conv-g1',
+        'user-2',
+      );
+
+      expect(prisma.conversationParticipant.delete).toHaveBeenCalledWith({
+        where: {
+          conversationId_userId: {
+            conversationId: 'conv-g1',
+            userId: 'user-2',
+          },
+        },
+      });
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('rejects non-admin removing other with NOT_ADMIN', async () => {
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-2',
+        role: 'MEMBER',
+      });
+
+      await expect(
+        service.removeParticipant('user-2', 'conv-g1', 'user-3'),
+      ).rejects.toThrow(new ForbiddenException('NOT_ADMIN'));
+    });
+  });
+
+  describe('editMessage', () => {
+    const existingMessage = {
+      id: 'msg-1',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      content: 'Original content',
+    };
+
+    it('edits message content, sets editedAt, and emits MessageEdited event', async () => {
+      prisma.message.findUnique.mockResolvedValue(existingMessage);
+      prisma.message.update.mockResolvedValue({
+        ...existingMessage,
+        content: 'Updated',
+        editedAt: new Date(),
+      });
+
+      const result = await service.editMessage('user-1', 'conv-1', 'msg-1', {
+        content: 'Updated',
+      });
+
+      expect(prisma.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: expect.objectContaining({
+          content: 'Updated',
+          editedAt: expect.any(Date),
+        }),
+      });
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ eventType: 'MessageEdited' }),
+      );
+      expect(result.content).toBe('Updated');
+    });
+
+    it('rejects non-sender with NOT_MESSAGE_SENDER', async () => {
+      prisma.message.findUnique.mockResolvedValue(existingMessage);
+
+      await expect(
+        service.editMessage('user-2', 'conv-1', 'msg-1', {
+          content: 'Updated',
+        }),
+      ).rejects.toThrow(new ForbiddenException('NOT_MESSAGE_SENDER'));
+    });
+
+    it('rejects message in wrong conversation with MESSAGE_NOT_FOUND', async () => {
+      prisma.message.findUnique.mockResolvedValue(existingMessage);
+
+      await expect(
+        service.editMessage('user-1', 'conv-2', 'msg-1', {
+          content: 'Updated',
+        }),
+      ).rejects.toThrow(new NotFoundException('MESSAGE_NOT_FOUND'));
+    });
+
+    it('rejects non-existent message with MESSAGE_NOT_FOUND', async () => {
+      prisma.message.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.editMessage('user-1', 'conv-1', 'msg-999', {
+          content: 'Updated',
+        }),
+      ).rejects.toThrow(new NotFoundException('MESSAGE_NOT_FOUND'));
+    });
+  });
+
+  describe('deleteMessage', () => {
+    const existingMessage = {
+      id: 'msg-1',
+      conversationId: 'conv-1',
+      senderId: 'user-1',
+      content: 'To delete',
+    };
+
+    it('sender can delete their own message', async () => {
+      prisma.message.findUnique.mockResolvedValue(existingMessage);
+
+      const result = await service.deleteMessage('user-1', 'conv-1', 'msg-1');
+
+      expect(prisma.message.update).toHaveBeenCalledWith({
+        where: { id: 'msg-1' },
+        data: expect.objectContaining({ deletedAt: expect.any(Date) }),
+      });
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ eventType: 'MessageDeleted' }),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('admin can delete another users message', async () => {
+      prisma.message.findUnique.mockResolvedValue({
+        ...existingMessage,
+        senderId: 'user-2',
+      });
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        role: 'ADMIN',
+      });
+
+      const result = await service.deleteMessage('user-1', 'conv-1', 'msg-1');
+
+      expect(prisma.message.update).toHaveBeenCalled();
+      expect(outbox.emit).toHaveBeenCalledWith(
+        prisma,
+        expect.objectContaining({ eventType: 'MessageDeleted' }),
+      );
+      expect(result).toEqual({ ok: true });
+    });
+
+    it('rejects unauthorized user with NOT_AUTHORIZED', async () => {
+      prisma.message.findUnique.mockResolvedValue({
+        ...existingMessage,
+        senderId: 'user-2',
+      });
+      prisma.conversationParticipant.findUnique.mockResolvedValue({
+        userId: 'user-3',
+        role: 'MEMBER',
+      });
+
+      await expect(
+        service.deleteMessage('user-3', 'conv-1', 'msg-1'),
+      ).rejects.toThrow(new ForbiddenException('NOT_AUTHORIZED'));
+    });
+
+    it('rejects non-existent message with MESSAGE_NOT_FOUND', async () => {
+      prisma.message.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.deleteMessage('user-1', 'conv-1', 'msg-999'),
+      ).rejects.toThrow(new NotFoundException('MESSAGE_NOT_FOUND'));
+    });
+
+    it('rejects message in wrong conversation with MESSAGE_NOT_FOUND', async () => {
+      prisma.message.findUnique.mockResolvedValue(existingMessage);
+
+      await expect(
+        service.deleteMessage('user-1', 'conv-2', 'msg-1'),
+      ).rejects.toThrow(new NotFoundException('MESSAGE_NOT_FOUND'));
+    });
+  });
+
+  describe('searchMessages', () => {
+    it('returns paginated results', async () => {
+      const rows = [
+        {
+          id: 'idx-1',
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          created_at: new Date('2026-01-01'),
+          content: 'Hello world',
+          sender_id: 'user-2',
+          message_created_at: new Date('2026-01-01'),
+        },
+      ];
+      prisma.$queryRaw.mockResolvedValue(rows);
+
+      const result = await service.searchMessages('user-1', {
+        q: 'hello',
+        limit: 20,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0].content).toBe('Hello world');
+      expect(result.data[0].messageId).toBe('msg-1');
+      expect(result.meta.hasNextPage).toBe(false);
+    });
+
+    it('returns empty array for empty query string', async () => {
+      const result = await service.searchMessages('user-1', {
+        q: '',
+        limit: 20,
+      });
+
+      expect(result.data).toEqual([]);
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('returns empty array for whitespace-only query', async () => {
+      const result = await service.searchMessages('user-1', {
+        q: '   ',
+        limit: 20,
+      });
+
+      expect(result.data).toEqual([]);
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
+    });
+
+    it('sanitizes input by stripping special characters', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await service.searchMessages('user-1', {
+        q: 'hello; DROP TABLE users; --',
+        limit: 20,
+      });
+
+      // With $queryRaw tagged template, the mock receives [stringParts, ...values]
+      const callArgs = (prisma.$queryRaw as jest.Mock).mock.calls[0];
+      const sql = callArgs[0].join('') + callArgs.slice(1).join('');
+      expect(sql).toContain('hello');
+      // DROP passes through (word chars only — regex keeps \w\s-)
+      expect(sql).not.toContain(';');
+    });
+
+    it('paginates with limit and returns cursor', async () => {
+      const rows = [
+        {
+          id: 'idx-2',
+          conversation_id: 'conv-1',
+          message_id: 'msg-2',
+          created_at: new Date('2026-01-02'),
+          content: 'Second',
+          sender_id: 'user-2',
+          message_created_at: new Date('2026-01-02'),
+        },
+        {
+          id: 'idx-1',
+          conversation_id: 'conv-1',
+          message_id: 'msg-1',
+          created_at: new Date('2026-01-01'),
+          content: 'First',
+          sender_id: 'user-2',
+          message_created_at: new Date('2026-01-01'),
+        },
+      ];
+      prisma.$queryRaw.mockResolvedValue(rows);
+
+      const result = await service.searchMessages('user-1', {
+        q: 'hello',
+        limit: 1,
+      });
+
+      expect(result.data).toHaveLength(1);
+      expect(result.meta.hasNextPage).toBe(true);
+      expect(result.meta.nextCursor).toBeDefined();
+    });
+
+    it('filters by conversationId when provided', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await service.searchMessages('user-1', {
+        q: 'hello',
+        limit: 20,
+        conversationId: 'conv-1',
+      });
+
+      // Query is called with conversation filter when conversationId provided
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      const callArgs = (prisma.$queryRaw as jest.Mock).mock.calls[0];
+      const sql = callArgs[0].join('');
+      expect(sql).toContain('conversation_id =');
     });
   });
 });

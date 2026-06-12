@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { UserStatus } from '@prisma/client';
 import { AdminService } from './admin.service';
 
@@ -18,7 +22,18 @@ describe('AdminService', () => {
         create: jest.fn(),
       },
       job: { findMany: jest.fn(), update: jest.fn() },
-      auditLog: { create: jest.fn() },
+      auditLog: { create: jest.fn(), findMany: jest.fn() },
+      adminUser: {
+        create: jest.fn(),
+        delete: jest.fn(),
+        findMany: jest.fn(),
+        findUnique: jest.fn(),
+      },
+      adminPermission: {
+        createMany: jest.fn(),
+        deleteMany: jest.fn(),
+        findMany: jest.fn(),
+      },
       refreshToken: { updateMany: jest.fn() },
       outboxDeadLetter: { findMany: jest.fn() },
       $transaction: jest.fn(),
@@ -180,6 +195,308 @@ describe('AdminService', () => {
           entityId: 'dl-1',
           metadata: {},
         },
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // W1-T3: Audit Log Viewer
+  // ---------------------------------------------------------------------------
+
+  describe('listAuditLogs', () => {
+    it('returns paginated results with actor data', async () => {
+      const rows = [
+        {
+          id: 'log-1',
+          createdAt: new Date('2026-01-02'),
+          actorUserId: 'actor-1',
+          action: 'admin.user.status_change',
+          entityType: 'User',
+          entityId: 'user-1',
+          metadata: {},
+          actor: {
+            id: 'actor-1',
+            email: 'admin@test.com',
+            displayName: 'Admin',
+            profile: { id: 'profile-1', headline: 'Head Admin' },
+          },
+        },
+      ];
+      prisma.auditLog.findMany.mockResolvedValue(rows);
+
+      const result = await service.listAuditLogs({ limit: 50 });
+
+      expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            actor: expect.objectContaining({
+              select: expect.objectContaining({
+                id: true,
+                email: true,
+                displayName: true,
+              }),
+            }),
+          }),
+          take: 51,
+        }),
+      );
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({ id: 'log-1' });
+      expect(result.meta).toMatchObject({ hasNextPage: false, limit: 50 });
+    });
+
+    it('applies date range and entity filters', async () => {
+      prisma.auditLog.findMany.mockResolvedValue([]);
+
+      await service.listAuditLogs({
+        actorUserId: 'actor-1',
+        entityType: 'User',
+        entityId: 'user-1',
+        action: 'admin.user.status_change',
+        dateFrom: '2026-01-01T00:00:00Z',
+        dateTo: '2026-12-31T23:59:59Z',
+        limit: 50,
+      });
+
+      expect(prisma.auditLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            actorUserId: 'actor-1',
+            entityType: 'User',
+            entityId: 'user-1',
+            action: 'admin.user.status_change',
+            createdAt: {
+              gte: expect.any(Date),
+              lte: expect.any(Date),
+            },
+          }),
+        }),
+      );
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // W1-T4: Admin User Management
+  // ---------------------------------------------------------------------------
+
+  describe('createAdmin', () => {
+    it('creates admin user with permissions and writes audit log', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        email: 'user@test.com',
+      });
+      prisma.adminUser.findUnique.mockResolvedValue(null);
+      prisma.adminUser.create.mockResolvedValue({
+        id: 'admin-1',
+        userId: 'user-1',
+        role: 'ADMIN',
+        user: { id: 'user-1', email: 'user@test.com', displayName: 'User' },
+        permissions: [
+          { id: 'p1', adminUserId: 'admin-1', permission: 'MANAGE_USERS' },
+        ],
+      });
+
+      const result = await service.createAdmin('acting-admin-1', {
+        userId: 'user-1',
+        permissions: ['MANAGE_USERS'],
+      });
+
+      expect(prisma.adminUser.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            userId: 'user-1',
+            role: 'ADMIN',
+            permissions: {
+              create: [{ permission: 'MANAGE_USERS' }],
+            },
+          }),
+        }),
+      );
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'acting-admin-1',
+          action: 'admin.management.create',
+          entityType: 'AdminUser',
+          metadata: expect.objectContaining({
+            targetUserId: 'user-1',
+            permissions: ['MANAGE_USERS'],
+          }),
+        }),
+      });
+      expect(result).toMatchObject({ id: 'admin-1' });
+    });
+
+    it('throws ConflictException when user is already an admin', async () => {
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      prisma.adminUser.findUnique.mockResolvedValue({
+        id: 'admin-1',
+        userId: 'user-1',
+      });
+
+      await expect(
+        service.createAdmin('admin-1', {
+          userId: 'user-1',
+          permissions: ['MANAGE_USERS'],
+        }),
+      ).rejects.toThrow(ConflictException);
+    });
+
+    it('throws NotFoundException when target user does not exist', async () => {
+      prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.createAdmin('admin-1', {
+          userId: 'missing',
+          permissions: ['MANAGE_USERS'],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('removeAdmin', () => {
+    it('deletes admin and writes audit log', async () => {
+      prisma.adminUser.findUnique.mockResolvedValue({
+        id: 'target-1',
+        userId: 'user-1',
+      });
+
+      await service.removeAdmin('acting-admin', 'target-1');
+
+      expect(prisma.adminUser.delete).toHaveBeenCalledWith({
+        where: { id: 'target-1' },
+      });
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'acting-admin',
+          action: 'admin.management.remove',
+          entityType: 'AdminUser',
+          entityId: 'target-1',
+          metadata: { targetUserId: 'user-1' },
+        }),
+      });
+    });
+
+    it('throws NotFoundException when admin does not exist', async () => {
+      prisma.adminUser.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.removeAdmin('acting-admin', 'missing'),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('updateAdminPermissions', () => {
+    it('replaces permissions atomically and writes audit log', async () => {
+      const existingPerms = [
+        { id: 'old-1', adminUserId: 'target-1', permission: 'MANAGE_JOBS' },
+      ];
+
+      prisma.adminUser.findUnique
+        .mockResolvedValueOnce({
+          id: 'target-1',
+          userId: 'user-1',
+          permissions: existingPerms,
+        })
+        .mockResolvedValueOnce({
+          id: 'target-1',
+          userId: 'user-1',
+          user: { id: 'user-1', email: 'user@test.com', displayName: 'User' },
+          permissions: [
+            {
+              id: 'new-1',
+              adminUserId: 'target-1',
+              permission: 'MANAGE_USERS',
+            },
+          ],
+        });
+
+      const result = await service.updateAdminPermissions(
+        'acting-admin',
+        'target-1',
+        {
+          permissions: ['MANAGE_USERS'],
+        },
+      );
+
+      expect(prisma.adminPermission.deleteMany).toHaveBeenCalledWith({
+        where: { adminUserId: 'target-1' },
+      });
+      expect(prisma.adminPermission.createMany).toHaveBeenCalledWith({
+        data: [{ adminUserId: 'target-1', permission: 'MANAGE_USERS' }],
+      });
+      expect(prisma.auditLog.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          actorUserId: 'acting-admin',
+          action: 'admin.management.update_permissions',
+          entityType: 'AdminUser',
+          entityId: 'target-1',
+          metadata: expect.objectContaining({
+            targetUserId: 'user-1',
+            oldPermissions: ['MANAGE_JOBS'],
+            newPermissions: ['MANAGE_USERS'],
+          }),
+        }),
+      });
+      expect(result).toMatchObject({ id: 'target-1' });
+    });
+
+    it('throws NotFoundException when admin does not exist', async () => {
+      prisma.adminUser.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.updateAdminPermissions('acting-admin', 'missing', {
+          permissions: ['MANAGE_USERS'],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('listAdmins', () => {
+    it('returns all admins with user data and permissions', async () => {
+      const mockAdmins = [
+        {
+          id: 'admin-1',
+          userId: 'user-1',
+          role: 'ADMIN',
+          createdAt: new Date(),
+          user: {
+            id: 'user-1',
+            email: 'admin@test.com',
+            displayName: 'Admin',
+            status: 'ACTIVE',
+          },
+          permissions: [
+            { permission: 'MANAGE_USERS' },
+            { permission: 'MANAGE_JOBS' },
+          ],
+        },
+      ];
+      prisma.adminUser.findMany.mockResolvedValue(mockAdmins);
+
+      const result = await service.listAdmins();
+
+      expect(prisma.adminUser.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            user: {
+              select: {
+                id: true,
+                email: true,
+                displayName: true,
+                status: true,
+              },
+            },
+            permissions: {
+              select: { permission: true },
+            },
+          }),
+          orderBy: { createdAt: 'desc' },
+        }),
+      );
+      expect(result.data).toHaveLength(1);
+      expect(result.data[0]).toMatchObject({
+        id: 'admin-1',
+        user: { email: 'admin@test.com' },
       });
     });
   });

@@ -92,6 +92,37 @@ export function buildCursorWhere(decoded: { createdAt: Date; id: string }): {
 }
 
 /**
+ * Decode an optional cursor string and build the corresponding keyset
+ * WHERE clause in one step — replaces the common 5-line boilerplate:
+ *
+ * ```ts
+ * // Before (duplicated in ~7 places)
+ * let cursorWhere = {};
+ * if (query.cursor) {
+ *   const decoded = decodeCursor(query.cursor);
+ *   if (decoded) {
+ *     cursorWhere = buildCursorWhere(decoded);
+ *   }
+ * }
+ *
+ * // After
+ * const cursorWhere = resolveCursorFilter(query.cursor);
+ * ```
+ */
+export function resolveCursorFilter(cursor?: string):
+  | {
+      OR: [
+        { createdAt: { lt: Date } },
+        { createdAt: Date; id: { lt: string } },
+      ];
+    }
+  | Record<string, never> {
+  if (!cursor) return {};
+  const decoded = decodeCursor(cursor);
+  return decoded ? buildCursorWhere(decoded) : {};
+}
+
+/**
  * Given a `findMany` result set that was fetched with `take: limit + 1`,
  * split off the extra row and build `hasNextPage` / `nextCursor`.
  *

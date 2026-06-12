@@ -13,6 +13,18 @@ interface MessageSentPayload {
   recipientIds: string[];
 }
 
+interface MessageEditedPayload {
+  messageId: string;
+  conversationId: string;
+  editorId: string;
+}
+
+interface MessageDeletedPayload {
+  messageId: string;
+  conversationId: string;
+  deleterId: string;
+}
+
 @Injectable()
 export class MessagingProcessor {
   private readonly logger = new Logger(MessagingProcessor.name);
@@ -39,6 +51,9 @@ export class MessagingProcessor {
       );
       return;
     }
+
+    // Populate conversation search index (Gap 1)
+    await this.upsertSearchIndex(messageId, conversationId, message.content);
 
     // Create notification for each recipient (except sender)
     for (const recipientId of recipientIds) {
@@ -105,5 +120,69 @@ export class MessagingProcessor {
       createdAt: message.createdAt,
     };
     this.chatGateway.pushMessage(conversationId, messageEvent);
+  }
+
+  async processMessageEdited(payload: MessageEditedPayload): Promise<void> {
+    const { messageId, conversationId, editorId } = payload;
+
+    const message = await this.prisma.message.findUnique({
+      where: { id: messageId },
+      select: { id: true, content: true },
+    });
+
+    if (!message) {
+      this.logger.warn(
+        `MessageEdited: message ${messageId} not found — skipping`,
+      );
+      return;
+    }
+
+    // Update conversation search index with new content (Gap 1)
+    await this.upsertSearchIndex(messageId, conversationId, message.content);
+
+    // Push realtime edit event to conversation room (Gap 2)
+    this.chatGateway.pushMessageEdited(conversationId, messageId, editorId);
+
+    this.logger.debug(
+      `Processed MessageEdited: message=${messageId} conversation=${conversationId}`,
+    );
+  }
+
+  async processMessageDeleted(payload: MessageDeletedPayload): Promise<void> {
+    const { messageId, conversationId, deleterId } = payload;
+
+    // Remove from conversation search index (Gap 1)
+    await this.prisma.$executeRawUnsafe(
+      `DELETE FROM conversation_search_index WHERE message_id = $1::uuid`,
+      messageId,
+    );
+
+    // Push realtime delete event to conversation room (Gap 2)
+    this.chatGateway.pushMessageDeleted(conversationId, messageId, deleterId);
+
+    this.logger.debug(
+      `Processed MessageDeleted: message=${messageId} conversation=${conversationId}`,
+    );
+  }
+
+  /**
+   * Upsert a row in conversation_search_index using PostgreSQL's
+   * to_tsvector for full-text search support.
+   */
+  private async upsertSearchIndex(
+    messageId: string,
+    conversationId: string,
+    content: string,
+  ): Promise<void> {
+    await this.prisma.$executeRawUnsafe(
+      `INSERT INTO conversation_search_index (id, conversation_id, message_id, text_content, created_at)
+       SELECT gen_random_uuid(), $1::uuid, $2::uuid, to_tsvector('english', $3), NOW()
+       ON CONFLICT (message_id)
+       DO UPDATE SET text_content = to_tsvector('english', $3),
+                     created_at = NOW()`,
+      conversationId,
+      messageId,
+      content,
+    );
   }
 }
