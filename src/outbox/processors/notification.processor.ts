@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../infra/prisma/prisma.service';
+import { OutboxService } from '../outbox.service';
 import { NotificationEventDto } from '../../realtime/dto/notification-event.dto';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { IdempotencyService } from '../idempotency.service';
@@ -110,10 +111,24 @@ async function resolveCompanyRecruiters(
 export class NotificationProcessor {
   private readonly logger = new Logger(NotificationProcessor.name);
 
+  /**
+   * Maps in-app notification event names (PascalCase) to the snake_case
+   * push-notification preference keys consumed by `PushNotificationProcessor`.
+   * Events without a mapping fall back to "default enabled" in the push
+   * processor (no per-type opt-out registered).
+   */
+  private static readonly PUSH_TYPE_MAP: Record<string, string> = {
+    ApplicationStatusChanged: 'application_status_change',
+    ApplicationSubmitted: 'application_status_change',
+    ConnectionRequested: 'connection_request',
+    ConnectionAccepted: 'connection_accepted',
+  };
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly idempotencyService: IdempotencyService,
     private readonly realtimeGateway: RealtimeGateway,
+    private readonly outboxService: OutboxService,
   ) {}
 
   async processApplicationSubmitted(
@@ -492,6 +507,59 @@ export class NotificationProcessor {
     };
     this.realtimeGateway.pushNotification(opts.recipientUserId, event);
 
+    // Emit a `PushNotificationRequired` outbox event so the dedicated
+    // `PushNotificationProcessor` can dispatch the mobile push with the
+    // user's per-type preference gate. The emit is in a fresh transaction
+    // (the notification insert above is its own implicit transaction);
+    // failure here leaves the in-app notification intact and logs a warning.
+    await this.emitPushNotificationRequired(
+      opts.recipientUserId,
+      opts.type,
+      opts.title,
+      opts.body,
+      notification.id,
+    );
+
     return true;
+  }
+
+  /**
+   * Emit a `PushNotificationRequired` outbox event for a newly created
+   * notification. Mapped `type` values feed the push processor's
+   * preference lookup; unmapped values fall through to "default enabled".
+   */
+  private async emitPushNotificationRequired(
+    userId: string,
+    type: string,
+    title: string,
+    body: string,
+    notificationId: string,
+  ): Promise<void> {
+    const pushType =
+      NotificationProcessor.PUSH_TYPE_MAP[type] ?? type.toLowerCase();
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        await this.outboxService.emit(tx, {
+          eventType: 'PushNotificationRequired',
+          aggregateType: 'Notification',
+          aggregateId: notificationId,
+          payload: {
+            userId,
+            type: pushType,
+            title,
+            body,
+            data: { notificationId },
+          },
+        });
+      });
+    } catch (err) {
+      // Best-effort: do not propagate — the in-app notification is already
+      // committed and visible to the user.
+      this.logger.warn(
+        { err, userId, notificationId, pushType },
+        'Failed to emit PushNotificationRequired — push will be skipped',
+      );
+    }
   }
 }

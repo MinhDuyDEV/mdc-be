@@ -121,7 +121,47 @@ describe('validateEnv', () => {
       billingProvider: 'mock',
       billingWebhookSecret: 'whsec_test_secret',
       billingDefaultFreePlanSlug: 'free',
+      fcmEnabled: false,
+      fcmServiceAccountPath: '',
+      apnsEnabled: false,
+      apnsTeamId: '',
+      apnsKeyId: '',
+      apnsSigningKeyPath: '',
+      apnsBundleId: '',
+      apnsProduction: false,
+      unleashEnabled: true,
+      unleashUrl: 'http://localhost:4242/api',
+      unleashApiToken: '',
+      unleashAppName: 'mdc-be',
+      emailTrackingBaseUrl: 'http://localhost:3000',
+      emailUnsubscribeSecret: 'dev-only-change-me-in-production',
     });
+  });
+
+  it('uses EMAIL_UNSUBSCRIBE_SECRET when explicitly provided', () => {
+    const result = validateEnv({
+      ...validEnv,
+      EMAIL_UNSUBSCRIBE_SECRET: 'a-real-secret-32-chars-long-x-x-x',
+    });
+    expect(result.emailUnsubscribeSecret).toBe(
+      'a-real-secret-32-chars-long-x-x-x',
+    );
+  });
+
+  it('throws in production when EMAIL_UNSUBSCRIBE_SECRET is the default placeholder', () => {
+    expect(() => validateEnv({ ...validEnv, NODE_ENV: 'production' })).toThrow(
+      /EMAIL_UNSUBSCRIBE_SECRET is required in production/,
+    );
+  });
+
+  it('throws in production when EMAIL_UNSUBSCRIBE_SECRET is empty', () => {
+    expect(() =>
+      validateEnv({
+        ...validEnv,
+        NODE_ENV: 'production',
+        EMAIL_UNSUBSCRIBE_SECRET: '',
+      }),
+    ).toThrow(/EMAIL_UNSUBSCRIBE_SECRET is required in production/);
   });
 
   it.each([

@@ -24,4 +24,8 @@ export class UpdateNotificationPreferenceDto {
   @IsOptional()
   @IsBoolean()
   postInteraction?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  pushEnabled?: boolean;
 }

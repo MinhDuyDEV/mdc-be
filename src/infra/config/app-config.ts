@@ -83,4 +83,22 @@ export interface AppConfig {
   billingProvider: string;
   billingWebhookSecret: string;
   billingDefaultFreePlanSlug: string;
+  // Push Notifications (FCM)
+  fcmEnabled: boolean;
+  fcmServiceAccountPath: string;
+  // Push Notifications (APNs)
+  apnsEnabled: boolean;
+  apnsTeamId: string;
+  apnsKeyId: string;
+  apnsSigningKeyPath: string;
+  apnsBundleId: string;
+  apnsProduction: boolean;
+  // Feature Flags (Unleash)
+  unleashEnabled: boolean;
+  unleashUrl: string;
+  unleashApiToken: string;
+  unleashAppName: string;
+  // Email tracking
+  emailTrackingBaseUrl: string;
+  emailUnsubscribeSecret: string;
 }

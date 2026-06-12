@@ -27,6 +27,25 @@ export class EmailService {
   ) {}
 
   async send(options: SendEmailOptions): Promise<{ message: string }> {
+    // Marketing consent check: skip job-alert if user has unsubscribed
+    if (options.template === 'job-alert') {
+      const user = await this.prisma.user.findUnique({
+        where: { email: options.to },
+        select: { id: true },
+      });
+      if (user) {
+        const consent = await this.prisma.emailConsent.findUnique({
+          where: { userId: user.id },
+        });
+        if (!consent?.marketingConsent || consent.unsubscribedAt) {
+          this.logger.log(
+            `Email skipped (unsubscribed): ${options.template} → ${options.to}`,
+          );
+          return { message: 'Email skipped: user has unsubscribed' };
+        }
+      }
+    }
+
     await this.prisma.emailDelivery.create({
       data: {
         to: options.to,

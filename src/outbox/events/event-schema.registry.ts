@@ -312,6 +312,19 @@ export const outboxEventSchemas = {
     email: z.string(),
     createdAt: z.string(),
   }),
+  ExperimentImpression: payload.extend({
+    experimentId: z.string(),
+    userId: z.string(),
+    variant: z.string(),
+    timestamp: z.string(),
+  }),
+  PushNotificationRequired: payload.extend({
+    userId: z.string(),
+    type: z.string(),
+    title: z.string(),
+    body: z.string(),
+    data: z.record(z.string(), z.string()).optional(),
+  }),
 } as const;
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;

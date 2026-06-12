@@ -6,6 +6,7 @@ export interface RecommendedPersonDto {
   headline: string | null;
   location: string | null;
   profilePictureUrl: string | null;
+  explanation?: string | null;
 }
 
 export interface RecommendedJobDto {
@@ -19,6 +20,7 @@ export interface RecommendedJobDto {
   salaryMax: number | null;
   salaryCurrency: string | null;
   publishedAt: Date | null;
+  explanation?: string | null;
 }
 
 export interface RecommendedCompanyDto {
@@ -28,6 +30,7 @@ export interface RecommendedCompanyDto {
   followerCount: number;
   verified: boolean;
   logoUrl: string | null;
+  explanation?: string | null;
 }
 
 export interface RecommendationsResponseDto<T> {

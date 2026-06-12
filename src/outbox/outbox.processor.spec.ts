@@ -96,6 +96,12 @@ describe('OutboxProcessor', () => {
       processOfferSent: jest.fn().mockResolvedValue(undefined),
       processOfferResponded: jest.fn().mockResolvedValue(undefined),
     };
+    const mockExperimentTrackingProcessor = {
+      process: jest.fn().mockResolvedValue(undefined),
+    };
+    const mockPushNotificationProcessor = {
+      process: jest.fn().mockResolvedValue(undefined),
+    };
     const mockRealtimeGateway = {
       pushNotification: jest.fn(),
     };
@@ -131,6 +137,8 @@ describe('OutboxProcessor', () => {
       mockBillingProcessor as any,
       mockSubscriptionProcessor as any,
       mockRecruitingProcessor as any,
+      mockExperimentTrackingProcessor as any,
+      mockPushNotificationProcessor as any,
       mockMetrics as any,
       mockRealtimeGateway as any,
       mockLogger as any,

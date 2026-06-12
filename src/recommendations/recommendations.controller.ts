@@ -1,14 +1,16 @@
-import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import type {
+  DismissDto,
   RecommendationsQueryDto,
   RecommendationsResponseDto,
   RecommendedCompanyDto,
   RecommendedJobDto,
   RecommendedPersonDto,
+  SubmitFeedbackDto,
 } from './dto';
 import { RecommendationsService } from './recommendations.service';
 
@@ -56,5 +58,25 @@ export class RecommendationsController {
       query.cursor,
       query.limit,
     );
+  }
+
+  @Post('feedback')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async submitFeedback(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: SubmitFeedbackDto,
+  ): Promise<{ message: string }> {
+    await this.recommendationsService.submitFeedback(user.id, dto);
+    return { message: 'Feedback recorded' };
+  }
+
+  @Post('dismiss')
+  @Throttle({ default: { limit: 30, ttl: 60000 } })
+  async dismiss(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: DismissDto,
+  ): Promise<{ message: string }> {
+    await this.recommendationsService.dismissRecommendation(user.id, dto);
+    return { message: 'Recommendation dismissed' };
   }
 }

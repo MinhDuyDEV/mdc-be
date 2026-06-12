@@ -8,10 +8,15 @@ interface MockPrisma {
   savedCandidate: { findFirst: jest.Mock };
   talentPoolCandidate: { findFirst: jest.Mock };
   notification: { create: jest.Mock; findFirst: jest.Mock };
+  $transaction: jest.Mock;
 }
 
 interface MockIdempotency {
   claim: jest.Mock;
+}
+
+interface MockOutboxService {
+  emit: jest.Mock;
 }
 
 interface MockLogger {
@@ -40,6 +45,14 @@ function createProcessor() {
       }),
       findFirst: jest.fn().mockResolvedValue(null),
     },
+    // $transaction forwards its callback so the outbox.emit() inside it runs
+    // against the same mock client. Most tests don't care; the push-emit
+    // tests override this to assert transaction usage.
+    $transaction: jest
+      .fn()
+      .mockImplementation(async (cb) =>
+        cb({ outboxEvent: { create: jest.fn() } }),
+      ),
   };
   const idempotency: MockIdempotency = {
     claim: jest.fn().mockResolvedValue({ id: 'idem-1' }),
@@ -53,12 +66,23 @@ function createProcessor() {
   const realtimeGateway = {
     pushNotification: jest.fn(),
   };
+  const outboxService: MockOutboxService = {
+    emit: jest.fn().mockResolvedValue(undefined),
+  };
   const processor = new NotificationProcessor(
     prisma as never,
     idempotency as never,
     realtimeGateway as never,
+    outboxService,
   );
-  return { processor, prisma, idempotency, logger, realtimeGateway };
+  return {
+    processor,
+    prisma,
+    idempotency,
+    logger,
+    realtimeGateway,
+    outboxService,
+  };
 }
 
 describe('NotificationProcessor', () => {
@@ -337,6 +361,114 @@ describe('NotificationProcessor', () => {
       });
 
       expect(prisma.notification.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('push notification emission', () => {
+    it('emits PushNotificationRequired for ConnectionAccepted → connection_accepted', async () => {
+      const { processor, prisma, outboxService } = createProcessor();
+
+      await processor.processConnectionAccepted({
+        connectionId: 'conn-1',
+        requesterUserId: 'user-1',
+        targetUserId: 'user-2',
+      });
+
+      expect(prisma.$transaction).toHaveBeenCalled();
+      expect(outboxService.emit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          eventType: 'PushNotificationRequired',
+          aggregateType: 'Notification',
+          aggregateId: 'notif-1',
+          payload: expect.objectContaining({
+            userId: 'user-1',
+            type: 'connection_accepted',
+            title: 'Connection accepted',
+            body: 'Your connection request was accepted',
+            data: { notificationId: 'notif-1' },
+          }),
+        }),
+      );
+    });
+
+    it('emits PushNotificationRequired for ApplicationStatusChanged → application_status_change', async () => {
+      const { processor, prisma, outboxService } = createProcessor();
+      prisma.application.findUnique.mockResolvedValue({
+        id: 'app-1',
+        userId: 'user-1',
+      });
+
+      await processor.processApplicationStatusChanged({
+        applicationId: 'app-1',
+        toStatus: 'REVIEWED',
+        companyId: 'company-1',
+        candidateUserId: 'user-1',
+      });
+
+      expect(outboxService.emit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          eventType: 'PushNotificationRequired',
+          payload: expect.objectContaining({
+            userId: 'user-1',
+            type: 'application_status_change',
+          }),
+        }),
+      );
+    });
+
+    it('uses the lowercased event name for unmapped notification types', async () => {
+      const { processor, prisma, outboxService } = createProcessor();
+      prisma.savedCandidate.findFirst.mockResolvedValue({ id: 'sc-1' });
+
+      await processor.processCandidateSaved({
+        savedCandidateId: 'sc-1',
+        companyId: 'company-1',
+        candidateUserId: 'user-1',
+        savedByUserId: 'recruiter-1',
+      });
+
+      expect(outboxService.emit).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            type: 'candidatesaved',
+          }),
+        }),
+      );
+    });
+
+    it('skips push emission when notification is a duplicate (replay)', async () => {
+      const { processor, prisma, outboxService } = createProcessor();
+      prisma.savedCandidate.findFirst.mockResolvedValue({ id: 'sc-1' });
+      prisma.notification.findFirst.mockResolvedValue({ id: 'notif-existing' });
+
+      await processor.processCandidateSaved({
+        savedCandidateId: 'sc-1',
+        companyId: 'company-1',
+        candidateUserId: 'user-1',
+        savedByUserId: 'recruiter-1',
+      });
+
+      expect(prisma.notification.create).not.toHaveBeenCalled();
+      expect(outboxService.emit).not.toHaveBeenCalled();
+    });
+
+    it('warns and does not throw when the outbox emit fails', async () => {
+      const { processor, outboxService } = createProcessor();
+      outboxService.emit.mockRejectedValue(new Error('db down'));
+
+      // Should not throw — push emit is best-effort
+      await expect(
+        processor.processConnectionAccepted({
+          connectionId: 'conn-1',
+          requesterUserId: 'user-1',
+          targetUserId: 'user-2',
+        }),
+      ).resolves.not.toThrow();
+
+      expect(warnSpy).toHaveBeenCalled();
     });
   });
 });

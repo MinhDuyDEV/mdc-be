@@ -14,9 +14,12 @@ import { CommonModule } from './common';
 import { CompaniesModule } from './companies/companies.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { EmailModule } from './email/email.module';
+import { ExperimentsModule } from './experiments/experiments.module';
 import { FeedModule } from './feed/feed.module';
+import { FeatureFlagsModule } from './infra/feature-flags/feature-flags.module';
 import { InfraModule } from './infra';
 import type { AppConfig } from './infra/config';
+import { PushModule } from './infra/push/push.module';
 import { REDIS_CLIENT } from './infra/redis/redis.constants';
 import { JobsModule } from './jobs/jobs.module';
 import { MediaModule } from './media/media.module';
@@ -57,13 +60,16 @@ import { UsersModule } from './users/users.module';
     }),
     AdminModule,
     CommonModule,
+    FeatureFlagsModule,
     InfraModule,
+    PushModule,
     AnalyticsModule,
     ApplicationsModule,
     AuthModule,
     BillingModule,
     CompaniesModule,
     EmailModule,
+    ExperimentsModule,
     JobsModule,
     MediaModule,
     NotificationsModule,

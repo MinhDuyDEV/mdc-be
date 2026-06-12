@@ -1,0 +1,72 @@
+import { Test, type TestingModule } from '@nestjs/testing';
+import { PrismaService } from '../../infra/prisma/prisma.service';
+import { ExperimentTrackingProcessor } from './experiment-tracking.processor';
+
+describe('ExperimentTrackingProcessor', () => {
+  let processor: ExperimentTrackingProcessor;
+  let prisma: jest.Mocked<PrismaService>;
+
+  const mockPayload = {
+    experimentId: 'exp-homepage-v2',
+    userId: 'user-123',
+    variant: 'treatment-a',
+    timestamp: '2026-06-12T00:00:00.000Z',
+  };
+
+  beforeEach(async () => {
+    prisma = {
+      experimentImpression: {
+        create: jest.fn(),
+      },
+    } as unknown as jest.Mocked<PrismaService>;
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        ExperimentTrackingProcessor,
+        { provide: PrismaService, useValue: prisma },
+      ],
+    }).compile();
+
+    processor = module.get<ExperimentTrackingProcessor>(
+      ExperimentTrackingProcessor,
+    );
+  });
+
+  it('creates an experiment impression record', async () => {
+    await processor.process(mockPayload);
+
+    expect(prisma.experimentImpression.create).toHaveBeenCalledWith({
+      data: {
+        experimentId: 'exp-homepage-v2',
+        userId: 'user-123',
+        variant: 'treatment-a',
+        impressedAt: new Date('2026-06-12T00:00:00.000Z'),
+      },
+    });
+  });
+
+  it('allows duplicate rows (append-only analytics)', async () => {
+    // The schema has no @@unique([experimentId, userId]) — a returning
+    // user can be re-bucketed, so duplicate rows are valid. The insert
+    // is unconditional; if the DB ever does throw P2002, it should
+    // propagate (no silent dedup).
+    (prisma.experimentImpression.create as jest.Mock).mockResolvedValue({
+      id: 'impression-1',
+    });
+
+    await expect(processor.process(mockPayload)).resolves.toBeUndefined();
+  });
+
+  it('rethrows Prisma errors (no silent swallowing)', async () => {
+    const dbError = Object.assign(new Error('Connection lost'), {
+      code: 'P2002',
+    });
+    (prisma.experimentImpression.create as jest.Mock).mockRejectedValue(
+      dbError,
+    );
+
+    await expect(processor.process(mockPayload)).rejects.toThrow(
+      'Connection lost',
+    );
+  });
+});

@@ -3,10 +3,12 @@ import type { Redis } from 'ioredis';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { REDIS_CLIENT } from '../infra/redis/redis.constants';
 import type {
+  DismissDto,
   RecommendationsResponseDto,
   RecommendedCompanyDto,
   RecommendedJobDto,
   RecommendedPersonDto,
+  SubmitFeedbackDto,
 } from './dto';
 import {
   encodeScoreCursor,
@@ -18,6 +20,12 @@ import {
 export class RecommendationsService {
   private readonly CACHE_TTL = 3600; // 1 hour
   private readonly CACHE_PREFIX = 'recommendations:';
+
+  private readonly ENTITY_TYPE_TO_CACHE_KEY: Record<string, string> = {
+    person: 'people',
+    job: 'jobs',
+    company: 'companies',
+  };
 
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
@@ -123,6 +131,7 @@ export class RecommendationsService {
         headline: user.profile?.headline || null,
         location: user.profile?.location || null,
         profilePictureUrl: this.mediaUrl(user.mediaAssets?.[0]?.id),
+        explanation: this.buildExplanation('person', scored.score),
         score: scored.score,
       });
     }
@@ -265,6 +274,7 @@ export class RecommendationsService {
         salaryMax: job.salaryMax ? Number(job.salaryMax) : null,
         salaryCurrency: job.salaryCurrency,
         publishedAt: job.publishedAt,
+        explanation: this.buildExplanation('job', scored.score),
         score: scored.score,
       });
     }
@@ -393,6 +403,7 @@ export class RecommendationsService {
           company.logoMediaAsset.visibility === 'PUBLIC'
             ? this.mediaUrl(company.logoMediaAsset.id)
             : null,
+        explanation: this.buildExplanation('company', scored.score),
         score: scored.score,
       });
     }
@@ -428,5 +439,78 @@ export class RecommendationsService {
     }
 
     return result;
+  }
+
+  async submitFeedback(userId: string, dto: SubmitFeedbackDto): Promise<void> {
+    await this.prisma.recommendationFeedback.upsert({
+      where: {
+        unique_recommendation_feedback: {
+          userId,
+          entityType: dto.entityType,
+          entityId: dto.entityId,
+        },
+      },
+      update: { feedback: dto.feedback },
+      create: {
+        userId,
+        entityType: dto.entityType,
+        entityId: dto.entityId,
+        feedback: dto.feedback,
+      },
+    });
+
+    // Invalidate cache
+    await this.invalidateRecommendationCache(userId, dto.entityType);
+  }
+
+  async dismissRecommendation(userId: string, dto: DismissDto): Promise<void> {
+    await this.prisma.recommendationDismissal.upsert({
+      where: {
+        unique_recommendation_dismissal: {
+          userId,
+          entityType: dto.entityType,
+          entityId: dto.entityId,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        entityType: dto.entityType,
+        entityId: dto.entityId,
+      },
+    });
+
+    // Invalidate cache
+    await this.invalidateRecommendationCache(userId, dto.entityType);
+  }
+
+  private async invalidateRecommendationCache(
+    userId: string,
+    entityType: string,
+  ): Promise<void> {
+    const type = this.ENTITY_TYPE_TO_CACHE_KEY[entityType] ?? entityType;
+    const cacheKey = `${this.CACHE_PREFIX}${type}:${userId}`;
+    try {
+      await this.redis.del(cacheKey);
+    } catch {
+      // Cache invalidation failures are non-critical
+    }
+  }
+
+  private buildExplanation(
+    entityType: string,
+    score: number,
+  ): string | undefined {
+    if (score <= 0) return undefined;
+    switch (entityType) {
+      case 'person':
+        return `${score} mutual connection${score !== 1 ? 's' : ''}`;
+      case 'job':
+        return `Matches ${score} of your skills`;
+      case 'company':
+        return `${score} connection${score !== 1 ? 's' : ''} work here`;
+      default:
+        return undefined;
+    }
   }
 }

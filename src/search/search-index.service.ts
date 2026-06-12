@@ -2,6 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { PinoLogger } from 'nestjs-pino';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { SearchEngineService } from '../infra/search-engine';
+// `synonyms.ts` is kept for future query-time synonym application. The
+// index-time edge_ngram analyzer + synonym filter (which used
+// buildSynonymList) was removed in Phase D P1 cleanup.
 
 /**
  * Elasticsearch indexing facade consumed by outbox processors
@@ -255,7 +258,10 @@ export class SearchIndexService {
           userId: { type: 'keyword' },
           displayName: {
             type: 'text',
-            fields: { keyword: { type: 'keyword' } },
+            fields: {
+              keyword: { type: 'keyword' },
+              autocomplete: { type: 'search_as_you_type' },
+            },
           },
           headline: { type: 'text', analyzer: 'english' },
           about: { type: 'text', analyzer: 'english' },
@@ -269,7 +275,10 @@ export class SearchIndexService {
           ...commonFields,
           name: {
             type: 'text',
-            fields: { keyword: { type: 'keyword' } },
+            fields: {
+              keyword: { type: 'keyword' },
+              autocomplete: { type: 'search_as_you_type' },
+            },
           },
           industry: { type: 'text' },
           description: { type: 'text', analyzer: 'english' },
@@ -283,13 +292,19 @@ export class SearchIndexService {
           ...commonFields,
           title: {
             type: 'text',
-            fields: { keyword: { type: 'keyword' } },
+            fields: {
+              keyword: { type: 'keyword' },
+              autocomplete: { type: 'search_as_you_type' },
+            },
           },
           description: { type: 'text', analyzer: 'english' },
           companyId: { type: 'keyword' },
           companyName: {
             type: 'text',
-            fields: { keyword: { type: 'keyword' } },
+            fields: {
+              keyword: { type: 'keyword' },
+              autocomplete: { type: 'search_as_you_type' },
+            },
           },
           location: { type: 'text' },
           salaryMin: { type: 'integer' },
@@ -307,7 +322,10 @@ export class SearchIndexService {
           authorId: { type: 'keyword' },
           authorName: {
             type: 'text',
-            fields: { keyword: { type: 'keyword' } },
+            fields: {
+              keyword: { type: 'keyword' },
+              autocomplete: { type: 'search_as_you_type' },
+            },
           },
           content: { type: 'text', analyzer: 'english' },
           hashtags: { type: 'keyword' },
@@ -322,29 +340,19 @@ export class SearchIndexService {
   }
 
   /**
-   * Default index settings with an edge-ngram autocomplete analyzer.
+   * Default index settings. Autocomplete prefix matching is provided by
+   * the `search_as_you_type` sub-fields on displayName/title/name/etc.
+   * (see `getEntityMappings()`). A custom edge_ngram analyzer + synonym
+   * filter was previously declared here but assigned to no field, making
+   * it a no-op — see Phase D P1 cleanup. Synonyms (when needed) should
+   * be applied at query time via `synonym_graph` or a similar query-time
+   * mechanism, not as an index-time edge_ngram analyzer.
    */
   private getIndexSettings(): Record<string, unknown> {
     return {
       number_of_shards: 1,
       number_of_replicas: 1,
       'index.refresh_interval': '30s',
-      analysis: {
-        analyzer: {
-          autocomplete: {
-            tokenizer: 'autocomplete',
-            filter: ['lowercase'],
-          },
-        },
-        tokenizer: {
-          autocomplete: {
-            type: 'edge_ngram',
-            min_gram: 2,
-            max_gram: 20,
-            token_chars: ['letter', 'digit'],
-          },
-        },
-      },
     };
   }
 

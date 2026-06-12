@@ -66,6 +66,24 @@ describe('RecommendationsRepository', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('includes user_dismissals CTE to filter dismissed items', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await repository.findPeopleRecommendations('user-1', undefined, 20);
+
+      const sqlCall = prisma.$queryRaw.mock.calls[0][0];
+      const sqlText =
+        typeof sqlCall === 'string'
+          ? sqlCall
+          : ((sqlCall as { text?: string }).text ?? JSON.stringify(sqlCall));
+      expect(sqlText).toContain('user_dismissals');
+      expect(sqlText).toContain('recommendation_dismissals');
+      expect(sqlText).toContain("entity_type = 'person'");
+      expect(sqlText).toContain(
+        'NOT IN (SELECT entity_id FROM user_dismissals)',
+      );
+    });
   });
 
   describe('findJobRecommendations', () => {
@@ -107,6 +125,23 @@ describe('RecommendationsRepository', () => {
 
       expect(result).toEqual([]);
     });
+
+    it('includes user_dismissals CTE to filter dismissed jobs', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await repository.findJobRecommendations('user-1', undefined, 20);
+
+      const sqlCall = prisma.$queryRaw.mock.calls[0][0];
+      const sqlText =
+        typeof sqlCall === 'string'
+          ? sqlCall
+          : ((sqlCall as { text?: string }).text ?? JSON.stringify(sqlCall));
+      expect(sqlText).toContain('user_dismissals');
+      expect(sqlText).toContain("entity_type = 'job'");
+      expect(sqlText).toContain(
+        'NOT IN (SELECT entity_id FROM user_dismissals)',
+      );
+    });
   });
 
   describe('findCompanyRecommendations', () => {
@@ -147,6 +182,23 @@ describe('RecommendationsRepository', () => {
       );
 
       expect(result).toEqual([]);
+    });
+
+    it('includes user_dismissals CTE to filter dismissed companies', async () => {
+      prisma.$queryRaw.mockResolvedValue([]);
+
+      await repository.findCompanyRecommendations('user-1', undefined, 20);
+
+      const sqlCall = prisma.$queryRaw.mock.calls[0][0];
+      const sqlText =
+        typeof sqlCall === 'string'
+          ? sqlCall
+          : ((sqlCall as { text?: string }).text ?? JSON.stringify(sqlCall));
+      expect(sqlText).toContain('user_dismissals');
+      expect(sqlText).toContain("entity_type = 'company'");
+      expect(sqlText).toContain(
+        'NOT IN (SELECT entity_id FROM user_dismissals)',
+      );
     });
   });
 });

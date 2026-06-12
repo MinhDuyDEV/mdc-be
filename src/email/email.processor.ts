@@ -8,6 +8,7 @@ import {
   type MailerTransporter,
 } from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { EmailTrackingService } from './email-tracking.service';
 import { EmailService } from './email.service';
 
 export interface EmailSendEvent {
@@ -27,6 +28,7 @@ export class EmailProcessor {
     @Inject(MAILER_TRANSPORTER)
     private readonly mailerService: MailerTransporter,
     private readonly emailService: EmailService,
+    private readonly trackingService: EmailTrackingService,
     private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
@@ -49,6 +51,32 @@ export class EmailProcessor {
         orderBy: { createdAt: 'asc' },
       });
 
+      // ── Batch user + consent lookups (avoids N+1) ──
+      // We do these OUTSIDE the per-row loop — previously each of the
+      // 50 rows triggered 2 sequential DB roundtrips (`user.findUnique`
+      // + `emailConsent.findUnique`), so a 50-email batch was 100 queries.
+      // Now: 1 query for all users, then 1 query for all consents.
+      const uniqueRecipients = [...new Set(rows.map((r) => r.to))];
+      const users =
+        uniqueRecipients.length === 0
+          ? []
+          : await this.prisma.user.findMany({
+              where: { email: { in: uniqueRecipients } },
+              select: { id: true, email: true },
+            });
+      const userIdByEmail = new Map(users.map((u) => [u.email, u.id]));
+
+      const consents: Array<{ userId: string; trackingConsent: boolean }> =
+        users.length === 0
+          ? []
+          : await this.prisma.emailConsent.findMany({
+              where: { userId: { in: users.map((u) => u.id) } },
+              select: { userId: true, trackingConsent: true },
+            });
+      const trackingConsentByUserId = new Map(
+        consents.map((c) => [c.userId, c.trackingConsent]),
+      );
+
       // Process each email while holding the lock — prevents duplicate sends
       // on crash or retry between lock release and SMTP call.
       for (const delivery of rows) {
@@ -61,16 +89,55 @@ export class EmailProcessor {
         };
 
         try {
-          const html = this.emailService.renderTemplate(
+          let html = this.emailService.renderTemplate(
             event.template,
             event.context,
           );
+
+          // ── Email tracking & unsubscribe ──
+          const userId = userIdByEmail.get(delivery.to);
+          let unsubscribeUrl: string | undefined;
+
+          if (userId) {
+            const hasConsent = trackingConsentByUserId.get(userId) ?? false;
+            if (hasConsent) {
+              html = this.trackingService.injectTrackingPixel(
+                html,
+                delivery.id,
+              );
+              html = this.trackingService.rewriteLinks(html, delivery.id);
+            }
+
+            // Always add unsubscribe link
+            unsubscribeUrl = this.trackingService.getUnsubscribeUrl(userId);
+            const unsubscribeHtml = `<p style="font-size:12px;color:#999;margin-top:30px"><a href="${unsubscribeUrl}" style="color:#999">Unsubscribe</a></p>`;
+
+            if (html.includes('</body>')) {
+              html = html.replace('</body>', `${unsubscribeHtml}</body>`);
+            } else {
+              html = html + unsubscribeHtml;
+            }
+          }
+          // ── End tracking ──
+
           const from = this.configService.get('emailFrom', { infer: true });
+          // RFC 8058 one-click unsubscribe header. The URL is the same
+          // HMAC-signed token URL embedded in the email body; mail clients
+          // that support List-Unsubscribe-Post will trigger unsubscribe
+          // without requiring the user to open the email.
+          const headers: Record<string, string> = unsubscribeUrl
+            ? {
+                'List-Unsubscribe': `<${unsubscribeUrl}>`,
+                'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+              }
+            : {};
+
           await this.mailerService.sendMail({
             from,
             to: event.to,
             subject: event.subject,
             html,
+            ...(Object.keys(headers).length > 0 ? { headers } : {}),
           });
 
           await tx.emailDelivery.update({
