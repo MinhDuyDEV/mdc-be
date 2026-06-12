@@ -4,7 +4,6 @@ import { CursorPaginationQueryDto } from '../../common/pagination/cursor-paginat
 export enum FeedSortOrder {
   RANKED = 'ranked',
   LATEST = 'latest',
-  TRENDING = 'trending',
 }
 
 export class FeedQueryDto extends CursorPaginationQueryDto {

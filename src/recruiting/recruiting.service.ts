@@ -181,7 +181,7 @@ export class RecruitingService {
 
     const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasMore: hasNextPage } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   // ─────────────────────── Talent pools ───────────────────────────────────
@@ -525,7 +525,7 @@ export class RecruitingService {
 
     const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasMore: hasNextPage } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   // ─────────────────────── Scorecard System (W2-T10) ─────────────────────
@@ -626,7 +626,7 @@ export class RecruitingService {
 
     const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
-    return { data: items, meta: { nextCursor, hasMore: hasNextPage } };
+    return { data: items, meta: { nextCursor, hasNextPage, limit } };
   }
 
   // ─────────────────────── Offer Workflow (W2-T11) ───────────────────────
@@ -694,37 +694,32 @@ export class RecruitingService {
   }
 
   async respondToOffer(userId: string, offerId: string, accepted: boolean) {
-    const offer = await this.prisma.offer.findFirst({
-      where: { id: offerId, status: 'SENT' },
-      select: { id: true, applicationId: true, companyId: true },
-    });
-    if (!offer) {
-      throw new NotFoundException('OFFER_NOT_FOUND_OR_NOT_SENT');
-    }
-
-    // Verify user is the candidate
-    const application = await this.prisma.application.findFirst({
-      where: { id: offer.applicationId, userId },
-      select: { id: true },
-    });
-    if (!application) {
-      throw new ForbiddenException('NOT_CANDIDATE_FOR_OFFER');
-    }
-
     const newStatus = accepted ? 'ACCEPTED' : 'REJECTED';
 
     return this.prisma.$transaction(async (tx) => {
+      // Read offer + verify candidate inside transaction to prevent TOCTOU race
+      const offer = await tx.offer.findFirst({
+        where: {
+          id: offerId,
+          status: 'SENT',
+          application: { userId },
+        },
+        select: { id: true, applicationId: true, companyId: true },
+      });
+
+      if (!offer) {
+        throw new NotFoundException('OFFER_NOT_FOUND_OR_NOT_SENT');
+      }
+
       const updated = await tx.offer.update({
-        where: { id: offerId },
+        where: { id: offerId, status: 'SENT' },
         data: { status: newStatus },
       });
 
-      // Update application status accordingly
+      // Update application status accordingly (only if currently in a valid state)
       await tx.application.update({
         where: { id: offer.applicationId },
-        data: {
-          status: accepted ? 'ACCEPTED' : 'REJECTED',
-        },
+        data: { status: accepted ? 'ACCEPTED' : 'REJECTED' },
       });
 
       await this.outboxService.emit(tx, {

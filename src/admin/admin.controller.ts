@@ -105,6 +105,7 @@ export class AdminController {
   // ---------------------------------------------------------------------------
 
   @Post('admins')
+  @Roles('super_admin')
   @Permissions('MANAGE_ADMINS')
   async createAdmin(
     @CurrentUser('id') adminId: string,
@@ -115,6 +116,7 @@ export class AdminController {
   }
 
   @Delete('admins/:id')
+  @Roles('super_admin')
   @Permissions('MANAGE_ADMINS')
   async removeAdmin(
     @CurrentUser('id') adminId: string,
@@ -125,6 +127,7 @@ export class AdminController {
   }
 
   @Patch('admins/:id/permissions')
+  @Roles('super_admin')
   @Permissions('MANAGE_ADMINS')
   async updateAdminPermissions(
     @CurrentUser('id') adminId: string,

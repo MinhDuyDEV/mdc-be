@@ -40,7 +40,7 @@ describe('MessagingService', () => {
         update: jest.fn(),
       },
       user: { findUnique: jest.fn() },
-      $queryRawUnsafe: jest.fn().mockResolvedValue([]),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       $transaction: jest.fn((cb: (tx: unknown) => unknown) => cb(prisma)),
     };
     outbox = { emit: jest.fn() };
@@ -631,7 +631,7 @@ describe('MessagingService', () => {
           message_created_at: new Date('2026-01-01'),
         },
       ];
-      prisma.$queryRawUnsafe.mockResolvedValue(rows);
+      prisma.$queryRaw.mockResolvedValue(rows);
 
       const result = await service.searchMessages('user-1', {
         q: 'hello',
@@ -651,7 +651,7 @@ describe('MessagingService', () => {
       });
 
       expect(result.data).toEqual([]);
-      expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
 
     it('returns empty array for whitespace-only query', async () => {
@@ -661,18 +661,20 @@ describe('MessagingService', () => {
       });
 
       expect(result.data).toEqual([]);
-      expect(prisma.$queryRawUnsafe).not.toHaveBeenCalled();
+      expect(prisma.$queryRaw).not.toHaveBeenCalled();
     });
 
     it('sanitizes input by stripping special characters', async () => {
-      prisma.$queryRawUnsafe.mockResolvedValue([]);
+      prisma.$queryRaw.mockResolvedValue([]);
 
       await service.searchMessages('user-1', {
         q: 'hello; DROP TABLE users; --',
         limit: 20,
       });
 
-      const sql = (prisma.$queryRawUnsafe as jest.Mock).mock.calls[0][0];
+      // With $queryRaw tagged template, the mock receives [stringParts, ...values]
+      const callArgs = (prisma.$queryRaw as jest.Mock).mock.calls[0];
+      const sql = callArgs[0].join('') + callArgs.slice(1).join('');
       expect(sql).toContain('hello');
       // DROP passes through (word chars only — regex keeps \w\s-)
       expect(sql).not.toContain(';');
@@ -699,7 +701,7 @@ describe('MessagingService', () => {
           message_created_at: new Date('2026-01-01'),
         },
       ];
-      prisma.$queryRawUnsafe.mockResolvedValue(rows);
+      prisma.$queryRaw.mockResolvedValue(rows);
 
       const result = await service.searchMessages('user-1', {
         q: 'hello',
@@ -712,7 +714,7 @@ describe('MessagingService', () => {
     });
 
     it('filters by conversationId when provided', async () => {
-      prisma.$queryRawUnsafe.mockResolvedValue([]);
+      prisma.$queryRaw.mockResolvedValue([]);
 
       await service.searchMessages('user-1', {
         q: 'hello',
@@ -720,8 +722,11 @@ describe('MessagingService', () => {
         conversationId: 'conv-1',
       });
 
-      const sql = (prisma.$queryRawUnsafe as jest.Mock).mock.calls[0][0];
-      expect(sql).toContain("conversation_id = 'conv-1'::uuid");
+      // Query is called with conversation filter when conversationId provided
+      expect(prisma.$queryRaw).toHaveBeenCalled();
+      const callArgs = (prisma.$queryRaw as jest.Mock).mock.calls[0];
+      const sql = callArgs[0].join('');
+      expect(sql).toContain('conversation_id =');
     });
   });
 });

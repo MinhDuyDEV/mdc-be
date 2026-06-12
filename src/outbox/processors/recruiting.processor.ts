@@ -95,23 +95,36 @@ export class RecruitingProcessor {
   async processScorecardSubmitted(
     payload: ScorecardSubmittedPayload,
   ): Promise<void> {
-    // Notify the recruiter who scheduled the interview
+    // Notify the company OWNER/ADMIN who can see the scorecard
     const interview = await this.prisma.interview.findUnique({
       where: { id: payload.interviewId },
-      select: { id: true },
+      select: { companyId: true },
     });
     if (!interview) return;
 
-    await this.insertNotification({
-      recipientUserId: payload.submittedByUserId,
-      eventType: 'ScorecardSubmitted',
-      aggregateId: payload.scorecardId,
-      type: 'ScorecardSubmitted',
-      payloadJson: payload as unknown as Record<string, unknown>,
-      title: 'Scorecard submitted',
-      body: 'A scorecard has been submitted for an interview',
-      actionUrl: `/companies/${payload.companyId}/scorecards`,
+    const adminMembers = await this.prisma.companyMember.findMany({
+      where: {
+        companyId: interview.companyId,
+        role: { in: ['OWNER', 'ADMIN'] },
+        deletedAt: null,
+      },
+      select: { userId: true },
     });
+
+    if (adminMembers.length === 0) return;
+
+    for (const member of adminMembers) {
+      await this.insertNotification({
+        recipientUserId: member.userId,
+        eventType: 'ScorecardSubmitted',
+        aggregateId: payload.scorecardId,
+        type: 'ScorecardSubmitted',
+        payloadJson: payload as unknown as Record<string, unknown>,
+        title: 'Scorecard submitted',
+        body: 'A scorecard has been submitted for an interview',
+        actionUrl: `/companies/${payload.companyId}/scorecards`,
+      });
+    }
   }
 
   async processOfferSent(payload: OfferSentPayload): Promise<void> {
@@ -133,10 +146,33 @@ export class RecruitingProcessor {
     });
   }
 
-  processOfferResponded(payload: OfferRespondedPayload): void {
-    // Log for now — company notification fan-out is deferred
-    // Future: find company members and notify them
-    void payload.accepted;
+  async processOfferResponded(payload: OfferRespondedPayload): Promise<void> {
+    // Notify company OWNER/ADMIN about offer response
+    const adminMembers = await this.prisma.companyMember.findMany({
+      where: {
+        companyId: payload.companyId,
+        role: { in: ['OWNER', 'ADMIN'] },
+        deletedAt: null,
+      },
+      select: { userId: true },
+    });
+
+    if (adminMembers.length === 0) return;
+
+    const verb = payload.accepted ? 'accepted' : 'rejected';
+
+    for (const member of adminMembers) {
+      await this.insertNotification({
+        recipientUserId: member.userId,
+        eventType: 'OfferResponded',
+        aggregateId: payload.offerId,
+        type: 'OfferResponded',
+        payloadJson: payload as unknown as Record<string, unknown>,
+        title: `Offer ${verb}`,
+        body: `A candidate has ${verb} the job offer`,
+        actionUrl: `/companies/${payload.companyId}/offers`,
+      });
+    }
   }
 
   private async insertNotification(opts: {
@@ -151,38 +187,40 @@ export class RecruitingProcessor {
   }): Promise<boolean> {
     const key = `${opts.recipientUserId}:${opts.eventType}:${opts.aggregateId}`;
 
-    try {
-      await this.idempotencyService.claim('Notification', key);
-    } catch {
-      // Duplicate notification — skip
-      return false;
-    }
+    return this.prisma.$transaction(async (tx) => {
+      try {
+        await this.idempotencyService.claim(tx, 'Notification', key);
+      } catch {
+        // Duplicate notification — skip
+        return false;
+      }
 
-    const existing = await this.prisma.notification.findFirst({
-      where: {
-        userId: opts.recipientUserId,
-        type: opts.type as never,
-        payloadJson: {
-          path: ['aggregateId'],
-          equals: opts.aggregateId,
+      const existing = await tx.notification.findFirst({
+        where: {
+          userId: opts.recipientUserId,
+          type: opts.type as never,
+          payloadJson: {
+            path: ['aggregateId'],
+            equals: opts.aggregateId,
+          },
         },
-      },
-      select: { id: true },
+        select: { id: true },
+      });
+
+      if (existing) return false;
+
+      await tx.notification.create({
+        data: {
+          userId: opts.recipientUserId,
+          type: opts.type as never,
+          payloadJson: opts.payloadJson as never,
+          title: opts.title,
+          body: opts.body,
+          actionUrl: opts.actionUrl,
+        },
+      });
+
+      return true;
     });
-
-    if (existing) return false;
-
-    await this.prisma.notification.create({
-      data: {
-        userId: opts.recipientUserId,
-        type: opts.type as never,
-        payloadJson: opts.payloadJson as never,
-        title: opts.title,
-        body: opts.body,
-        actionUrl: opts.actionUrl,
-      },
-    });
-
-    return true;
   }
 }

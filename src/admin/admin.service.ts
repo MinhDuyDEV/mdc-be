@@ -411,6 +411,6 @@ export class AdminService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    return { data: admins };
+    return { data: admins, meta: { hasNextPage: false, limit: admins.length } };
   }
 }

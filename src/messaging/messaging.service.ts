@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import * as crypto from 'node:crypto';
 import {
   DEFAULT_PAGE_LIMIT,
@@ -502,6 +503,18 @@ export class MessagingService {
     userId: string,
     dto: CreateGroupConversationDto,
   ) {
+    // Check that no participant is blocked by the creator
+    for (const participantId of dto.participantIds) {
+      if (participantId === userId) continue;
+      const canCreate = await this.messagingPolicy.canCreateConversation(
+        userId,
+        participantId,
+      );
+      if (!canCreate) {
+        throw new BadRequestException('BLOCKED_USER');
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       await this.idempotencyService.claim(tx, 'Conversation:group', dto.title);
 
@@ -751,37 +764,23 @@ export class MessagingService {
       .map((word) => `${word}:*`)
       .join(' & ');
 
-    // Build cursor condition
-    let cursorCondition = '';
+    // Build cursor condition using parameterized Prisma.sql fragments
+    const cursorParts: Prisma.Sql[] = [];
     if (dto.cursor) {
-      const decoded = JSON.parse(
-        Buffer.from(dto.cursor, 'base64').toString('utf8'),
-      ) as {
-        createdAt: string;
-        id: string;
-      };
-      cursorCondition = `AND csi.created_at < '${new Date(decoded.createdAt).toISOString()}'`;
+      const decoded = decodeCursor(dto.cursor);
+      if (decoded) {
+        cursorParts.push(Prisma.sql`AND csi.created_at < ${decoded.createdAt}`);
+      }
     }
 
-    const conversationFilter = dto.conversationId
-      ? `AND csi.conversation_id = '${dto.conversationId}'::uuid`
-      : '';
+    const conversationParts: Prisma.Sql[] = [];
+    if (dto.conversationId) {
+      conversationParts.push(
+        Prisma.sql`AND csi.conversation_id = ${dto.conversationId}::uuid`,
+      );
+    }
 
-    const sql = `
-      SELECT csi.id, csi.conversation_id, csi.message_id, csi.created_at,
-             m.content, m.sender_id, m.created_at AS message_created_at
-      FROM conversation_search_index csi
-      JOIN messages m ON m.id = csi.message_id AND m.deleted_at IS NULL
-      JOIN conversation_participants cp ON cp.conversation_id = csi.conversation_id
-        AND cp.user_id = '${userId}'::uuid AND cp.left_at IS NULL
-      WHERE csi.text_content @@ to_tsquery('english', '${tsquery}')
-        ${conversationFilter}
-        ${cursorCondition}
-      ORDER BY csi.created_at DESC
-      LIMIT ${limit + 1}
-    `;
-
-    const rows = await this.prisma.$queryRawUnsafe<
+    const rows = await this.prisma.$queryRaw<
       Array<{
         id: string;
         conversation_id: string;
@@ -791,21 +790,26 @@ export class MessagingService {
         sender_id: string;
         message_created_at: Date;
       }>
-    >(sql);
+    >`
+      SELECT csi.id, csi.conversation_id, csi.message_id, csi.created_at,
+             m.content, m.sender_id, m.created_at AS message_created_at
+      FROM conversation_search_index csi
+      JOIN messages m ON m.id = csi.message_id AND m.deleted_at IS NULL
+      JOIN conversation_participants cp ON cp.conversation_id = csi.conversation_id
+        AND cp.user_id = ${userId}::uuid AND cp.left_at IS NULL
+      WHERE csi.text_content @@ to_tsquery('english', ${tsquery})
+        ${conversationParts.length > 0 ? Prisma.join(conversationParts) : Prisma.empty}
+        ${cursorParts.length > 0 ? Prisma.join(cursorParts) : Prisma.empty}
+      ORDER BY csi.created_at DESC
+      LIMIT ${limit + 1}
+    `;
 
     const hasNextPage = rows.length > limit;
     const items = hasNextPage ? rows.slice(0, limit) : rows;
 
     const last = items.at(-1);
     const nextCursor =
-      hasNextPage && last
-        ? Buffer.from(
-            JSON.stringify({
-              createdAt: last.created_at.toISOString(),
-              id: last.id,
-            }),
-          ).toString('base64')
-        : undefined;
+      hasNextPage && last ? encodeCursor(last.created_at, last.id) : undefined;
 
     return {
       data: items.map((row) => ({

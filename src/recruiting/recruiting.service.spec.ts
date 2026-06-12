@@ -513,7 +513,7 @@ describe('RecruitingService', () => {
       });
 
       expect(result.data).toHaveLength(2);
-      expect(result.meta.hasMore).toBe(false);
+      expect(result.meta.hasNextPage).toBe(false);
     });
 
     it('supports applicationId filter', async () => {
@@ -627,7 +627,7 @@ describe('RecruitingService', () => {
       });
 
       expect(result.data).toHaveLength(1);
-      expect(result.meta.hasMore).toBe(false);
+      expect(result.meta.hasNextPage).toBe(false);
     });
   });
 
@@ -735,7 +735,6 @@ describe('RecruitingService', () => {
         applicationId: 'app-1',
         companyId: 'c-1',
       });
-      prisma.application.findFirst.mockResolvedValue({ id: 'app-1' });
       const updated = { id: 'offer-1', status: 'ACCEPTED' };
       prisma.offer.update.mockResolvedValue(updated);
       prisma.application.update.mockResolvedValue({});
@@ -764,7 +763,6 @@ describe('RecruitingService', () => {
         applicationId: 'app-2',
         companyId: 'c-1',
       });
-      prisma.application.findFirst.mockResolvedValue({ id: 'app-2' });
       const updated = { id: 'offer-2', status: 'REJECTED' };
       prisma.offer.update.mockResolvedValue(updated);
       prisma.application.update.mockResolvedValue({});
@@ -795,16 +793,12 @@ describe('RecruitingService', () => {
     });
 
     it('rejects when user is not the candidate', async () => {
-      prisma.offer.findFirst.mockResolvedValue({
-        id: 'offer-1',
-        applicationId: 'app-1',
-        companyId: 'c-1',
-      });
-      prisma.application.findFirst.mockResolvedValue(null);
+      // Combined query with application: { userId } returns null for wrong user
+      prisma.offer.findFirst.mockResolvedValue(null);
 
       await expect(
         service.respondToOffer('other-user', 'offer-1', true),
-      ).rejects.toThrow(new ForbiddenException('NOT_CANDIDATE_FOR_OFFER'));
+      ).rejects.toThrow(new NotFoundException('OFFER_NOT_FOUND_OR_NOT_SENT'));
     });
   });
 });

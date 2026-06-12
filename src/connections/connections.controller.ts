@@ -14,13 +14,17 @@ import {
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { ConnectionsPolicyService } from './connections-policy.service';
 import { ConnectionsService } from './connections.service';
 import { MutualConnectionsQueryDto } from './dto/mutual-connections-query.dto';
 import { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 @Controller('connections')
 export class ConnectionsController {
-  constructor(private readonly connectionsService: ConnectionsService) {}
+  constructor(
+    private readonly connectionsService: ConnectionsService,
+    private readonly connectionsPolicy: ConnectionsPolicyService,
+  ) {}
 
   /** POST /api/v1/connections — Send a connection request */
   @Post()
@@ -57,12 +61,11 @@ export class ConnectionsController {
     @Param('userId', ParseUUIDPipe) targetUserId: string,
     @Query() query: MutualConnectionsQueryDto,
   ) {
-    const result = await this.connectionsService.getMutualConnections(
+    return this.connectionsPolicy.getMutualConnectionsWithPolicy(
       user.id,
       targetUserId,
       query,
     );
-    return result;
   }
 
   /** PATCH /api/v1/connections/:id/accept — Accept a pending request */

@@ -349,7 +349,7 @@ export class JobsService {
 
     return {
       data: items.map(toJobResponseDto),
-      meta: { nextCursor, hasMore: hasNextPage },
+      meta: { nextCursor, hasNextPage, limit },
     };
   }
 
@@ -620,7 +620,7 @@ export class JobsService {
         savedAt: row.createdAt,
         job: toJobResponseDto(row.job),
       })),
-      meta: { nextCursor, hasMore: hasNextPage },
+      meta: { nextCursor, hasNextPage, limit },
     };
   }
 
@@ -705,7 +705,7 @@ export class JobsService {
 
     return {
       data: items,
-      meta: { nextCursor, hasMore: hasNextPage },
+      meta: { nextCursor, hasNextPage, limit },
     };
   }
 

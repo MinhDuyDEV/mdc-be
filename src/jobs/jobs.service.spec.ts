@@ -710,7 +710,7 @@ describe('JobsService', () => {
       const result = await service.listSavedSearches('user-1', { limit: 20 });
 
       expect(result.data).toHaveLength(0);
-      expect(result.meta.hasMore).toBe(false);
+      expect(result.meta.hasNextPage).toBe(false);
     });
   });
 });

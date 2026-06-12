@@ -42,7 +42,6 @@ const CONNECTION_INCLUDE = {
 
 export interface MutualConnectionRow {
   id: string;
-  email: string;
   firstName: string | null;
   lastName: string | null;
   headline: string | null;
@@ -355,7 +354,6 @@ export class ConnectionsService {
       Prisma.sql`
         SELECT
           u.id,
-          u.email,
           p.first_name AS "firstName",
           p.last_name AS "lastName",
           p.headline,

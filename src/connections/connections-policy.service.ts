@@ -89,7 +89,6 @@ export class ConnectionsPolicyService {
         )
         SELECT
           u.id,
-          u.email,
           p.first_name AS "firstName",
           p.last_name AS "lastName",
           p.headline,

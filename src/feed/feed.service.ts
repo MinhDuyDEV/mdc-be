@@ -463,60 +463,49 @@ export class FeedService {
     const windowStart = new Date(now - 24 * 60 * 60 * 1000);
     const windowEnd = new Date();
 
-    const posts = await this.prisma.post.findMany({
-      where: {
-        createdAt: { gte: windowStart },
-        deletedAt: null,
-        status: 'PUBLISHED' as const,
-      },
-      include: {
-        hashtags: true,
-        reactions: { select: { id: true } },
-        comments: { select: { id: true } },
-      },
-    });
+    // Aggregate in SQL instead of loading all posts into memory
+    type HashtagScore = { hashtag_id: string; score: number };
+    const scores = await this.prisma.$queryRaw<HashtagScore[]>`
+      SELECT
+        ph.hashtag_id,
+        (
+          COUNT(DISTINCT r.id)::int * 2
+          + COUNT(DISTINCT c.id)::int * 3
+          + COUNT(DISTINCT p.id)::int
+        ) AS score
+      FROM post_hashtags ph
+      JOIN posts p ON p.id = ph.post_id
+        AND p.deleted_at IS NULL
+        AND p.status = 'PUBLISHED'
+      LEFT JOIN reactions r ON r.post_id = p.id
+      LEFT JOIN comments c ON c.post_id = p.id
+      WHERE p.created_at >= ${windowStart}
+      GROUP BY ph.hashtag_id
+      HAVING (
+        COUNT(DISTINCT r.id) * 2
+        + COUNT(DISTINCT c.id) * 3
+        + COUNT(DISTINCT p.id)
+      ) > 0
+    `;
 
-    // Group by hashtag and accumulate counts
-    const hashtagScores = new Map<
-      string,
-      { postCount: number; reactionCount: number; commentCount: number }
-    >();
-
-    for (const post of posts) {
-      const reactionCount = post.reactions.length;
-      const commentCount = post.comments.length;
-      for (const ph of post.hashtags) {
-        const current = hashtagScores.get(ph.hashtagId) ?? {
-          postCount: 0,
-          reactionCount: 0,
-          commentCount: 0,
-        };
-        current.postCount += 1;
-        current.reactionCount += reactionCount;
-        current.commentCount += commentCount;
-        hashtagScores.set(ph.hashtagId, current);
-      }
-    }
-
-    for (const [hashtagId, counts] of hashtagScores) {
-      const score =
-        counts.reactionCount * 2 + counts.commentCount * 3 + counts.postCount;
-      if (score <= 0) continue;
-
-      // Use findFirst + create/update instead of upsert with composite id
-      // because the primary key is a UUID column.
+    for (const row of scores) {
       const existing = await this.prisma.trendingHashtag.findFirst({
-        where: { hashtagId, windowStart },
+        where: { hashtagId: row.hashtag_id, windowStart },
       });
 
       if (existing) {
         await this.prisma.trendingHashtag.update({
           where: { id: existing.id },
-          data: { score, windowEnd },
+          data: { score: row.score, windowEnd },
         });
       } else {
         await this.prisma.trendingHashtag.create({
-          data: { hashtagId, score, windowStart, windowEnd },
+          data: {
+            hashtagId: row.hashtag_id,
+            score: row.score,
+            windowStart,
+            windowEnd,
+          },
         });
       }
     }
