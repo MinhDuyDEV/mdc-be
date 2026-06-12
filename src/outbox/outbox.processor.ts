@@ -579,13 +579,21 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'MessageEdited':
-        this.logger.debug(
-          `MessageEdited: message ${(payload as { messageId: string }).messageId} edited (no-op — deferred)`,
+        await this.messagingProcessor.processMessageEdited(
+          payload as {
+            messageId: string;
+            conversationId: string;
+            editorId: string;
+          },
         );
         return;
       case 'MessageDeleted':
-        this.logger.debug(
-          `MessageDeleted: message ${(payload as { messageId: string }).messageId} deleted (no-op — deferred)`,
+        await this.messagingProcessor.processMessageDeleted(
+          payload as {
+            messageId: string;
+            conversationId: string;
+            deleterId: string;
+          },
         );
         return;
       case 'ConversationCreated': {

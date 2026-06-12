@@ -12,9 +12,14 @@ describe('MessagingProcessor', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
       },
+      $executeRawUnsafe: jest.fn().mockResolvedValue(1),
     };
     idempotency = { claim: jest.fn().mockResolvedValue({}) };
-    const chatGateway = { pushMessage: jest.fn() } as any;
+    const chatGateway = {
+      pushMessage: jest.fn(),
+      pushMessageEdited: jest.fn(),
+      pushMessageDeleted: jest.fn(),
+    } as any;
     const realtimeGateway = { pushNotification: jest.fn() } as any;
     processor = new MessagingProcessor(
       prisma,
@@ -53,6 +58,13 @@ describe('MessagingProcessor', () => {
         }),
       }),
     );
+    // Verify search index was populated
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO conversation_search_index'),
+      'conv-1',
+      'msg-1',
+      'Hello',
+    );
   });
 
   it('skips notification creation if message not found', async () => {
@@ -66,6 +78,8 @@ describe('MessagingProcessor', () => {
     });
 
     expect(prisma.notification.create).not.toHaveBeenCalled();
+    // Search index should not be populated when message not found
+    expect(prisma.$executeRawUnsafe).not.toHaveBeenCalled();
   });
 
   it('skips duplicate notifications', async () => {
@@ -95,6 +109,49 @@ describe('MessagingProcessor', () => {
       expect.objectContaining({
         data: expect.objectContaining({ userId: 'user-3' }),
       }),
+    );
+  });
+
+  it('processMessageEdited updates search index and pushes realtime event', async () => {
+    prisma.message.findUnique.mockResolvedValue({
+      id: 'msg-1',
+      content: 'Updated content',
+    });
+
+    await processor.processMessageEdited({
+      messageId: 'msg-1',
+      conversationId: 'conv-1',
+      editorId: 'user-1',
+    });
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('INSERT INTO conversation_search_index'),
+      'conv-1',
+      'msg-1',
+      'Updated content',
+    );
+    expect(processor['chatGateway'].pushMessageEdited).toHaveBeenCalledWith(
+      'conv-1',
+      'msg-1',
+      'user-1',
+    );
+  });
+
+  it('processMessageDeleted removes search index and pushes realtime event', async () => {
+    await processor.processMessageDeleted({
+      messageId: 'msg-1',
+      conversationId: 'conv-1',
+      deleterId: 'user-1',
+    });
+
+    expect(prisma.$executeRawUnsafe).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM conversation_search_index'),
+      'msg-1',
+    );
+    expect(processor['chatGateway'].pushMessageDeleted).toHaveBeenCalledWith(
+      'conv-1',
+      'msg-1',
+      'user-1',
     );
   });
 });

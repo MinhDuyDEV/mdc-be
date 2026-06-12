@@ -41,7 +41,7 @@ const DOMAIN_IMPORT_ALLOWLIST = {
   feed: ["connections", "posts"],
   jobs: ["billing", "outbox"],
   media: ["outbox"],
-  messaging: ["connections", "outbox", "recruiting"],
+  messaging: ["connections", "media", "outbox", "recruiting"],
   moderation: ["auth", "outbox"],
   notifications: ["auth"],
   outbox: ["billing", "email", "realtime", "search"],

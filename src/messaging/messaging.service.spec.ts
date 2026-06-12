@@ -55,12 +55,16 @@ describe('MessagingService', () => {
         .fn()
         .mockResolvedValue({ allowed: true, reason: 'OPT_IN' }),
     };
+    const mediaService = {
+      validateOwnership: jest.fn().mockResolvedValue([]),
+    } as any;
     service = new MessagingService(
       prisma,
       outbox,
       idempotency,
       messagingPolicy,
       recruitingPolicy,
+      mediaService,
     );
   });
 

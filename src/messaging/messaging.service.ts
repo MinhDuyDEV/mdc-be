@@ -11,6 +11,7 @@ import {
   type CursorPaginationQueryDto,
 } from '../common/pagination/cursor-pagination.dto';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { MediaService } from '../media/media.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
 import { RecruitingPolicyService } from '../recruiting/recruiting-policy.service';
@@ -37,6 +38,7 @@ export class MessagingService {
     private readonly idempotencyService: IdempotencyService,
     private readonly messagingPolicy: MessagingPolicyService,
     private readonly recruitingPolicy: RecruitingPolicyService,
+    private readonly mediaService: MediaService,
   ) {}
 
   async createConversation(userId: string, dto: CreateConversationDto) {
@@ -340,17 +342,7 @@ export class MessagingService {
 
     // If attachmentIds provided, validate each media asset exists and is owned by sender
     if (dto.attachmentIds?.length) {
-      const mediaAssets = await this.prisma.mediaAsset.findMany({
-        where: {
-          id: { in: dto.attachmentIds },
-          ownerId: userId,
-        },
-        select: { id: true },
-      });
-
-      if (mediaAssets.length !== dto.attachmentIds.length) {
-        throw new BadRequestException('INVALID_ATTACHMENTS');
-      }
+      await this.mediaService.validateOwnership(userId, dto.attachmentIds);
     }
 
     return this.prisma.$transaction(async (tx) => {
