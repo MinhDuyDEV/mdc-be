@@ -22,11 +22,7 @@ import type { ScheduleInterviewDto } from './dto/schedule-interview.dto';
 import type { UpdateInterviewDto } from './dto/update-interview.dto';
 import type { SubmitScorecardDto } from './dto/submit-scorecard.dto';
 import type { CreateOfferDto } from './dto/create-offer.dto';
-import {
-  buildCursorWhere,
-  decodeCursor,
-  paginateRows,
-} from '../common/pagination/cursor';
+import { paginateRows, resolveCursorFilter } from '../common/pagination/cursor';
 
 /**
  * Recruiting domain service.
@@ -175,13 +171,7 @@ export class RecruitingService {
     await this.assertEmployerRole(companyId, userId);
     const limit = query.limit ?? 20;
 
-    let cursorWhere: Prisma.SavedCandidateWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.savedCandidate.findMany({
       where: { AND: [{ companyId, deletedAt: null }, cursorWhere] },
@@ -524,13 +514,7 @@ export class RecruitingService {
       andClauses.push({ applicationId: query.applicationId });
     }
 
-    let cursorWhere: Prisma.InterviewWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.interview.findMany({
       where: { AND: [...andClauses, cursorWhere] },
@@ -631,13 +615,7 @@ export class RecruitingService {
       andClauses.push({ applicationId: query.applicationId });
     }
 
-    let cursorWhere: Prisma.ScorecardWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.scorecard.findMany({
       where: { AND: [...andClauses, cursorWhere] },

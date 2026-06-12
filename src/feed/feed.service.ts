@@ -10,11 +10,7 @@ import {
 } from '@prisma/client';
 import { ConnectionsPolicyService } from '../connections/connections-policy.service';
 import { MAX_PAGE_LIMIT } from '../common/pagination/cursor-pagination.dto';
-import {
-  buildCursorWhere,
-  decodeCursor,
-  paginateRows,
-} from '../common/pagination/cursor';
+import { paginateRows, resolveCursorFilter } from '../common/pagination/cursor';
 import type { AppConfig } from '../infra/config/app-config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import type { FeedQueryDto } from './dto/feed-query.dto';
@@ -149,10 +145,9 @@ export class FeedService {
   async getHomeFeed(userId: string | undefined, query: FeedQueryDto) {
     const limit = query.limit ?? 20;
 
-    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
     const cursorWhere =
-      query.sort !== FeedSortOrder.RANKED && cursor
-        ? buildCursorWhere(cursor)
+      query.sort !== FeedSortOrder.RANKED
+        ? resolveCursorFilter(query.cursor)
         : {};
 
     // Hoist social-graph sets for scoring (populated when authenticated)
@@ -328,8 +323,7 @@ export class FeedService {
     query: FeedQueryDto,
   ) {
     const limit = query.limit ?? 20;
-    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
-    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     // Block check: if either party has blocked the other, return empty feed
     if (viewerId && viewerId !== userId) {
@@ -386,8 +380,7 @@ export class FeedService {
    */
   async getCompanyFeed(companyId: string, query: FeedQueryDto) {
     const limit = query.limit ?? 20;
-    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
-    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const members = await this.prisma.companyMember.findMany({
       where: { companyId, status: 'active' },
@@ -423,8 +416,7 @@ export class FeedService {
    */
   async getHashtagFeed(tag: string, query: FeedQueryDto) {
     const limit = query.limit ?? 20;
-    const cursor = query.cursor ? decodeCursor(query.cursor) : undefined;
-    const cursorWhere = cursor ? buildCursorWhere(cursor) : {};
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const hashtag = await this.prisma.hashtag.findUnique({
       where: { name: tag.toLowerCase() },

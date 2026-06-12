@@ -53,7 +53,6 @@ export class AdminService {
     dto: UpdateUserStatusDto,
     adminId: string,
   ): Promise<void> {
-    // fallow-ignore-next-line complexity
     await this.prisma.$transaction(async (tx) => {
       // Read current status so we can validate the transition and
       // record previousStatus for downstream consumers / auditors.

@@ -18,11 +18,7 @@ import { toJobResponseDto } from './dto/job.response.dto';
 import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
 import type { UpdateJobDto } from './dto/update-job.dto';
 import type { UpdateSavedSearchDto } from './dto/update-saved-search.dto';
-import {
-  buildCursorWhere,
-  decodeCursor,
-  paginateRows,
-} from '../common/pagination/cursor';
+import { paginateRows, resolveCursorFilter } from '../common/pagination/cursor';
 
 /**
  * Validates the mutual exclusivity rule between Job.applyMode and Job.applyUrl.
@@ -339,15 +335,9 @@ export class JobsService {
       ...(query.skillId && { skills: { some: { skillId: query.skillId } } }),
     };
 
-    let cursorWhere: Prisma.JobWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
-
+    const cursorWhere = resolveCursorFilter(query.cursor);
     const limit = query.limit ?? 20;
+
     const rows = await this.prisma.job.findMany({
       where: { AND: [baseWhere, cursorWhere] },
       include: JOB_INCLUDES,
@@ -612,15 +602,9 @@ export class JobsService {
   }
 
   async listSavedJobs(userId: string, query: CursorPaginationQueryDto) {
-    let cursorWhere: Prisma.SavedJobWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
-
+    const cursorWhere = resolveCursorFilter(query.cursor);
     const limit = query.limit ?? 20;
+
     const rows = await this.prisma.savedJob.findMany({
       where: { AND: [{ userId, deletedAt: null }, cursorWhere] },
       include: { job: { include: JOB_INCLUDES } },
@@ -708,15 +692,9 @@ export class JobsService {
   }
 
   async listSavedSearches(userId: string, query: CursorPaginationQueryDto) {
-    let cursorWhere: Prisma.SavedSearchWhereInput = {};
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
-
+    const cursorWhere = resolveCursorFilter(query.cursor);
     const limit = query.limit ?? 20;
+
     const rows = await this.prisma.savedSearch.findMany({
       where: { AND: [{ userId, deletedAt: null }, cursorWhere] },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],

@@ -13,8 +13,8 @@ import type { SendConnectionRequestDto } from './dto/send-connection-request.dto
 import {
   decodeCursor,
   encodeCursor,
-  buildCursorWhere,
   paginateRows,
+  resolveCursorFilter,
 } from '../common/pagination/cursor';
 
 const CONNECTION_INCLUDE = {
@@ -219,14 +219,7 @@ export class ConnectionsService {
     query: { cursor?: string; limit?: number },
   ) {
     const limit = query.limit ?? 20;
-    let cursorWhere: Prisma.ConnectionWhereInput = {};
-
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.connection.findMany({
       where: {
@@ -253,14 +246,7 @@ export class ConnectionsService {
     query: { cursor?: string; limit?: number },
   ) {
     const limit = query.limit ?? 20;
-    let cursorWhere: Prisma.ConnectionWhereInput = {};
-
-    if (query.cursor) {
-      const decoded = decodeCursor(query.cursor);
-      if (decoded) {
-        cursorWhere = buildCursorWhere(decoded);
-      }
-    }
+    const cursorWhere = resolveCursorFilter(query.cursor);
 
     const rows = await this.prisma.connection.findMany({
       where: {
