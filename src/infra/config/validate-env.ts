@@ -343,5 +343,27 @@ export function validateEnv(env: RawEnv): AppConfig {
     billingWebhookSecret: requireString(env, 'BILLING_WEBHOOK_SECRET'),
     billingDefaultFreePlanSlug:
       parseOptionalString(env, 'BILLING_DEFAULT_FREE_PLAN_SLUG') || 'free',
+    // Push notifications (FCM/APNs) — all optional, disabled by default
+    fcmEnabled: parseOptionalString(env, 'FCM_ENABLED') === 'true',
+    fcmServiceAccountPath: parseOptionalString(env, 'FCM_SERVICE_ACCOUNT_PATH'),
+    apnsEnabled: parseOptionalString(env, 'APNS_ENABLED') === 'true',
+    apnsTeamId: parseOptionalString(env, 'APNS_TEAM_ID'),
+    apnsKeyId: parseOptionalString(env, 'APNS_KEY_ID'),
+    apnsSigningKeyPath: parseOptionalString(env, 'APNS_SIGNING_KEY_PATH'),
+    apnsBundleId: parseOptionalString(env, 'APNS_BUNDLE_ID'),
+    apnsProduction: parseOptionalString(env, 'APNS_PRODUCTION') === 'true',
+    // Feature flags (Unleash) — optional, disabled by default
+    unleashEnabled: parseOptionalString(env, 'UNLEASH_ENABLED') !== 'false',
+    unleashUrl:
+      parseOptionalString(env, 'UNLEASH_URL') || 'http://localhost:4242/api',
+    unleashApiToken: parseOptionalString(env, 'UNLEASH_API_TOKEN') ?? '',
+    unleashAppName: parseOptionalString(env, 'UNLEASH_APP_NAME') || 'mdc-be',
+    // Email tracking (CNIL)
+    emailTrackingBaseUrl:
+      parseOptionalString(env, 'EMAIL_TRACKING_BASE_URL') ||
+      'http://localhost:3000',
+    emailUnsubscribeSecret:
+      parseOptionalString(env, 'EMAIL_UNSUBSCRIBE_SECRET') ||
+      'change-me-in-production',
   };
 }

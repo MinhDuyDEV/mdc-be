@@ -195,6 +195,59 @@ describe('SearchService', () => {
     });
   });
 
+  describe('buildAutocompleteQuery', () => {
+    it('returns bool_prefix multi_match per entity type', () => {
+      const result = service.buildAutocompleteQuery('sen', [
+        'profiles',
+        'jobs',
+      ]);
+      const { bool } = result as {
+        bool: {
+          should: Array<{ multi_match: { type: string; fields: string[] } }>;
+          minimum_should_match: number;
+        };
+      };
+      expect(bool.should).toHaveLength(2);
+      expect(bool.minimum_should_match).toBe(1);
+
+      const profileClause = bool.should[0].multi_match;
+      expect(profileClause.type).toBe('bool_prefix');
+      expect(profileClause.fields).toContain('displayName.autocomplete');
+
+      const jobClause = bool.should[1].multi_match;
+      expect(jobClause.type).toBe('bool_prefix');
+      expect(jobClause.fields).toContain('title.autocomplete');
+      expect(jobClause.fields).toContain('companyName.autocomplete');
+    });
+
+    it('includes all entity types by default', () => {
+      const result = service.buildAutocompleteQuery('eng');
+      const { bool } = result as {
+        bool: { should: unknown[] };
+      };
+      expect(bool.should).toHaveLength(4);
+    });
+
+    it('skips unknown entity types', () => {
+      const result = service.buildAutocompleteQuery('test', ['unknown']);
+      const { bool } = result as {
+        bool: { should: unknown[] };
+      };
+      expect(bool.should).toHaveLength(0);
+    });
+
+    it('includes companyName.autocomplete for jobs', () => {
+      const result = service.buildAutocompleteQuery('micro', ['jobs']);
+      const { bool } = result as {
+        bool: {
+          should: Array<{ multi_match: { fields: string[] } }>;
+        };
+      };
+      const fields = bool.should[0].multi_match.fields;
+      expect(fields).toContain('companyName.autocomplete');
+    });
+  });
+
   describe('buildSearchBody', () => {
     it('wraps query with from/size/sort options', () => {
       const esQuery = { match_all: {} };

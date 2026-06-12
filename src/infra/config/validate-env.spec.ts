@@ -121,6 +121,20 @@ describe('validateEnv', () => {
       billingProvider: 'mock',
       billingWebhookSecret: 'whsec_test_secret',
       billingDefaultFreePlanSlug: 'free',
+      fcmEnabled: false,
+      fcmServiceAccountPath: '',
+      apnsEnabled: false,
+      apnsTeamId: '',
+      apnsKeyId: '',
+      apnsSigningKeyPath: '',
+      apnsBundleId: '',
+      apnsProduction: false,
+      unleashEnabled: true,
+      unleashUrl: 'http://localhost:4242/api',
+      unleashApiToken: '',
+      unleashAppName: 'mdc-be',
+      emailTrackingBaseUrl: 'http://localhost:3000',
+      emailUnsubscribeSecret: 'change-me-in-production',
     });
   });
 

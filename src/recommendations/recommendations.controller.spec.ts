@@ -8,6 +8,8 @@ describe('RecommendationsController', () => {
     getPeopleRecommendations: jest.Mock;
     getJobRecommendations: jest.Mock;
     getCompanyRecommendations: jest.Mock;
+    submitFeedback: jest.Mock;
+    dismissRecommendation: jest.Mock;
   };
 
   const mockUser: AuthenticatedUser = {
@@ -24,6 +26,8 @@ describe('RecommendationsController', () => {
       getPeopleRecommendations: jest.fn(),
       getJobRecommendations: jest.fn(),
       getCompanyRecommendations: jest.fn(),
+      submitFeedback: jest.fn(),
+      dismissRecommendation: jest.fn(),
     };
 
     controller = new RecommendationsController(
@@ -113,5 +117,29 @@ describe('RecommendationsController', () => {
       'abc789',
       10,
     );
+  });
+
+  it('delegates submitFeedback to service', async () => {
+    service.submitFeedback.mockResolvedValue(undefined);
+
+    const dto = {
+      entityType: 'job' as const,
+      entityId: 'job-1',
+      feedback: 'helpful' as const,
+    };
+    const result = await controller.submitFeedback(mockUser, dto);
+
+    expect(service.submitFeedback).toHaveBeenCalledWith('u1', dto);
+    expect(result).toEqual({ message: 'Feedback recorded' });
+  });
+
+  it('delegates dismiss to service', async () => {
+    service.dismissRecommendation.mockResolvedValue(undefined);
+
+    const dto = { entityType: 'person' as const, entityId: 'user-2' };
+    const result = await controller.dismiss(mockUser, dto);
+
+    expect(service.dismissRecommendation).toHaveBeenCalledWith('u1', dto);
+    expect(result).toEqual({ message: 'Recommendation dismissed' });
   });
 });

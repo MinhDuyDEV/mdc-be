@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { EmailModule } from '../email/email.module';
 import { InfraModule } from '../infra';
+import { PushModule } from '../infra/push/push.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SearchModule } from '../search';
 import { OutboxCoreModule } from './outbox-core.module';
@@ -17,6 +18,8 @@ import { PostInteractionProcessor } from './processors/post-interaction.processo
 import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import { ExperimentTrackingProcessor } from './processors/experiment-tracking.processor';
+import { PushNotificationProcessor } from './processors/push-notification.processor';
 import { RecruitingProcessor } from './processors/recruiting.processor';
 import { SubscriptionProcessor } from './processors/subscription.processor';
 
@@ -27,8 +30,10 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
     RealtimeModule,
     SearchModule,
     EmailModule,
+    PushModule,
   ],
   providers: [
+    ExperimentTrackingProcessor,
     NotificationProcessor,
     PostInteractionProcessor,
     PostSearchIndexProcessor,
@@ -40,6 +45,7 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
     JobAlertProcessor,
     JobSearchIndexProcessor,
     MessagingProcessor,
+    PushNotificationProcessor,
     ApplicationEmailProcessor,
     BillingProcessor,
     SubscriptionProcessor,

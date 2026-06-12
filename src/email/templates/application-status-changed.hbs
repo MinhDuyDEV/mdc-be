@@ -1,8 +1,13 @@
-Hi {{candidateName}},
-
-Your application to "{{jobTitle}}" at {{companyName}} has moved to status: {{toStatus}}.
-{{#if reason}}
-Reason: {{reason}}
-{{/if}}
-
-Open the app to view details.
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2 style="color: #2c3e50;">Application Status Update</h2>
+  <p>Hi {{candidateName}},</p>
+  <p>Your application to <strong>"{{jobTitle}}"</strong> at <strong>{{companyName}}</strong> has moved to status: <strong>{{toStatus}}</strong>.</p>
+  {{#if reason}}
+  <p>Reason: {{reason}}</p>
+  {{/if}}
+  <p style="margin-top: 30px; font-size: 14px; color: #7f8c8d;">Open the app to view details.</p>
+</body>
+</html>

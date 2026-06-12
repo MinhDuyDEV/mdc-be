@@ -8,14 +8,18 @@ import {
   Request,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '../auth/auth.guard';
+import { Public } from '../common/auth/public.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { SuggestQueryDto } from './dto/search-suggest.dto';
 import { SearchQueryDto, SearchReindexQueryDto } from './dto/search.query.dto';
 import type { SearchResponseDto } from './dto/search.response.dto';
 import { SearchIndexService } from './search-index.service';
 import { SearchQueryService } from './search-query.service';
+import { SearchSuggestService } from './search-suggest.service';
 
 interface AuthenticatedRequest {
   user?: { id: string };
@@ -26,6 +30,7 @@ export class SearchController {
   constructor(
     private readonly searchQuery: SearchQueryService,
     private readonly searchIndex: SearchIndexService,
+    private readonly searchSuggest: SearchSuggestService,
   ) {}
 
   /**
@@ -91,6 +96,23 @@ export class SearchController {
   ): Promise<SearchResponseDto> {
     const userId = req.user?.id;
     return this.searchQuery.search({ ...query, type: ['posts'] }, userId);
+  }
+
+  /**
+   * Search autocomplete suggestions
+   * GET /api/v1/search/suggest?q=sen&limit=5
+   */
+  @Get('suggest')
+  @Public()
+  @Throttle({ default: { limit: 60, ttl: 60000 } })
+  async suggest(@Query() query: SuggestQueryDto) {
+    const entityTypes = query.type
+      ? query.type
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : undefined;
+    return this.searchSuggest.suggest(query.q, entityTypes, query.limit ?? 10);
   }
 
   /**

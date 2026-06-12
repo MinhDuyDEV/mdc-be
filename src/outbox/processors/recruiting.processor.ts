@@ -106,7 +106,7 @@ export class RecruitingProcessor {
       where: {
         companyId: interview.companyId,
         role: { in: ['OWNER', 'ADMIN'] },
-        deletedAt: null,
+        status: 'active',
       },
       select: { userId: true },
     });
@@ -152,7 +152,7 @@ export class RecruitingProcessor {
       where: {
         companyId: payload.companyId,
         role: { in: ['OWNER', 'ADMIN'] },
-        deletedAt: null,
+        status: 'active',
       },
       select: { userId: true },
     });

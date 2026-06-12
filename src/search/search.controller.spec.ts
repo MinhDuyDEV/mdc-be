@@ -4,6 +4,7 @@ describe('SearchController', () => {
   let controller: SearchController;
   let mockSearchQuery: any;
   let mockSearchIndex: any;
+  let mockSearchSuggest: any;
 
   beforeEach(() => {
     mockSearchQuery = {
@@ -22,7 +23,25 @@ describe('SearchController', () => {
       reindexEntity: jest.fn().mockResolvedValue('reindex-jobs-123'),
     };
 
-    controller = new SearchController(mockSearchQuery, mockSearchIndex);
+    mockSearchSuggest = {
+      suggest: jest.fn().mockResolvedValue({
+        data: [
+          {
+            id: 'profile-1',
+            type: 'profile',
+            text: 'Senior Engineer',
+            score: 2.5,
+          },
+        ],
+        meta: { took: 5 },
+      }),
+    };
+
+    controller = new SearchController(
+      mockSearchQuery,
+      mockSearchIndex,
+      mockSearchSuggest,
+    );
   });
 
   it('should call searchQuery.search for unified search', async () => {
@@ -96,6 +115,59 @@ describe('SearchController', () => {
     expect(result).toEqual({
       message: 'Reindex started for jobs',
       runId: 'reindex-jobs-123',
+    });
+  });
+
+  describe('suggest', () => {
+    it('should call searchSuggest.suggest with query and default limit', async () => {
+      const query = { q: 'sen' } as any;
+
+      await controller.suggest(query);
+      expect(mockSearchSuggest.suggest).toHaveBeenCalledWith(
+        'sen',
+        undefined,
+        10,
+      );
+    });
+
+    it('should parse comma-separated type filter', async () => {
+      const query = { q: 'eng', type: 'profiles,jobs', limit: 5 } as any;
+
+      await controller.suggest(query);
+      expect(mockSearchSuggest.suggest).toHaveBeenCalledWith(
+        'eng',
+        ['profiles', 'jobs'],
+        5,
+      );
+    });
+
+    it('should return suggest results', async () => {
+      const query = { q: 'senior', limit: 5 } as any;
+
+      const result = await controller.suggest(query);
+      expect(result).toEqual({
+        data: [
+          {
+            id: 'profile-1',
+            type: 'profile',
+            text: 'Senior Engineer',
+            score: 2.5,
+          },
+        ],
+        meta: { took: 5 },
+      });
+    });
+
+    it('should handle empty type filter', async () => {
+      const query = { q: 'dev', type: '', limit: 3 } as any;
+
+      await controller.suggest(query);
+      // Empty string after split/filter → undefined
+      expect(mockSearchSuggest.suggest).toHaveBeenCalledWith(
+        'dev',
+        undefined,
+        3,
+      );
     });
   });
 });

@@ -22,6 +22,8 @@ import { PostInteractionProcessor } from './processors/post-interaction.processo
 import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import { ExperimentTrackingProcessor } from './processors/experiment-tracking.processor';
+import { PushNotificationProcessor } from './processors/push-notification.processor';
 import { RecruitingProcessor } from './processors/recruiting.processor';
 import { SubscriptionProcessor } from './processors/subscription.processor';
 
@@ -76,6 +78,10 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly subscriptionProcessor: SubscriptionProcessor,
     @Inject(RecruitingProcessor)
     private readonly recruitingProcessor: RecruitingProcessor,
+    @Inject(ExperimentTrackingProcessor)
+    private readonly experimentTrackingProcessor: ExperimentTrackingProcessor,
+    @Inject(PushNotificationProcessor)
+    private readonly pushNotificationProcessor: PushNotificationProcessor,
     @Inject(OutboxMetrics) private readonly metrics: OutboxMetrics,
     @Inject(RealtimeGateway)
     private readonly realtimeGateway: RealtimeGateway,
@@ -668,12 +674,34 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'OfferResponded':
-        this.recruitingProcessor.processOfferResponded(
+        void this.recruitingProcessor.processOfferResponded(
           payload as {
             offerId: string;
             applicationId: string;
             companyId: string;
             accepted: boolean;
+          },
+        );
+        return;
+      case 'ExperimentImpression':
+        await this.experimentTrackingProcessor.process(
+          payload as {
+            experimentId: string;
+            userId: string;
+            variant: string;
+            timestamp: string;
+          },
+        );
+        return;
+      // Push notifications — Phase D (T4)
+      case 'PushNotificationRequired':
+        await this.pushNotificationProcessor.process(
+          payload as {
+            userId: string;
+            type: string;
+            title: string;
+            body: string;
+            data?: Record<string, string>;
           },
         );
         return;

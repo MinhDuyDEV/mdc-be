@@ -384,6 +384,9 @@ model User {
   savedSearches            SavedSearch[]
   interviews               Interviewer[]
   submittedScorecards      Scorecard[]
+  emailConsent             EmailConsent?
+  emailTrackingEvents      EmailTrackingEvent[]
+  experimentImpressions    ExperimentImpression[]
 
   @@map("users")
 }
@@ -603,9 +606,52 @@ model EmailDelivery {
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
+  trackingEvents EmailTrackingEvent[]
+
   @@index([status])
   @@index([createdAt])
   @@map("email_deliveries")
+}
+
+enum EmailTrackingType {
+  OPENED
+  CLICKED
+}
+
+model EmailTrackingEvent {
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  emailId     String             @map("email_id") @db.Uuid
+  userId      String?            @map("user_id") @db.Uuid
+  eventType   EmailTrackingType  @map("event_type")
+  clickedUrl  String?            @map("clicked_url") @db.VarChar(2048)
+  userAgent   String?            @map("user_agent") @db.VarChar(512)
+  ipAddress   String?            @map("ip_address") @db.VarChar(45)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  email       EmailDelivery      @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  user        User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([emailId])
+  @@index([userId])
+  @@index([eventType])
+  @@index([createdAt])
+  @@map("email_tracking_events")
+}
+
+model EmailConsent {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId            String    @unique @map("user_id") @db.Uuid
+  marketingConsent  Boolean   @default(false) @map("marketing_consent")
+  trackingConsent   Boolean   @default(false) @map("tracking_consent")
+  consentVersion    String    @default("1.0") @map("consent_version") @db.VarChar(10)
+  consentedAt       DateTime  @default(now()) @map("consented_at") @db.Timestamptz(6)
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+  unsubscribedAt    DateTime? @map("unsubscribed_at") @db.Timestamptz(6)
+  unsubscribeReason String?  @map("unsubscribe_reason") @db.VarChar(255)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("email_consents")
 }
 
 // endregion
@@ -2052,6 +2098,29 @@ model AnalyticsDailyAggregate {
   @@unique([date, metricType, entityType, entityId])
   @@index([date, metricType])
   @@map("analytics_daily_aggregates")
+}
+
+// endregion
+
+// region: A/B testing and experiments
+
+model ExperimentImpression {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  experimentId String   @map("experiment_id") @db.VarChar(100)
+  userId       String   @map("user_id") @db.Uuid
+  variant      String   @db.VarChar(50)
+  impressedAt  DateTime @map("impressed_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Note: no @@unique([experimentId, userId]) — a returning user can be
+  // re-bucketed; impressions are append-only analytics events. The
+  // ExperimentTrackingProcessor is idempotent at the application layer
+  // (P2002 ignored on insert with the same (experimentId, userId, variant)).
+  @@index([experimentId, userId])
+  @@index([experimentId])
+  @@index([userId])
+  @@map("experiment_impressions")
 }
 
 // endregion

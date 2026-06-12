@@ -68,6 +68,10 @@ export class RecommendationsRepository {
           UNION
           SELECT blocker_id AS blocked_user_id FROM blocks WHERE blocked_id = ${userId}::uuid
         ),
+        user_dismissals AS (
+          SELECT entity_id FROM recommendation_dismissals
+          WHERE user_id = ${userId}::uuid AND entity_type = 'person'
+        ),
         second_degree_pre AS (
           SELECT
             CASE
@@ -96,6 +100,7 @@ export class RecommendationsRepository {
         JOIN profiles p ON p.user_id = u.id AND p.deleted_at IS NULL
         WHERE u.status = 'ACTIVE'
           AND p.visibility IN ('PUBLIC', 'CONNECTIONS_ONLY')
+          AND sd.candidate_id NOT IN (SELECT entity_id FROM user_dismissals)
           ${decoded ? Prisma.sql`AND (sd.mutual_count < ${decoded.score} OR (sd.mutual_count = ${decoded.score} AND sd.candidate_id < ${decoded.id}::uuid))` : Prisma.empty}
         ORDER BY sd.mutual_count DESC, sd.candidate_id DESC
         LIMIT ${limit + 1}
@@ -133,6 +138,10 @@ export class RecommendationsRepository {
           UNION
           SELECT blocker_id AS blocked_user_id FROM blocks WHERE blocked_id = ${userId}::uuid
         ),
+        user_dismissals AS (
+          SELECT entity_id FROM recommendation_dismissals
+          WHERE user_id = ${userId}::uuid AND entity_type = 'job'
+        ),
         skill_matches AS (
           SELECT js.job_id, COUNT(*) AS match_count
           FROM job_skills js
@@ -153,6 +162,7 @@ export class RecommendationsRepository {
             AND j.deleted_at IS NULL
             AND c.deleted_at IS NULL
             AND j.id NOT IN (SELECT job_id FROM user_applied_jobs)
+            AND j.id NOT IN (SELECT entity_id FROM user_dismissals)
             AND j.company_id NOT IN (
               SELECT cm.company_id FROM company_members cm WHERE cm.user_id IN (SELECT blocked_user_id FROM user_blocks)
             )
@@ -195,6 +205,10 @@ export class RecommendationsRepository {
         user_followed_companies AS (
           SELECT company_id FROM company_followers WHERE user_id = ${userId}::uuid
         ),
+        user_dismissals AS (
+          SELECT entity_id FROM recommendation_dismissals
+          WHERE user_id = ${userId}::uuid AND entity_type = 'company'
+        ),
         scored_companies AS (
           SELECT
             c.id AS company_id,
@@ -204,6 +218,7 @@ export class RecommendationsRepository {
           FROM companies c
           WHERE c.deleted_at IS NULL
             AND c.id NOT IN (SELECT company_id FROM user_followed_companies)
+            AND c.id NOT IN (SELECT entity_id FROM user_dismissals)
         )
         SELECT
           sc.company_id AS id,

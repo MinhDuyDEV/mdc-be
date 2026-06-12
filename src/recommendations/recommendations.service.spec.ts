@@ -10,8 +10,10 @@ describe('RecommendationsService', () => {
     job: { findMany: jest.Mock };
     company: { findMany: jest.Mock };
     notificationPreference: { findUnique: jest.Mock };
+    recommendationFeedback: { upsert: jest.Mock };
+    recommendationDismissal: { upsert: jest.Mock };
   };
-  let redis: { get: jest.Mock; setex: jest.Mock };
+  let redis: { get: jest.Mock; setex: jest.Mock; del: jest.Mock };
   let repository: {
     findPeopleRecommendations: jest.Mock;
     findJobRecommendations: jest.Mock;
@@ -24,9 +26,11 @@ describe('RecommendationsService', () => {
       job: { findMany: jest.fn() },
       company: { findMany: jest.fn() },
       notificationPreference: { findUnique: jest.fn() },
+      recommendationFeedback: { upsert: jest.fn() },
+      recommendationDismissal: { upsert: jest.fn() },
     };
 
-    redis = { get: jest.fn(), setex: jest.fn() };
+    redis = { get: jest.fn(), setex: jest.fn(), del: jest.fn() };
     repository = {
       findPeopleRecommendations: jest.fn(),
       findJobRecommendations: jest.fn(),
@@ -710,6 +714,266 @@ describe('RecommendationsService', () => {
         Buffer.from(result.meta.nextCursor!, 'base64').toString('utf8'),
       );
       expect(decoded).toEqual({ score: 5, id: 'company-2' });
+    });
+  });
+
+  describe('submitFeedback', () => {
+    it('upserts feedback and invalidates cache', async () => {
+      prisma.recommendationFeedback.upsert.mockResolvedValue({
+        id: 'fb-1',
+        userId: 'u1',
+        entityType: 'person',
+        entityId: 'rec-1',
+        feedback: 'helpful',
+        createdAt: new Date(),
+      });
+      redis.del.mockResolvedValue(1);
+
+      await service.submitFeedback('u1', {
+        entityType: 'person',
+        entityId: 'rec-1',
+        feedback: 'helpful',
+      });
+
+      expect(prisma.recommendationFeedback.upsert).toHaveBeenCalledWith({
+        where: {
+          unique_recommendation_feedback: {
+            userId: 'u1',
+            entityType: 'person',
+            entityId: 'rec-1',
+          },
+        },
+        update: { feedback: 'helpful' },
+        create: {
+          userId: 'u1',
+          entityType: 'person',
+          entityId: 'rec-1',
+          feedback: 'helpful',
+        },
+      });
+      expect(redis.del).toHaveBeenCalledWith('recommendations:people:u1');
+    });
+
+    it('maps entityType to correct cache key for jobs', async () => {
+      prisma.recommendationFeedback.upsert.mockResolvedValue({ id: 'fb-2' });
+      redis.del.mockResolvedValue(1);
+
+      await service.submitFeedback('u1', {
+        entityType: 'job',
+        entityId: 'job-1',
+        feedback: 'not_helpful',
+      });
+
+      expect(redis.del).toHaveBeenCalledWith('recommendations:jobs:u1');
+    });
+
+    it('maps entityType to correct cache key for companies', async () => {
+      prisma.recommendationFeedback.upsert.mockResolvedValue({ id: 'fb-3' });
+      redis.del.mockResolvedValue(1);
+
+      await service.submitFeedback('u1', {
+        entityType: 'company',
+        entityId: 'co-1',
+        feedback: 'irrelevant',
+      });
+
+      expect(redis.del).toHaveBeenCalledWith('recommendations:companies:u1');
+    });
+
+    it('handles Redis failure gracefully during feedback', async () => {
+      prisma.recommendationFeedback.upsert.mockResolvedValue({ id: 'fb-4' });
+      redis.del.mockRejectedValue(new Error('Redis down'));
+
+      await expect(
+        service.submitFeedback('u1', {
+          entityType: 'person',
+          entityId: 'rec-1',
+          feedback: 'helpful',
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('dismissRecommendation', () => {
+    it('upserts dismissal and invalidates cache', async () => {
+      prisma.recommendationDismissal.upsert.mockResolvedValue({
+        id: 'dismiss-1',
+      });
+      redis.del.mockResolvedValue(1);
+
+      await service.dismissRecommendation('u1', {
+        entityType: 'person',
+        entityId: 'rec-1',
+      });
+
+      expect(prisma.recommendationDismissal.upsert).toHaveBeenCalledWith({
+        where: {
+          unique_recommendation_dismissal: {
+            userId: 'u1',
+            entityType: 'person',
+            entityId: 'rec-1',
+          },
+        },
+        update: {},
+        create: {
+          userId: 'u1',
+          entityType: 'person',
+          entityId: 'rec-1',
+        },
+      });
+      expect(redis.del).toHaveBeenCalledWith('recommendations:people:u1');
+    });
+
+    it('maps entityType to correct cache key for jobs', async () => {
+      prisma.recommendationDismissal.upsert.mockResolvedValue({
+        id: 'dismiss-2',
+      });
+      redis.del.mockResolvedValue(1);
+
+      await service.dismissRecommendation('u1', {
+        entityType: 'job',
+        entityId: 'job-1',
+      });
+
+      expect(redis.del).toHaveBeenCalledWith('recommendations:jobs:u1');
+    });
+
+    it('handles Redis failure gracefully during dismiss', async () => {
+      prisma.recommendationDismissal.upsert.mockResolvedValue({
+        id: 'dismiss-3',
+      });
+      redis.del.mockRejectedValue(new Error('Redis down'));
+
+      await expect(
+        service.dismissRecommendation('u1', {
+          entityType: 'person',
+          entityId: 'rec-1',
+        }),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('explanation generation', () => {
+    it('includes explanation for people recommendations', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findPeopleRecommendations.mockResolvedValue([
+        { id: 'user-2', score: 3 },
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-2',
+          displayName: 'Alice',
+          profile: { headline: 'Engineer', location: 'SF' },
+          mediaAssets: [],
+        },
+      ]);
+
+      const result = await service.getPeopleRecommendations(
+        'u1',
+        undefined,
+        20,
+      );
+
+      expect(result.data[0].explanation).toBe('3 mutual connections');
+    });
+
+    it('includes explanation for job recommendations', async () => {
+      prisma.notificationPreference.findUnique.mockResolvedValue(null);
+      redis.get.mockResolvedValue(null);
+      repository.findJobRecommendations.mockResolvedValue([
+        { id: 'job-1', score: 4 },
+      ]);
+      prisma.job.findMany.mockResolvedValue([
+        {
+          id: 'job-1',
+          title: 'Engineer',
+          location: null,
+          employmentType: 'FULL_TIME',
+          workplaceType: 'REMOTE',
+          salaryMin: null,
+          salaryMax: null,
+          salaryCurrency: null,
+          publishedAt: null,
+          company: { name: 'Acme' },
+        },
+      ]);
+
+      const result = await service.getJobRecommendations('u1', undefined, 20);
+
+      expect(result.data[0].explanation).toBe('Matches 4 of your skills');
+    });
+
+    it('includes explanation for company recommendations', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findCompanyRecommendations.mockResolvedValue([
+        { id: 'company-1', score: 2 },
+      ]);
+      prisma.company.findMany.mockResolvedValue([
+        {
+          id: 'company-1',
+          name: 'Acme',
+          industry: null,
+          verified: false,
+          logoMediaAsset: null,
+          _count: { followers: 10 },
+        },
+      ]);
+
+      const result = await service.getCompanyRecommendations(
+        'u1',
+        undefined,
+        20,
+      );
+
+      expect(result.data[0].explanation).toBe('2 connections work here');
+    });
+
+    it('handles singular mutual connections correctly', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findPeopleRecommendations.mockResolvedValue([
+        { id: 'user-2', score: 1 },
+      ]);
+      prisma.user.findMany.mockResolvedValue([
+        {
+          id: 'user-2',
+          displayName: 'Bob',
+          profile: { headline: null, location: null },
+          mediaAssets: [],
+        },
+      ]);
+
+      const result = await service.getPeopleRecommendations(
+        'u1',
+        undefined,
+        20,
+      );
+
+      expect(result.data[0].explanation).toBe('1 mutual connection');
+    });
+
+    it('handles singular company connections correctly', async () => {
+      redis.get.mockResolvedValue(null);
+      repository.findCompanyRecommendations.mockResolvedValue([
+        { id: 'company-1', score: 1 },
+      ]);
+      prisma.company.findMany.mockResolvedValue([
+        {
+          id: 'company-1',
+          name: 'Acme',
+          industry: null,
+          verified: false,
+          logoMediaAsset: null,
+          _count: { followers: 10 },
+        },
+      ]);
+
+      const result = await service.getCompanyRecommendations(
+        'u1',
+        undefined,
+        20,
+      );
+
+      expect(result.data[0].explanation).toBe('1 connection work here');
     });
   });
 });

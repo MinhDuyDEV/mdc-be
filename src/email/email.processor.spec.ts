@@ -5,6 +5,7 @@ import { EmailProcessor } from './email.processor';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { MAILER_TRANSPORTER } from '../infra/mailer/mailer.constants';
 import { EmailService } from './email.service';
+import { EmailTrackingService } from './email-tracking.service';
 
 describe('EmailProcessor', () => {
   let processor: EmailProcessor;
@@ -15,8 +16,12 @@ describe('EmailProcessor', () => {
       findMany: jest.Mock;
       update: jest.Mock;
     };
+    user: {
+      findUnique: jest.Mock;
+    };
   };
   let mailerService: { sendMail: jest.Mock };
+  let trackingService: jest.Mocked<EmailTrackingService>;
 
   const mockDelivery = {
     id: 'ed-1',
@@ -36,12 +41,42 @@ describe('EmailProcessor', () => {
   beforeEach(async () => {
     mailerService = { sendMail: jest.fn() };
 
+    trackingService = {
+      recordOpen: jest.fn(),
+      recordClick: jest.fn(),
+      unsubscribe: jest.fn(),
+      getOpenTrackingUrl: jest
+        .fn()
+        .mockReturnValue('https://mdc.local/api/v1/email/track/open/ed-1'),
+      getClickTrackingUrl: jest
+        .fn()
+        .mockReturnValue(
+          'https://mdc.local/api/v1/email/track/click/ed-1?redirect=https%3A%2F%2Fexample.com',
+        ),
+      getUnsubscribeUrl: jest
+        .fn()
+        .mockReturnValue('https://mdc.local/api/v1/email/unsubscribe/abc'),
+      hasTrackingConsent: jest.fn(),
+      hasMarketingConsent: jest.fn(),
+      injectTrackingPixel: jest
+        .fn()
+        .mockImplementation((html: string) => html + '<!--pixel-->'),
+      rewriteLinks: jest
+        .fn()
+        .mockImplementation((html: string) =>
+          html.replace(/href="http/g, 'href="https://track/'),
+        ),
+    } as unknown as jest.Mocked<EmailTrackingService>;
+
     prisma = {
       $transaction: jest.fn(),
       $queryRaw: jest.fn(),
       emailDelivery: {
         findMany: jest.fn(),
         update: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn(),
       },
     };
     prisma.$transaction.mockImplementation(
@@ -64,6 +99,10 @@ describe('EmailProcessor', () => {
           useValue: {
             renderTemplate: jest.fn().mockReturnValue('<html>Hello</html>'),
           },
+        },
+        {
+          provide: EmailTrackingService,
+          useValue: trackingService,
         },
         {
           provide: ConfigService,
@@ -125,9 +164,68 @@ describe('EmailProcessor', () => {
       expect(mailerService.sendMail).not.toHaveBeenCalled();
     });
 
+    it('should process pending email and inject tracking when consent exists', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ id: 'ed-1' }]);
+      prisma.emailDelivery.findMany.mockResolvedValue([mockDelivery]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      trackingService.hasTrackingConsent.mockResolvedValue(true);
+      mailerService.sendMail.mockResolvedValue({ messageId: 'abc-123' });
+
+      await processor.pollPending();
+
+      // Tracking should be injected
+      expect(trackingService.injectTrackingPixel).toHaveBeenCalled();
+      expect(trackingService.rewriteLinks).toHaveBeenCalled();
+
+      // Mail should be sent
+      expect(mailerService.sendMail).toHaveBeenCalled();
+    });
+
+    it('should NOT inject tracking when no consent', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ id: 'ed-1' }]);
+      prisma.emailDelivery.findMany.mockResolvedValue([mockDelivery]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      trackingService.hasTrackingConsent.mockResolvedValue(false);
+      mailerService.sendMail.mockResolvedValue({ messageId: 'abc-123' });
+
+      await processor.pollPending();
+
+      // Tracking should NOT be injected
+      expect(trackingService.injectTrackingPixel).not.toHaveBeenCalled();
+      expect(trackingService.rewriteLinks).not.toHaveBeenCalled();
+
+      // Mail should still be sent
+      expect(mailerService.sendMail).toHaveBeenCalled();
+    });
+
+    it('should add unsubscribe link when user is found', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ id: 'ed-1' }]);
+      prisma.emailDelivery.findMany.mockResolvedValue([mockDelivery]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      trackingService.hasTrackingConsent.mockResolvedValue(false);
+      mailerService.sendMail.mockResolvedValue({ messageId: 'abc-123' });
+
+      await processor.pollPending();
+
+      expect(trackingService.getUnsubscribeUrl).toHaveBeenCalledWith('user-1');
+    });
+
+    it('should not add unsubscribe link when user is not found', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ id: 'ed-1' }]);
+      prisma.emailDelivery.findMany.mockResolvedValue([mockDelivery]);
+      prisma.user.findUnique.mockResolvedValue(null);
+      mailerService.sendMail.mockResolvedValue({ messageId: 'abc-123' });
+
+      await processor.pollPending();
+
+      expect(trackingService.getUnsubscribeUrl).not.toHaveBeenCalled();
+    });
+
     it('should process pending email and mark as SENT on success', async () => {
       prisma.$queryRaw.mockResolvedValue([{ id: 'ed-1' }]);
       prisma.emailDelivery.findMany.mockResolvedValue([mockDelivery]);
+      prisma.user.findUnique.mockResolvedValue({ id: 'user-1' });
+      trackingService.hasTrackingConsent.mockResolvedValue(false);
       mailerService.sendMail.mockResolvedValue({ messageId: 'abc-123' });
 
       await processor.pollPending();
@@ -187,6 +285,19 @@ describe('EmailProcessor', () => {
       // Status should NOT be FAILED since attempts < 3
       const updateCall = prisma.emailDelivery.update.mock.calls[0][0];
       expect(updateCall.data.status).toBeUndefined();
+    });
+
+    it('should still send email when user lookup fails', async () => {
+      prisma.$queryRaw.mockResolvedValue([{ id: 'ed-1' }]);
+      prisma.emailDelivery.findMany.mockResolvedValue([mockDelivery]);
+      prisma.user.findUnique.mockResolvedValue(null);
+      mailerService.sendMail.mockResolvedValue({ messageId: 'abc-123' });
+
+      await processor.pollPending();
+
+      expect(mailerService.sendMail).toHaveBeenCalled();
+      expect(trackingService.injectTrackingPixel).not.toHaveBeenCalled();
+      expect(trackingService.getUnsubscribeUrl).not.toHaveBeenCalled();
     });
   });
 });

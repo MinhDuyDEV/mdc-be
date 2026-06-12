@@ -6,6 +6,7 @@ import { SearchService } from './search.service';
 import { SearchFallbackService } from './search-fallback.service';
 import { SearchIndexService } from './search-index.service';
 import { SearchQueryService } from './search-query.service';
+import { SearchSuggestService } from './search-suggest.service';
 
 @Module({
   imports: [InfraModule, ScheduleModule],
@@ -15,12 +16,14 @@ import { SearchQueryService } from './search-query.service';
     SearchIndexService,
     SearchFallbackService,
     SearchQueryService,
+    SearchSuggestService,
   ],
   exports: [
     SearchService,
     SearchIndexService,
     SearchFallbackService,
     SearchQueryService,
+    SearchSuggestService,
   ],
 })
 export class SearchModule {}

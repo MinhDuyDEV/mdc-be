@@ -8,6 +8,7 @@ import {
   type MailerTransporter,
 } from '../infra/mailer/mailer.constants';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { EmailTrackingService } from './email-tracking.service';
 import { EmailService } from './email.service';
 
 export interface EmailSendEvent {
@@ -27,6 +28,7 @@ export class EmailProcessor {
     @Inject(MAILER_TRANSPORTER)
     private readonly mailerService: MailerTransporter,
     private readonly emailService: EmailService,
+    private readonly trackingService: EmailTrackingService,
     private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
@@ -61,10 +63,43 @@ export class EmailProcessor {
         };
 
         try {
-          const html = this.emailService.renderTemplate(
+          let html = this.emailService.renderTemplate(
             event.template,
             event.context,
           );
+
+          // ── Email tracking & unsubscribe ──
+          const user = await this.prisma.user.findUnique({
+            where: { email: delivery.to },
+            select: { id: true },
+          });
+
+          if (user) {
+            const hasConsent = await this.trackingService.hasTrackingConsent(
+              user.id,
+            );
+            if (hasConsent) {
+              html = this.trackingService.injectTrackingPixel(
+                html,
+                delivery.id,
+              );
+              html = this.trackingService.rewriteLinks(html, delivery.id);
+            }
+
+            // Always add unsubscribe link
+            const unsubscribeUrl = this.trackingService.getUnsubscribeUrl(
+              user.id,
+            );
+            const unsubscribeHtml = `<p style="font-size:12px;color:#999;margin-top:30px"><a href="${unsubscribeUrl}" style="color:#999">Unsubscribe</a></p>`;
+
+            if (html.includes('</body>')) {
+              html = html.replace('</body>', `${unsubscribeHtml}</body>`);
+            } else {
+              html = html + unsubscribeHtml;
+            }
+          }
+          // ── End tracking ──
+
           const from = this.configService.get('emailFrom', { infer: true });
           await this.mailerService.sendMail({
             from,

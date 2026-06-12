@@ -196,6 +196,38 @@ export class SearchService {
   }
 
   /**
+   * Build a multi_match bool_prefix query optimized for search-as-you-type.
+   * Uses the .autocomplete sub-fields for each entity type.
+   */
+  buildAutocompleteQuery(
+    query: string,
+    entityTypes: string[] = ['profiles', 'companies', 'jobs', 'posts'],
+  ): Record<string, unknown> {
+    const should: Record<string, unknown>[] = [];
+
+    const autocompleteFields: Record<string, string[]> = {
+      profiles: ['displayName.autocomplete'],
+      companies: ['name.autocomplete'],
+      jobs: ['title.autocomplete', 'companyName.autocomplete'],
+      posts: ['authorName.autocomplete'],
+    };
+
+    for (const entityType of entityTypes) {
+      const fields = autocompleteFields[entityType];
+      if (!fields) continue;
+      should.push({
+        multi_match: {
+          query,
+          type: 'bool_prefix',
+          fields,
+        },
+      });
+    }
+
+    return { bool: { should, minimum_should_match: 1 } };
+  }
+
+  /**
    * Build a full Elasticsearch search body with query, pagination, and sorting.
    */
   buildSearchBody(

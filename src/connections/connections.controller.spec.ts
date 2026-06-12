@@ -3,6 +3,7 @@ import {
   ConnectionsController,
   ConnectionsUsersController,
 } from './connections.controller';
+import type { ConnectionsPolicyService } from './connections-policy.service';
 import type { ConnectionsService } from './connections.service';
 
 interface MockService {
@@ -20,9 +21,16 @@ interface MockService {
   getMutualConnectionCount: jest.Mock;
 }
 
+interface MockPolicy {
+  areConnected: jest.Mock;
+  isBlocked: jest.Mock;
+  isFollowing: jest.Mock;
+}
+
 describe('ConnectionsController', () => {
   let controller: ConnectionsController;
   let service: MockService;
+  let policy: MockPolicy;
 
   const mockUser: AuthenticatedUser = {
     id: 'user-1',
@@ -44,8 +52,14 @@ describe('ConnectionsController', () => {
       getMutualConnections: jest.fn().mockResolvedValue({ data: [], meta: {} }),
       getMutualConnectionCount: jest.fn().mockResolvedValue(0),
     };
+    policy = {
+      areConnected: jest.fn().mockResolvedValue(false),
+      isBlocked: jest.fn().mockResolvedValue(false),
+      isFollowing: jest.fn().mockResolvedValue(false),
+    };
     controller = new ConnectionsController(
       service as unknown as ConnectionsService,
+      policy as unknown as ConnectionsPolicyService,
     );
   });
 
