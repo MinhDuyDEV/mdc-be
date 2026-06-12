@@ -19,8 +19,10 @@ import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
 import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+import { CreateSavedSearchDto } from './dto/create-saved-search.dto';
 import { ListJobsQueryDto } from './dto/list-jobs.query.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
+import { UpdateSavedSearchDto } from './dto/update-saved-search.dto';
 import { JobsService } from './jobs.service';
 
 @Controller('jobs')
@@ -56,6 +58,41 @@ export class JobsController {
     @Query() query: CursorPaginationQueryDto,
   ) {
     return this.jobsService.listSavedJobs(user.id, query);
+  }
+
+  @Post('saved-searches')
+  @HttpCode(HttpStatus.CREATED)
+  async createSavedSearch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: CreateSavedSearchDto,
+  ) {
+    return this.jobsService.createSavedSearch(user.id, dto);
+  }
+
+  @Get('saved-searches')
+  async listSavedSearches(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query() query: CursorPaginationQueryDto,
+  ) {
+    return this.jobsService.listSavedSearches(user.id, query);
+  }
+
+  @Patch('saved-searches/:id')
+  async updateSavedSearch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateSavedSearchDto,
+  ) {
+    return this.jobsService.updateSavedSearch(user.id, id, dto);
+  }
+
+  @Delete('saved-searches/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSavedSearch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    await this.jobsService.deleteSavedSearch(user.id, id);
   }
 
   @Get(':id')

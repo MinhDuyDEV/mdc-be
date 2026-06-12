@@ -47,4 +47,12 @@ export class FeedController {
   ) {
     return this.feedService.getHashtagFeed(tag, query);
   }
+
+  @Get('trending')
+  @Public()
+  getTrendingHashtags(@Query('limit') limit?: string) {
+    return this.feedService.getTrendingHashtags(
+      limit ? parseInt(limit, 10) : 10,
+    );
+  }
 }

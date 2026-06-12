@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+  <h2>Job Alert: {{searchName}}</h2>
+  <p>We found {{jobs.length}} new job(s) matching your criteria:</p>
+  {{#each jobs}}
+  <div style="border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin: 12px 0;">
+    <h3 style="margin: 0 0 8px;"><a href="{{url}}">{{title}}</a></h3>
+    <p style="margin: 0; color: #666;">{{company}} · {{location}}</p>
+  </div>
+  {{/each}}
+  <p style="color: #999; font-size: 12px;">This is a {{frequency}} job alert. You can manage your saved searches in your account settings.</p>
+</body>
+</html>

@@ -54,6 +54,15 @@ export class AnalyticsController {
     return { data: metrics };
   }
 
+  @Get('recruiting')
+  @UseGuards(AuthGuard, RolesGuard)
+  @Roles('admin')
+  @Permissions('VIEW_ANALYTICS')
+  async getRecruitingMetrics() {
+    const metrics = await this.service.getRecruitingMetrics();
+    return { data: metrics };
+  }
+
   @Get('entity/:type/:id')
   @UseGuards(AuthGuard, RolesGuard)
   @Roles('admin')

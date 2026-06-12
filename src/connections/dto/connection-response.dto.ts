@@ -7,6 +7,7 @@ export class ConnectionResponseDto {
   status!: ConnectionStatus;
   createdAt!: Date;
   updatedAt!: Date;
+  mutualConnectionCount?: number;
 
   requester?: {
     id: string;

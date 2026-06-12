@@ -15,6 +15,7 @@ import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { ConnectionsService } from './connections.service';
+import { MutualConnectionsQueryDto } from './dto/mutual-connections-query.dto';
 import { SendConnectionRequestDto } from './dto/send-connection-request.dto';
 
 @Controller('connections')
@@ -47,6 +48,21 @@ export class ConnectionsController {
     @Query() query: CursorPaginationQueryDto,
   ) {
     return this.connectionsService.listPendingRequests(user.id, query);
+  }
+
+  /** GET /api/v1/connections/mutual/:userId — List mutual connections */
+  @Get('mutual/:userId')
+  async getMutualConnections(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('userId', ParseUUIDPipe) targetUserId: string,
+    @Query() query: MutualConnectionsQueryDto,
+  ) {
+    const result = await this.connectionsService.getMutualConnections(
+      user.id,
+      targetUserId,
+      query,
+    );
+    return result;
   }
 
   /** PATCH /api/v1/connections/:id/accept — Accept a pending request */

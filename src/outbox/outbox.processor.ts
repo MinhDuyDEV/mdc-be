@@ -14,6 +14,7 @@ import { OutboxMetrics } from './outbox.metrics';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
 import { BillingProcessor } from './processors/billing.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import { JobAlertProcessor } from './processors/job-alert.processor';
 import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
 import { MessagingProcessor } from './processors/messaging.processor';
 import { NotificationProcessor } from './processors/notification.processor';
@@ -21,6 +22,7 @@ import { PostInteractionProcessor } from './processors/post-interaction.processo
 import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import { RecruitingProcessor } from './processors/recruiting.processor';
 import { SubscriptionProcessor } from './processors/subscription.processor';
 
 export interface ClaimedEvent {
@@ -50,6 +52,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     @Inject(DeadLetterService) private readonly deadLetter: DeadLetterService,
     @Inject(CompanySearchIndexProcessor)
     private readonly companySearchIndex: CompanySearchIndexProcessor,
+    @Inject(JobAlertProcessor)
+    private readonly jobAlertProcessor: JobAlertProcessor,
     @Inject(JobSearchIndexProcessor)
     private readonly jobSearchIndex: JobSearchIndexProcessor,
     @Inject(ApplicationEmailProcessor)
@@ -70,6 +74,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly billingProcessor: BillingProcessor,
     @Inject(SubscriptionProcessor)
     private readonly subscriptionProcessor: SubscriptionProcessor,
+    @Inject(RecruitingProcessor)
+    private readonly recruitingProcessor: RecruitingProcessor,
     @Inject(OutboxMetrics) private readonly metrics: OutboxMetrics,
     @Inject(RealtimeGateway)
     private readonly realtimeGateway: RealtimeGateway,
@@ -349,6 +355,9 @@ export class OutboxProcessor implements OnApplicationShutdown {
         await this.jobSearchIndex.processJobPublished(
           payload as { jobId: string },
         );
+        await this.jobAlertProcessor.processJobPublished(
+          payload as { jobId: string; companyId: string },
+        );
         return;
       case 'JobClosed':
         await this.jobSearchIndex.processJobClosed(
@@ -537,6 +546,11 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
+      case 'ShareCreated':
+        this.logger.debug(
+          `ShareCreated: post ${(payload as { postId: string }).postId} shared by ${(payload as { authorId: string }).authorId}`,
+        );
+        return;
       // Moderation domain — Phase B (T4)
       case 'ProfileRemoved':
         await this.profileSearchIndex.processProfileRemoved(
@@ -562,6 +576,16 @@ export class OutboxProcessor implements OnApplicationShutdown {
             senderId: string;
             recipientIds: string[];
           },
+        );
+        return;
+      case 'MessageEdited':
+        this.logger.debug(
+          `MessageEdited: message ${(payload as { messageId: string }).messageId} edited (no-op — deferred)`,
+        );
+        return;
+      case 'MessageDeleted':
+        this.logger.debug(
+          `MessageDeleted: message ${(payload as { messageId: string }).messageId} deleted (no-op — deferred)`,
         );
         return;
       case 'ConversationCreated': {
@@ -592,6 +616,57 @@ export class OutboxProcessor implements OnApplicationShutdown {
       case 'PaymentProviderEventReceived':
         await this.billingProcessor.processPaymentProviderEvent(
           (payload as { eventId: string }).eventId,
+        );
+        return;
+      // Recruiting domain — Phase C (W3-T2)
+      case 'InterviewScheduled':
+        await this.recruitingProcessor.processInterviewScheduled(
+          payload as {
+            interviewId: string;
+            applicationId: string;
+            companyId: string;
+            scheduledAt: string;
+            scheduledByUserId: string;
+          },
+        );
+        return;
+      case 'InterviewCompleted':
+        await this.recruitingProcessor.processInterviewCompleted(
+          payload as {
+            interviewId: string;
+            applicationId: string;
+            companyId: string;
+          },
+        );
+        return;
+      case 'ScorecardSubmitted':
+        await this.recruitingProcessor.processScorecardSubmitted(
+          payload as {
+            scorecardId: string;
+            interviewId: string;
+            applicationId: string;
+            companyId: string;
+            submittedByUserId: string;
+          },
+        );
+        return;
+      case 'OfferSent':
+        await this.recruitingProcessor.processOfferSent(
+          payload as {
+            offerId: string;
+            applicationId: string;
+            companyId: string;
+          },
+        );
+        return;
+      case 'OfferResponded':
+        this.recruitingProcessor.processOfferResponded(
+          payload as {
+            offerId: string;
+            applicationId: string;
+            companyId: string;
+            accepted: boolean;
+          },
         );
         return;
       default:
