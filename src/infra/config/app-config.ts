@@ -79,6 +79,10 @@ export interface AppConfig {
   mediaAvatarMaxSizeBytes: number;
   mediaResumeMaxSizeBytes: number;
   mediaAllowedContentTypes: string[];
+  // Virus scan (Phase E T2)
+  virusScanEnabled: boolean;
+  clamavHost: string;
+  clamavPort: number;
   // Billing
   billingProvider: string;
   billingWebhookSecret: string;

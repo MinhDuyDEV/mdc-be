@@ -47,7 +47,7 @@ const DOMAIN_IMPORT_ALLOWLIST = {
   moderation: ["auth", "outbox"],
   notifications: ["auth"],
   observability: [],
-  outbox: ["billing", "email", "notifications", "realtime", "search"],
+  outbox: ["billing", "email", "notifications", "observability", "realtime", "search"],
   posts: ["connections", "outbox"],
   profiles: ["outbox"],
   realtime: ["messaging"],

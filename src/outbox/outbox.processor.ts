@@ -15,6 +15,7 @@ import { ApplicationEmailProcessor } from './processors/application-email.proces
 import { BillingProcessor } from './processors/billing.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import { JobAlertProcessor } from './processors/job-alert.processor';
+import { MediaScanProcessor } from './processors/media-scan.processor';
 import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
 import { MessagingProcessor } from './processors/messaging.processor';
 import { NotificationProcessor } from './processors/notification.processor';
@@ -56,6 +57,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly companySearchIndex: CompanySearchIndexProcessor,
     @Inject(JobAlertProcessor)
     private readonly jobAlertProcessor: JobAlertProcessor,
+    @Inject(MediaScanProcessor)
+    private readonly mediaScanProcessor: MediaScanProcessor,
     @Inject(JobSearchIndexProcessor)
     private readonly jobSearchIndex: JobSearchIndexProcessor,
     @Inject(ApplicationEmailProcessor)

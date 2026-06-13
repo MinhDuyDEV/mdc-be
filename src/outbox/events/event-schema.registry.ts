@@ -325,6 +325,17 @@ export const outboxEventSchemas = {
     body: z.string(),
     data: z.record(z.string(), z.string()).optional(),
   }),
+  MediaAssetVirusScanned: payload.extend({
+    mediaAssetId: z.string(),
+    ownerId: z.string(),
+    clean: z.boolean(),
+    threats: z.array(z.string()).optional(),
+  }),
+  MediaAssetThumbnailsGenerated: payload.extend({
+    mediaAssetId: z.string(),
+    ownerId: z.string(),
+    sizes: z.array(z.object({ width: z.number(), s3Key: z.string() })),
+  }),
 } as const;
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;

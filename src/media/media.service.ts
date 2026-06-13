@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConnectionStatus, MediaVisibility } from '@prisma/client';
@@ -12,7 +13,9 @@ import type { AppConfig } from '../infra/config/app-config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { StorageService } from '../infra/storage/storage.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { ImageProcessingService } from './image-processing.service';
 import type { InitiateUploadDto } from './dto/initiate-upload.dto';
+import { VirusScanService } from './virus-scan.service';
 
 @Injectable()
 export class MediaService {
@@ -21,6 +24,8 @@ export class MediaService {
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly outboxService: OutboxService,
+    @Optional() private readonly virusScanner?: VirusScanService,
+    @Optional() private readonly imageProcessor?: ImageProcessingService,
   ) {}
 
   async initiateUpload(user: AuthenticatedUser, dto: InitiateUploadDto) {
@@ -111,6 +116,22 @@ export class MediaService {
       throw new BadRequestException('File size exceeds maximum allowed');
     }
 
+    // Optional virus scan. Only runs when the service is registered AND
+    // the operator has enabled the feature flag. Failures bubble up so
+    // the caller sees a 5xx and the asset is not flipped to READY.
+    const virusScanEnabled =
+      this.config.get('virusScanEnabled', { infer: true }) ?? false;
+    if (virusScanEnabled && this.virusScanner) {
+      const buffer = await this.storage.getObject(asset.s3Bucket, asset.s3Key);
+      const scanResult = await this.virusScanner.scanBuffer(buffer, asset.id);
+      if (!scanResult.clean) {
+        // Service has already persisted QUARANTINED + scan metadata.
+        throw new BadRequestException(
+          `Upload rejected: ${scanResult.threats.join(', ')}`,
+        );
+      }
+    }
+
     // Atomic: update status + emit event in one transaction
     const updated = await this.prisma.$transaction(async (tx) => {
       const result = await tx.mediaAsset.update({
@@ -137,6 +158,27 @@ export class MediaService {
 
       return result;
     });
+
+    // Optional image thumbnail generation. Runs after the transaction so
+    // a sharp failure cannot block the upload; failures are logged and
+    // the asset is still considered READY.
+    if (this.imageProcessor) {
+      try {
+        const buffer = await this.storage.getObject(
+          asset.s3Bucket,
+          asset.s3Key,
+        );
+        await this.imageProcessor.generateThumbnails(buffer, {
+          id: asset.id,
+          s3Bucket: asset.s3Bucket,
+          contentType: asset.contentType,
+        });
+      } catch (err) {
+        console.warn(
+          `Thumbnail generation failed for ${asset.id}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     return updated;
   }

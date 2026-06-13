@@ -19,6 +19,7 @@ import { PostSearchIndexProcessor } from './processors/post-search-index.process
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
 import { ExperimentTrackingProcessor } from './processors/experiment-tracking.processor';
+import { MediaScanProcessor } from './processors/media-scan.processor';
 import { PushNotificationProcessor } from './processors/push-notification.processor';
 import { RecruitingProcessor } from './processors/recruiting.processor';
 import { SubscriptionProcessor } from './processors/subscription.processor';
@@ -50,6 +51,7 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
     BillingProcessor,
     SubscriptionProcessor,
     RecruitingProcessor,
+    MediaScanProcessor,
   ],
 })
 export class OutboxProcessorModule {}

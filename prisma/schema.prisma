@@ -850,19 +850,24 @@ model Endorsement {
 }
 
 model MediaAsset {
-  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerId     String      @map("owner_id") @db.Uuid
-  purpose     String      @db.VarChar(50)
-  filename    String      @db.VarChar(500)
-  s3Key       String      @unique @map("s3_key") @db.VarChar(500)
-  s3Bucket    String      @map("s3_bucket") @db.VarChar(200)
-    contentType String      @map("content_type") @db.VarChar(200)
-    sizeBytes   Int?        @map("size_bytes")
-    status      MediaStatus @default(PENDING)
-    visibility  MediaVisibility @default(PRIVATE)
-    etag        String?     @db.VarChar(200)
-    createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-    updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId           String      @map("owner_id") @db.Uuid
+  purpose           String      @db.VarChar(50)
+  filename          String      @db.VarChar(500)
+  s3Key             String      @unique @map("s3_key") @db.VarChar(500)
+  s3Bucket          String      @map("s3_bucket") @db.VarChar(200)
+  contentType       String      @map("content_type") @db.VarChar(200)
+  sizeBytes         Int?        @map("size_bytes")
+  status            MediaStatus @default(PENDING)
+  visibility        MediaVisibility @default(PRIVATE)
+  etag              String?     @db.VarChar(200)
+  scanStatus        String      @default("PENDING") @map("scan_status")
+  scanResult        Json?       @map("scan_result")
+  scannedAt         DateTime?   @map("scanned_at")
+  thumbS3Key        String?     @map("thumb_s3_key")
+  thumbGeneratedAt  DateTime?   @map("thumb_generated_at")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
 
   owner                  User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   companyLogos           Company[]               @relation("CompanyLogo")
@@ -872,10 +877,11 @@ model MediaAsset {
   postMedia              PostMedia[]
   messageAttachments     MessageAttachment[]
 
-    @@index([ownerId, status])
-    @@index([visibility, status])
-    @@map("media_assets")
-  }
+  @@index([ownerId, status])
+  @@index([visibility, status])
+  @@index([scanStatus])
+  @@map("media_assets")
+}
 
 model CompanyMember {
   id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid

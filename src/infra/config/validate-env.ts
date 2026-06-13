@@ -358,6 +358,10 @@ export function validateEnv(env: RawEnv): AppConfig {
       parseOptionalString(env, 'UNLEASH_URL') || 'http://localhost:4242/api',
     unleashApiToken: parseOptionalString(env, 'UNLEASH_API_TOKEN') ?? '',
     unleashAppName: parseOptionalString(env, 'UNLEASH_APP_NAME') || 'mdc-be',
+    // Virus scan (Phase E T2) — optional, disabled by default
+    virusScanEnabled: parseOptionalString(env, 'VIRUS_SCAN_ENABLED') === 'true',
+    clamavHost: parseOptionalString(env, 'CLAMAV_HOST') ?? 'localhost',
+    clamavPort: parseOptionalPositiveInteger(env, 'CLAMAV_PORT', 3310),
     // Email tracking (CNIL)
     emailTrackingBaseUrl:
       parseOptionalString(env, 'EMAIL_TRACKING_BASE_URL') ||

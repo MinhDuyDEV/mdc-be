@@ -100,7 +100,51 @@ export class StorageService implements OnApplicationShutdown {
     await this.s3.send(command);
   }
 
+  /**
+   * Downloads an object as a buffer. Used by background processors
+   * (virus scanning, thumbnail generation) that need the raw bytes
+   * for in-process transformation.
+   */
+  async getObject(bucket: string, key: string): Promise<Buffer> {
+    const command = new GetObjectCommand({ Bucket: bucket, Key: key });
+    const response = await this.s3.send(command);
+    const stream = response.Body as NodeJS.ReadableStream | undefined;
+    if (!stream) {
+      throw new Error(`S3 object ${bucket}/${key} returned no body`);
+    }
+    return await streamToBuffer(stream);
+  }
+
+  /**
+   * Uploads a buffer to the given bucket/key with optional content type.
+   * Used by background processors (image thumbnails, generated exports)
+   * where a presigned upload URL is not appropriate.
+   */
+  async putObject(
+    bucket: string,
+    key: string,
+    body: Buffer,
+    options: { contentType?: string; metadata?: Record<string, string> } = {},
+  ): Promise<void> {
+    const command = new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: body,
+      ...(options.contentType ? { ContentType: options.contentType } : {}),
+      ...(options.metadata ? { Metadata: options.metadata } : {}),
+    });
+    await this.s3.send(command);
+  }
+
   onApplicationShutdown(): void {
     this.s3.destroy();
   }
+}
+
+async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
 }
