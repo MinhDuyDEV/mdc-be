@@ -26,6 +26,7 @@ import { MediaModule } from './media/media.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ModerationModule } from './moderation';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ObservabilityModule } from './observability/observability.module';
 // Direct import (not via './outbox' barrel) — see src/outbox/index.ts
 import { OutboxProcessorModule } from './outbox/outbox-processor.module';
 import { PostsModule } from './posts/posts.module';
@@ -73,6 +74,7 @@ import { UsersModule } from './users/users.module';
     JobsModule,
     MediaModule,
     NotificationsModule,
+    ObservabilityModule,
     OutboxProcessorModule,
     PostsModule,
     ProfilesModule,
