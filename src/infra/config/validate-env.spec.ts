@@ -1,91 +1,92 @@
-import { type RawEnv, validateEnv } from "./validate-env";
+import { type RawEnv, validateEnv } from './validate-env';
 
 const validEnv: RawEnv = {
-  NODE_ENV: "development",
-  PORT: "3000",
-  CORS_ORIGINS: "http://localhost:3000,http://localhost:5173",
-  BODY_JSON_LIMIT: "1mb",
-  BODY_URLENCODED_LIMIT: "1mb",
-  DATABASE_URL: "postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public",
-  REDIS_URL: "redis://localhost:6379",
-  HEALTH_DATABASE_TIMEOUT_MS: "1000",
-  HEALTH_REDIS_TIMEOUT_MS: "1000",
+  NODE_ENV: 'development',
+  PORT: '3000',
+  CORS_ORIGINS: 'http://localhost:3000,http://localhost:5173',
+  BODY_JSON_LIMIT: '1mb',
+  BODY_URLENCODED_LIMIT: '1mb',
+  DATABASE_URL:
+    'postgresql://mdc:mdc_dev_password@localhost:5432/mdc?schema=public',
+  REDIS_URL: 'redis://localhost:6379',
+  HEALTH_DATABASE_TIMEOUT_MS: '1000',
+  HEALTH_REDIS_TIMEOUT_MS: '1000',
   // S3 / MinIO
-  S3_ENDPOINT: "http://localhost:9000",
-  S3_REGION: "us-east-1",
-  S3_ACCESS_KEY_ID: "minioadmin",
-  S3_SECRET_ACCESS_KEY: "minioadmin",
-  S3_BUCKET: "mdc-media",
-  S3_FORCE_PATH_STYLE: "true",
-  HEALTH_S3_TIMEOUT_MS: "3000",
+  S3_ENDPOINT: 'http://localhost:9000',
+  S3_REGION: 'us-east-1',
+  S3_ACCESS_KEY_ID: 'minioadmin',
+  S3_SECRET_ACCESS_KEY: 'minioadmin',
+  S3_BUCKET: 'mdc-media',
+  S3_FORCE_PATH_STYLE: 'true',
+  HEALTH_S3_TIMEOUT_MS: '3000',
   // Elasticsearch
-  ELASTICSEARCH_NODE: "http://localhost:9200",
-  HEALTH_ELASTICSEARCH_TIMEOUT_MS: "5000",
+  ELASTICSEARCH_NODE: 'http://localhost:9200',
+  HEALTH_ELASTICSEARCH_TIMEOUT_MS: '5000',
   // SMTP
-  SMTP_HOST: "smtp.example.com",
-  SMTP_PORT: "587",
-  SMTP_SECURE: "false",
-  SMTP_USER: "user@example.com",
-  SMTP_PASS: "password123",
-  EMAIL_FROM: "noreply@mdc.local",
-  HEALTH_MAILER_TIMEOUT_MS: "3000",
+  SMTP_HOST: 'smtp.example.com',
+  SMTP_PORT: '587',
+  SMTP_SECURE: 'false',
+  SMTP_USER: 'user@example.com',
+  SMTP_PASS: 'password123',
+  EMAIL_FROM: 'noreply@mdc.local',
+  HEALTH_MAILER_TIMEOUT_MS: '3000',
   // OpenTelemetry
-  OTEL_SERVICE_NAME: "mdc-be-test",
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318",
+  OTEL_SERVICE_NAME: 'mdc-be-test',
+  OTEL_EXPORTER_OTLP_ENDPOINT: 'http://localhost:4318',
   // JWT Authentication
-  JWT_ACCESS_SECRET: "test-access-secret-min-32-chars-long",
+  JWT_ACCESS_SECRET: 'test-access-secret-min-32-chars-long',
   // Billing
-  BILLING_WEBHOOK_SECRET: "whsec_test_secret",
+  BILLING_WEBHOOK_SECRET: 'whsec_test_secret',
   // Cookie Configuration
-  COOKIE_SECRET: "test-cookie-secret-min-32-chars-long",
-  COOKIE_SECURE: "false",
+  COOKIE_SECRET: 'test-cookie-secret-min-32-chars-long',
+  COOKIE_SECURE: 'false',
 };
 
-describe("validateEnv", () => {
-  it("returns typed config for valid env input", () => {
+describe('validateEnv', () => {
+  it('returns typed config for valid env input', () => {
     expect(validateEnv(validEnv)).toEqual({
-      nodeEnv: "development",
+      nodeEnv: 'development',
       port: 3000,
-      corsOrigins: ["http://localhost:3000", "http://localhost:5173"],
-      bodyJsonLimit: "1mb",
-      bodyUrlencodedLimit: "1mb",
+      corsOrigins: ['http://localhost:3000', 'http://localhost:5173'],
+      bodyJsonLimit: '1mb',
+      bodyUrlencodedLimit: '1mb',
       databaseUrl: validEnv.DATABASE_URL,
       prismaTransactionMaxWaitMs: 5000,
       prismaTransactionTimeoutMs: 15000,
       redisUrl: validEnv.REDIS_URL,
       healthDatabaseTimeoutMs: 1000,
       healthRedisTimeoutMs: 1000,
-      s3Endpoint: "http://localhost:9000",
-      s3Region: "us-east-1",
-      s3AccessKeyId: "minioadmin",
-      s3SecretAccessKey: "minioadmin",
-      s3Bucket: "mdc-media",
+      s3Endpoint: 'http://localhost:9000',
+      s3Region: 'us-east-1',
+      s3AccessKeyId: 'minioadmin',
+      s3SecretAccessKey: 'minioadmin',
+      s3Bucket: 'mdc-media',
       s3ForcePathStyle: true,
       healthS3TimeoutMs: 3000,
-      elasticsearchNode: "http://localhost:9200",
+      elasticsearchNode: 'http://localhost:9200',
       healthElasticsearchTimeoutMs: 5000,
-      smtpHost: "smtp.example.com",
+      smtpHost: 'smtp.example.com',
       smtpPort: 587,
       smtpSecure: false,
-      smtpUser: "user@example.com",
-      smtpPass: "password123",
-      emailFrom: "noreply@mdc.local",
+      smtpUser: 'user@example.com',
+      smtpPass: 'password123',
+      emailFrom: 'noreply@mdc.local',
       healthMailerTimeoutMs: 3000,
-      otelServiceName: "mdc-be-test",
-      otelExporterOtlpEndpoint: "http://localhost:4318",
-      appProcessRole: "all",
+      otelServiceName: 'mdc-be-test',
+      otelExporterOtlpEndpoint: 'http://localhost:4318',
+      appProcessRole: 'all',
       outboxBatchSize: 20,
       outboxMaxRetries: 5,
       outboxBaseBackoffMs: 1000,
       outboxMaxBackoffMs: 60000,
       outboxLeaseTimeoutMs: 60000,
       outboxHealthLagThreshold: 100,
-      jwtAccessSecret: "test-access-secret-min-32-chars-long",
-      jwtAccessExpiresIn: "15m",
-      jwtRefreshExpiresIn: "7d",
-      cookieSecret: "test-cookie-secret-min-32-chars-long",
+      jwtAccessSecret: 'test-access-secret-min-32-chars-long',
+      jwtAccessExpiresIn: '15m',
+      jwtRefreshExpiresIn: '7d',
+      cookieSecret: 'test-cookie-secret-min-32-chars-long',
       cookieSecure: false,
-      cookieSameSite: "lax",
+      cookieSameSite: 'lax',
       throttleLoginLimit: 5,
       throttleLoginTtl: 60000,
       throttleRegisterLimit: 3,
@@ -111,165 +112,181 @@ describe("validateEnv", () => {
       mediaAvatarMaxSizeBytes: 5242880,
       mediaResumeMaxSizeBytes: 20971520,
       mediaAllowedContentTypes: [
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/pdf',
       ],
-      billingProvider: "mock",
-      billingWebhookSecret: "whsec_test_secret",
-      billingDefaultFreePlanSlug: "free",
+      billingProvider: 'mock',
+      billingWebhookSecret: 'whsec_test_secret',
+      billingDefaultFreePlanSlug: 'free',
       stripeEnabled: false,
-      stripeSecretKey: "",
-      stripeWebhookSecret: "",
-      stripeApiVersion: "2024-12-18.acacia",
+      stripeSecretKey: '',
+      stripeWebhookSecret: '',
+      stripeApiVersion: '2024-12-18.acacia',
       fcmEnabled: false,
-      fcmServiceAccountPath: "",
+      fcmServiceAccountPath: '',
       apnsEnabled: false,
-      apnsTeamId: "",
-      apnsKeyId: "",
-      apnsSigningKeyPath: "",
-      apnsBundleId: "",
+      apnsTeamId: '',
+      apnsKeyId: '',
+      apnsSigningKeyPath: '',
+      apnsBundleId: '',
       apnsProduction: false,
       unleashEnabled: true,
-      unleashUrl: "http://localhost:4242/api",
-      unleashApiToken: "",
-      unleashAppName: "mdc-be",
-      emailTrackingBaseUrl: "http://localhost:3000",
-      emailUnsubscribeSecret: "dev-only-change-me-in-production",
+      unleashUrl: 'http://localhost:4242/api',
+      unleashApiToken: '',
+      unleashAppName: 'mdc-be',
+      virusScanEnabled: false,
+      clamavHost: '',
+      clamavPort: 3310,
+      emailTrackingBaseUrl: 'http://localhost:3000',
+      emailUnsubscribeSecret: 'dev-only-change-me-in-production',
+      gdprExportRetentionDays: 7,
+      gdprGracePeriodDays: 7,
+      gdprSlaDays: 30,
     });
   });
 
-  it("uses EMAIL_UNSUBSCRIBE_SECRET when explicitly provided", () => {
+  it('uses EMAIL_UNSUBSCRIBE_SECRET when explicitly provided', () => {
     const result = validateEnv({
       ...validEnv,
-      EMAIL_UNSUBSCRIBE_SECRET: "a-real-secret-32-chars-long-x-x-x",
+      EMAIL_UNSUBSCRIBE_SECRET: 'a-real-secret-32-chars-long-x-x-x',
     });
-    expect(result.emailUnsubscribeSecret).toBe("a-real-secret-32-chars-long-x-x-x");
+    expect(result.emailUnsubscribeSecret).toBe(
+      'a-real-secret-32-chars-long-x-x-x',
+    );
   });
 
-  it("throws in production when EMAIL_UNSUBSCRIBE_SECRET is the default placeholder", () => {
-    expect(() => validateEnv({ ...validEnv, NODE_ENV: "production" })).toThrow(
+  it('throws in production when EMAIL_UNSUBSCRIBE_SECRET is the default placeholder', () => {
+    expect(() => validateEnv({ ...validEnv, NODE_ENV: 'production' })).toThrow(
       /EMAIL_UNSUBSCRIBE_SECRET is required in production/,
     );
   });
 
-  it("throws in production when EMAIL_UNSUBSCRIBE_SECRET is empty", () => {
+  it('throws in production when EMAIL_UNSUBSCRIBE_SECRET is empty', () => {
     expect(() =>
       validateEnv({
         ...validEnv,
-        NODE_ENV: "production",
-        EMAIL_UNSUBSCRIBE_SECRET: "",
+        NODE_ENV: 'production',
+        EMAIL_UNSUBSCRIBE_SECRET: '',
       }),
     ).toThrow(/EMAIL_UNSUBSCRIBE_SECRET is required in production/);
   });
 
   it.each([
-    "DATABASE_URL",
-    "REDIS_URL",
-    "PORT",
-    "BODY_JSON_LIMIT",
-    "CORS_ORIGINS",
-    "S3_ENDPOINT",
-    "S3_REGION",
-    "S3_ACCESS_KEY_ID",
-    "S3_SECRET_ACCESS_KEY",
-    "S3_BUCKET",
-    "ELASTICSEARCH_NODE",
-    "EMAIL_FROM",
-    "OTEL_SERVICE_NAME",
-    "OTEL_EXPORTER_OTLP_ENDPOINT",
-  ])("throws when %s is missing", (key) => {
+    'DATABASE_URL',
+    'REDIS_URL',
+    'PORT',
+    'BODY_JSON_LIMIT',
+    'CORS_ORIGINS',
+    'S3_ENDPOINT',
+    'S3_REGION',
+    'S3_ACCESS_KEY_ID',
+    'S3_SECRET_ACCESS_KEY',
+    'S3_BUCKET',
+    'ELASTICSEARCH_NODE',
+    'EMAIL_FROM',
+    'OTEL_SERVICE_NAME',
+    'OTEL_EXPORTER_OTLP_ENDPOINT',
+  ])('throws when %s is missing', (key) => {
     const env = { ...validEnv, [key]: undefined };
     expect(() => validateEnv(env)).toThrow();
   });
 
-  it("throws for invalid port, body limit, and empty CORS config", () => {
-    expect(() => validateEnv({ ...validEnv, PORT: "70000" })).toThrow("PORT must be");
-    expect(() => validateEnv({ ...validEnv, BODY_JSON_LIMIT: "huge" })).toThrow("BODY_JSON_LIMIT");
-    expect(() => validateEnv({ ...validEnv, CORS_ORIGINS: "  " })).toThrow("CORS_ORIGINS");
-  });
-
-  it("throws when S3_FORCE_PATH_STYLE is not a valid boolean", () => {
-    expect(() => validateEnv({ ...validEnv, S3_FORCE_PATH_STYLE: "yes" })).toThrow(
-      "S3_FORCE_PATH_STYLE",
+  it('throws for invalid port, body limit, and empty CORS config', () => {
+    expect(() => validateEnv({ ...validEnv, PORT: '70000' })).toThrow(
+      'PORT must be',
+    );
+    expect(() => validateEnv({ ...validEnv, BODY_JSON_LIMIT: 'huge' })).toThrow(
+      'BODY_JSON_LIMIT',
+    );
+    expect(() => validateEnv({ ...validEnv, CORS_ORIGINS: '  ' })).toThrow(
+      'CORS_ORIGINS',
     );
   });
 
-  it("allows empty SMTP_HOST, SMTP_USER, SMTP_PASS for dev fallback", () => {
-    const result = validateEnv({
-      ...validEnv,
-      SMTP_HOST: "",
-      SMTP_USER: "",
-      SMTP_PASS: "",
-    });
-    expect(result.smtpHost).toBe("");
-    expect(result.smtpUser).toBe("");
-    expect(result.smtpPass).toBe("");
+  it('throws when S3_FORCE_PATH_STYLE is not a valid boolean', () => {
+    expect(() =>
+      validateEnv({ ...validEnv, S3_FORCE_PATH_STYLE: 'yes' }),
+    ).toThrow('S3_FORCE_PATH_STYLE');
   });
 
-  describe("Prisma config", () => {
-    it("should parse transaction timeout defaults", () => {
+  it('allows empty SMTP_HOST, SMTP_USER, SMTP_PASS for dev fallback', () => {
+    const result = validateEnv({
+      ...validEnv,
+      SMTP_HOST: '',
+      SMTP_USER: '',
+      SMTP_PASS: '',
+    });
+    expect(result.smtpHost).toBe('');
+    expect(result.smtpUser).toBe('');
+    expect(result.smtpPass).toBe('');
+  });
+
+  describe('Prisma config', () => {
+    it('should parse transaction timeout defaults', () => {
       const config = validateEnv({
         ...validEnv,
-        PRISMA_TRANSACTION_MAX_WAIT_MS: "7000",
-        PRISMA_TRANSACTION_TIMEOUT_MS: "20000",
+        PRISMA_TRANSACTION_MAX_WAIT_MS: '7000',
+        PRISMA_TRANSACTION_TIMEOUT_MS: '20000',
       });
       expect(config.prismaTransactionMaxWaitMs).toBe(7000);
       expect(config.prismaTransactionTimeoutMs).toBe(20000);
     });
 
-    it("should reject invalid transaction timeout values", () => {
+    it('should reject invalid transaction timeout values', () => {
       expect(() =>
         validateEnv({
           ...validEnv,
-          PRISMA_TRANSACTION_MAX_WAIT_MS: "0",
+          PRISMA_TRANSACTION_MAX_WAIT_MS: '0',
         }),
-      ).toThrow("PRISMA_TRANSACTION_MAX_WAIT_MS");
+      ).toThrow('PRISMA_TRANSACTION_MAX_WAIT_MS');
       expect(() =>
         validateEnv({
           ...validEnv,
-          PRISMA_TRANSACTION_TIMEOUT_MS: "slow",
+          PRISMA_TRANSACTION_TIMEOUT_MS: 'slow',
         }),
-      ).toThrow("PRISMA_TRANSACTION_TIMEOUT_MS");
+      ).toThrow('PRISMA_TRANSACTION_TIMEOUT_MS');
     });
   });
 
-  describe("APP_PROCESS_ROLE", () => {
-    it("should accept valid process roles", () => {
-      for (const role of ["api", "worker", "realtime", "all"]) {
-        expect(() => validateEnv({ ...validEnv, APP_PROCESS_ROLE: role })).not.toThrow();
+  describe('APP_PROCESS_ROLE', () => {
+    it('should accept valid process roles', () => {
+      for (const role of ['api', 'worker', 'realtime', 'all']) {
+        expect(() =>
+          validateEnv({ ...validEnv, APP_PROCESS_ROLE: role }),
+        ).not.toThrow();
       }
     });
 
-    it("should reject invalid process roles", () => {
-      expect(() => validateEnv({ ...validEnv, APP_PROCESS_ROLE: "invalid" })).toThrow(
-        /APP_PROCESS_ROLE/,
-      );
+    it('should reject invalid process roles', () => {
+      expect(() =>
+        validateEnv({ ...validEnv, APP_PROCESS_ROLE: 'invalid' }),
+      ).toThrow(/APP_PROCESS_ROLE/);
     });
 
     it("should default to 'all' when unset", () => {
       const config = validateEnv(validEnv);
-      expect(config.appProcessRole).toBe("all");
+      expect(config.appProcessRole).toBe('all');
     });
 
-    it("should parse explicit process role", () => {
-      const config = validateEnv({ ...validEnv, APP_PROCESS_ROLE: "worker" });
-      expect(config.appProcessRole).toBe("worker");
+    it('should parse explicit process role', () => {
+      const config = validateEnv({ ...validEnv, APP_PROCESS_ROLE: 'worker' });
+      expect(config.appProcessRole).toBe('worker');
     });
   });
 
-  describe("Outbox config", () => {
-    it("should parse outbox batch size", () => {
+  describe('Outbox config', () => {
+    it('should parse outbox batch size', () => {
       const config = validateEnv({
         ...validEnv,
-        OUTBOX_BATCH_SIZE: "100",
+        OUTBOX_BATCH_SIZE: '100',
       });
       expect(config.outboxBatchSize).toBe(100);
     });
 
-    it("should default all outbox config when unset", () => {
+    it('should default all outbox config when unset', () => {
       const config = validateEnv(validEnv);
       expect(config.outboxBatchSize).toBe(20);
       expect(config.outboxMaxRetries).toBe(5);
@@ -279,15 +296,15 @@ describe("validateEnv", () => {
       expect(config.outboxHealthLagThreshold).toBe(100);
     });
 
-    it("should parse all outbox env vars", () => {
+    it('should parse all outbox env vars', () => {
       const config = validateEnv({
         ...validEnv,
-        OUTBOX_BATCH_SIZE: "50",
-        OUTBOX_MAX_RETRIES: "10",
-        OUTBOX_BASE_BACKOFF_MS: "2000",
-        OUTBOX_MAX_BACKOFF_MS: "120000",
-        OUTBOX_LEASE_TIMEOUT_MS: "30000",
-        OUTBOX_HEALTH_LAG_THRESHOLD: "200",
+        OUTBOX_BATCH_SIZE: '50',
+        OUTBOX_MAX_RETRIES: '10',
+        OUTBOX_BASE_BACKOFF_MS: '2000',
+        OUTBOX_MAX_BACKOFF_MS: '120000',
+        OUTBOX_LEASE_TIMEOUT_MS: '30000',
+        OUTBOX_HEALTH_LAG_THRESHOLD: '200',
       });
       expect(config.outboxBatchSize).toBe(50);
       expect(config.outboxMaxRetries).toBe(10);
@@ -298,30 +315,33 @@ describe("validateEnv", () => {
     });
   });
 
-  describe("Media config", () => {
-    it("should default media config when unset", () => {
+  describe('Media config', () => {
+    it('should default media config when unset', () => {
       const config = validateEnv(validEnv);
       expect(config.mediaAvatarMaxSizeBytes).toBe(5242880);
       expect(config.mediaResumeMaxSizeBytes).toBe(20971520);
       expect(config.mediaAllowedContentTypes).toEqual([
-        "image/jpeg",
-        "image/png",
-        "image/gif",
-        "image/webp",
-        "application/pdf",
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'application/pdf',
       ]);
     });
 
-    it("should parse all media env vars", () => {
+    it('should parse all media env vars', () => {
       const config = validateEnv({
         ...validEnv,
-        MEDIA_AVATAR_MAX_SIZE_BYTES: "1048576",
-        MEDIA_RESUME_MAX_SIZE_BYTES: "5242880",
-        MEDIA_ALLOWED_CONTENT_TYPES: "image/jpeg,application/pdf",
+        MEDIA_AVATAR_MAX_SIZE_BYTES: '1048576',
+        MEDIA_RESUME_MAX_SIZE_BYTES: '5242880',
+        MEDIA_ALLOWED_CONTENT_TYPES: 'image/jpeg,application/pdf',
       });
       expect(config.mediaAvatarMaxSizeBytes).toBe(1048576);
       expect(config.mediaResumeMaxSizeBytes).toBe(5242880);
-      expect(config.mediaAllowedContentTypes).toEqual(["image/jpeg", "application/pdf"]);
+      expect(config.mediaAllowedContentTypes).toEqual([
+        'image/jpeg',
+        'application/pdf',
+      ]);
     });
   });
 });

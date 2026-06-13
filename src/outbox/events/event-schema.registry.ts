@@ -382,6 +382,35 @@ export const outboxEventSchemas = {
     currentValue: z.number(),
     threshold: z.number(),
   }),
+  // Phase E — T1 GDPR events
+  UserDataExportRequested: payload.extend({
+    exportId: z.string(),
+    userId: z.string(),
+    requestedBy: z.string(),
+    requestedAt: z.string(),
+  }),
+  UserDataExported: payload.extend({
+    exportId: z.string(),
+    userId: z.string(),
+    s3Bucket: z.string(),
+    s3Key: z.string(),
+    downloadUrl: z.string().optional(),
+    expiresAt: z.string().optional(),
+    exportedAt: z.string(),
+  }),
+  UserDataDeleted: payload.extend({
+    requestId: z.string(),
+    userId: z.string(),
+    deletedBy: z.string(),
+    reason: z.string().optional(),
+    deletedAt: z.string(),
+  }),
+  UserDataAnonymized: payload.extend({
+    userId: z.string(),
+    requestId: z.string(),
+    anonymizedAt: z.string(),
+    anonymizedFields: z.array(z.string()),
+  }),
 } as const;
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;

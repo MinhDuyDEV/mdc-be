@@ -1,33 +1,35 @@
-import { Inject, Injectable, type OnApplicationShutdown } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { Cron, CronExpression } from "@nestjs/schedule";
-import type { Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
-import { PinoLogger } from "nestjs-pino";
-import type { AppConfig } from "../infra/config";
-import { PrismaService } from "../infra/prisma";
-import { NotificationEventDto } from "../realtime/dto/notification-event.dto";
-import { RealtimeGateway } from "../realtime/realtime.gateway";
-import { DeadLetterService } from "./dead-letter.service";
-import { validateOutboxPayload } from "./events";
-import { OutboxMetrics } from "./outbox.metrics";
-import { ApplicationEmailProcessor } from "./processors/application-email.processor";
-import { BillingAdvancedProcessor } from "./processors/billing-advanced.processor";
-import { BillingProcessor } from "./processors/billing.processor";
-import { CompanySearchIndexProcessor } from "./processors/company-search-index.processor";
-import { JobAlertProcessor } from "./processors/job-alert.processor";
-import { MediaScanProcessor } from "./processors/media-scan.processor";
-import { JobSearchIndexProcessor } from "./processors/job-search-index.processor";
-import { MessagingProcessor } from "./processors/messaging.processor";
-import { NotificationProcessor } from "./processors/notification.processor";
-import { PostInteractionProcessor } from "./processors/post-interaction.processor";
-import { PostSearchIndexProcessor } from "./processors/post-search-index.processor";
-import { ProfileCreationProcessor } from "./processors/profile-creation.processor";
-import { ProfileSearchIndexProcessor } from "./processors/profile-search-index.processor";
-import { ExperimentTrackingProcessor } from "./processors/experiment-tracking.processor";
-import { PushNotificationProcessor } from "./processors/push-notification.processor";
-import { RecruitingProcessor } from "./processors/recruiting.processor";
-import { SubscriptionProcessor } from "./processors/subscription.processor";
+import { Inject, Injectable, type OnApplicationShutdown } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Cron, CronExpression } from '@nestjs/schedule';
+import type { Prisma } from '@prisma/client';
+import { randomUUID } from 'crypto';
+import { PinoLogger } from 'nestjs-pino';
+import type { AppConfig } from '../infra/config';
+import { PrismaService } from '../infra/prisma';
+import { NotificationEventDto } from '../realtime/dto/notification-event.dto';
+import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { DeadLetterService } from './dead-letter.service';
+import { validateOutboxPayload } from './events';
+import { OutboxMetrics } from './outbox.metrics';
+import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { BillingAdvancedProcessor } from './processors/billing-advanced.processor';
+import { BillingProcessor } from './processors/billing.processor';
+import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
+import { JobAlertProcessor } from './processors/job-alert.processor';
+import { GdprDeletionProcessor } from './processors/gdpr-deletion.processor';
+import { GdprExportProcessor } from './processors/gdpr-export.processor';
+import { MediaScanProcessor } from './processors/media-scan.processor';
+import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
+import { MessagingProcessor } from './processors/messaging.processor';
+import { NotificationProcessor } from './processors/notification.processor';
+import { PostInteractionProcessor } from './processors/post-interaction.processor';
+import { PostSearchIndexProcessor } from './processors/post-search-index.processor';
+import { ProfileCreationProcessor } from './processors/profile-creation.processor';
+import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
+import { ExperimentTrackingProcessor } from './processors/experiment-tracking.processor';
+import { PushNotificationProcessor } from './processors/push-notification.processor';
+import { RecruitingProcessor } from './processors/recruiting.processor';
+import { SubscriptionProcessor } from './processors/subscription.processor';
 
 export interface ClaimedEvent {
   id: string;
@@ -58,6 +60,10 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly companySearchIndex: CompanySearchIndexProcessor,
     @Inject(JobAlertProcessor)
     private readonly jobAlertProcessor: JobAlertProcessor,
+    @Inject(GdprExportProcessor)
+    private readonly gdprExportProcessor: GdprExportProcessor,
+    @Inject(GdprDeletionProcessor)
+    private readonly gdprDeletionProcessor: GdprDeletionProcessor,
     @Inject(MediaScanProcessor)
     private readonly mediaScanProcessor: MediaScanProcessor,
     @Inject(JobSearchIndexProcessor)
@@ -94,26 +100,26 @@ export class OutboxProcessor implements OnApplicationShutdown {
     @Inject(PinoLogger) private readonly logger: PinoLogger,
   ) {
     this.logger.setContext(OutboxProcessor.name);
-    this.batchSize = this.config.get("outboxBatchSize", { infer: true });
-    this.maxRetries = this.config.get("outboxMaxRetries", { infer: true });
-    this.baseBackoffMs = this.config.get("outboxBaseBackoffMs", {
+    this.batchSize = this.config.get('outboxBatchSize', { infer: true });
+    this.maxRetries = this.config.get('outboxMaxRetries', { infer: true });
+    this.baseBackoffMs = this.config.get('outboxBaseBackoffMs', {
       infer: true,
     });
-    this.maxBackoffMs = this.config.get("outboxMaxBackoffMs", { infer: true });
-    this.leaseTimeoutMs = this.config.get("outboxLeaseTimeoutMs", {
+    this.maxBackoffMs = this.config.get('outboxMaxBackoffMs', { infer: true });
+    this.leaseTimeoutMs = this.config.get('outboxLeaseTimeoutMs', {
       infer: true,
     });
     this.metrics.registerPendingGauge(
       () =>
         this.prisma.outboxEvent.count({
-          where: { status: "PENDING" },
+          where: { status: 'PENDING' },
         }),
-      (err) => this.logger.error("Outbox pending metric failed: %s", err),
+      (err) => this.logger.error('Outbox pending metric failed: %s', err),
     );
   }
 
   @Cron(CronExpression.EVERY_5_SECONDS, {
-    name: "outbox-processor",
+    name: 'outbox-processor',
     waitForCompletion: true,
   })
   async processOutbox(): Promise<void> {
@@ -122,12 +128,12 @@ export class OutboxProcessor implements OnApplicationShutdown {
       const events = await this.claimEvents();
       if (events.length === 0) return;
 
-      this.logger.debug("Processing %d outbox events", events.length);
+      this.logger.debug('Processing %d outbox events', events.length);
 
       await this.processEventGroups(this.groupEventsByAggregate(events));
     } catch (err) {
       // Log but don't rethrow — that would kill the cron job
-      this.logger.error("Outbox processing failed: %s", err);
+      this.logger.error('Outbox processing failed: %s', err);
     }
   }
 
@@ -136,20 +142,26 @@ export class OutboxProcessor implements OnApplicationShutdown {
     try {
       const result = await this.prisma.outboxEvent.updateMany({
         where: {
-          status: "PROCESSING",
+          status: 'PROCESSING',
           lockedBy: this.processorId,
         },
         data: {
-          status: "PENDING",
+          status: 'PENDING',
           lockedAt: null,
           lockedBy: null,
         },
       });
       if (result.count > 0) {
-        this.logger.warn("Released %d outbox locks during shutdown", result.count);
+        this.logger.warn(
+          'Released %d outbox locks during shutdown',
+          result.count,
+        );
       }
     } catch (err) {
-      this.logger.error("Failed to release outbox locks during shutdown: %s", err);
+      this.logger.error(
+        'Failed to release outbox locks during shutdown: %s',
+        err,
+      );
     }
   }
 
@@ -183,7 +195,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
       // 3. Fetch full rows for the handler
       const events = (await tx.outboxEvent.findMany({
         where: { id: { in: ids }, lockedBy: lockId },
-        orderBy: { createdAt: "asc" },
+        orderBy: { createdAt: 'asc' },
       })) as ClaimedEvent[];
       return events;
     });
@@ -193,7 +205,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
     const groups = new Map<string, ClaimedEvent[]>();
     for (const event of events) {
       const key = event.aggregateId
-        ? `${event.aggregateType ?? "unknown"}:${event.aggregateId}`
+        ? `${event.aggregateType ?? 'unknown'}:${event.aggregateId}`
         : event.id;
       const group = groups.get(key);
       if (group) {
@@ -228,20 +240,24 @@ export class OutboxProcessor implements OnApplicationShutdown {
       await this.dispatch(event);
       this.metrics.recordDispatchDuration(
         event.eventType,
-        "success",
+        'success',
         Date.now() - dispatchStartedAt,
       );
       dispatchRecorded = true;
       await this.markProcessed(event.id);
       this.metrics.recordProcessed(event.eventType);
-      this.logger.debug("Event %s (%s) marked as processed", event.id, event.eventType);
+      this.logger.debug(
+        'Event %s (%s) marked as processed',
+        event.id,
+        event.eventType,
+      );
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));
       const attempts = await this.recordFailure(event.id);
       if (!dispatchRecorded) {
         this.metrics.recordDispatchDuration(
           event.eventType,
-          "failure",
+          'failure',
           Date.now() - dispatchStartedAt,
         );
       }
@@ -257,11 +273,15 @@ export class OutboxProcessor implements OnApplicationShutdown {
           error,
         );
         this.metrics.recordDeadLettered(event.eventType);
-        this.logger.warn("Event %s moved to dead letter after %d attempts", event.id, attempts);
+        this.logger.warn(
+          'Event %s moved to dead letter after %d attempts',
+          event.id,
+          attempts,
+        );
       } else {
         await this.requeueWithBackoff(event.id, attempts);
         this.logger.debug(
-          "Event %s requeued with backoff (attempt %d/%d)",
+          'Event %s requeued with backoff (attempt %d/%d)',
           event.id,
           attempts,
           this.maxRetries,
@@ -273,18 +293,20 @@ export class OutboxProcessor implements OnApplicationShutdown {
   private async dispatch(event: ClaimedEvent): Promise<void> {
     const payload = validateOutboxPayload(event.eventType, event.payload);
     switch (event.eventType) {
-      case "UserRegistered":
+      case 'UserRegistered':
         await this.profileCreation.processUserRegistered(
           payload as { userId: string; email: string },
         );
         return;
-      case "ProfileUpdated":
+      case 'ProfileUpdated':
         await this.profileSearchIndex.processProfileUpdated(
           payload as { profileId: string; userId: string },
         );
         return;
-      case "CompanyCreated":
-        await this.companySearchIndex.processCompanyCreated(payload as { companyId: string });
+      case 'CompanyCreated':
+        await this.companySearchIndex.processCompanyCreated(
+          payload as { companyId: string },
+        );
         await this.subscriptionProcessor.createFreeSubscription(
           (payload as { companyId: string }).companyId,
         );
@@ -293,18 +315,20 @@ export class OutboxProcessor implements OnApplicationShutdown {
       // (member counts, member names, follower counts, recruiter seats),
       // so route them through the same reindex path. If a dedicated handler
       // is needed later, split out below.
-      case "CompanyUpdated":
-      case "CompanyFollowed":
-      case "CompanyUnfollowed":
-      case "CompanyMemberAdded":
-      case "CompanyMemberRoleChanged":
-      case "CompanyMemberRemoved":
-      case "MemberInvited":
-      case "MemberJoined":
-      case "RecruiterSeatDeallocated": {
+      case 'CompanyUpdated':
+      case 'CompanyFollowed':
+      case 'CompanyUnfollowed':
+      case 'CompanyMemberAdded':
+      case 'CompanyMemberRoleChanged':
+      case 'CompanyMemberRemoved':
+      case 'MemberInvited':
+      case 'MemberJoined':
+      case 'RecruiterSeatDeallocated': {
         const companyPayload = payload as { companyId?: string };
         if (!companyPayload?.companyId) {
-          this.logger.warn(`${event.eventType} event ${event.id} missing companyId — skipping`);
+          this.logger.warn(
+            `${event.eventType} event ${event.id} missing companyId — skipping`,
+          );
           return;
         }
         await this.companySearchIndex.processCompanyUpdated({
@@ -312,13 +336,15 @@ export class OutboxProcessor implements OnApplicationShutdown {
         });
         return;
       }
-      case "RecruiterSeatAllocated": {
+      case 'RecruiterSeatAllocated': {
         const seatPayload = payload as {
           companyId?: string;
           recruiterUserId?: string;
         };
         if (!seatPayload?.companyId) {
-          this.logger.warn(`RecruiterSeatAllocated event ${event.id} missing companyId — skipping`);
+          this.logger.warn(
+            `RecruiterSeatAllocated event ${event.id} missing companyId — skipping`,
+          );
           return;
         }
         // Keep existing search-index side-effect.
@@ -333,25 +359,35 @@ export class OutboxProcessor implements OnApplicationShutdown {
         }
         return;
       }
-      case "JobCreated":
-        await this.jobSearchIndex.processJobCreated(payload as { jobId: string });
+      case 'JobCreated':
+        await this.jobSearchIndex.processJobCreated(
+          payload as { jobId: string },
+        );
         return;
-      case "JobUpdated":
-        await this.jobSearchIndex.processJobUpdated(payload as { jobId: string });
+      case 'JobUpdated':
+        await this.jobSearchIndex.processJobUpdated(
+          payload as { jobId: string },
+        );
         return;
-      case "JobPublished":
-        await this.jobSearchIndex.processJobPublished(payload as { jobId: string });
+      case 'JobPublished':
+        await this.jobSearchIndex.processJobPublished(
+          payload as { jobId: string },
+        );
         await this.jobAlertProcessor.processJobPublished(
           payload as { jobId: string; companyId: string },
         );
         return;
-      case "JobClosed":
-        await this.jobSearchIndex.processJobClosed(payload as { jobId: string });
+      case 'JobClosed':
+        await this.jobSearchIndex.processJobClosed(
+          payload as { jobId: string },
+        );
         return;
-      case "JobDeleted":
-        await this.jobSearchIndex.processJobDeleted(payload as { jobId: string });
+      case 'JobDeleted':
+        await this.jobSearchIndex.processJobDeleted(
+          payload as { jobId: string },
+        );
         return;
-      case "ApplicationSubmitted":
+      case 'ApplicationSubmitted':
         await this.notification.processApplicationSubmitted(
           payload as {
             applicationId: string;
@@ -361,7 +397,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ApplicationStatusChanged":
+      case 'ApplicationStatusChanged':
         await this.applicationEmail.processApplicationStatusChanged(
           payload as {
             applicationId: string;
@@ -381,7 +417,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ApplicationNoteAdded":
+      case 'ApplicationNoteAdded':
         await this.notification.processApplicationNoteAdded(
           payload as {
             applicationId: string;
@@ -391,7 +427,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ConnectionRequested":
+      case 'ConnectionRequested':
         await this.notification.processConnectionRequested(
           payload as {
             connectionId: string;
@@ -400,7 +436,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ConnectionAccepted":
+      case 'ConnectionAccepted':
         await this.notification.processConnectionAccepted(
           payload as {
             connectionId: string;
@@ -409,7 +445,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "UserBlocked":
+      case 'UserBlocked':
         await this.notification.processUserBlocked(
           payload as {
             blockerUserId: string;
@@ -417,7 +453,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "UserStatusChanged":
+      case 'UserStatusChanged':
         await this.notification.processUserStatusChanged(
           payload as {
             userId: string;
@@ -428,7 +464,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ExternalApplyClicked": {
+      case 'ExternalApplyClicked': {
         const { jobId, companyId } = payload as {
           jobId: string;
           companyId: string;
@@ -442,7 +478,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       }
-      case "CandidateSaved":
+      case 'CandidateSaved':
         await this.notification.processCandidateSaved(
           payload as {
             savedCandidateId: string;
@@ -452,7 +488,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "CandidateAddedToTalentPool":
+      case 'CandidateAddedToTalentPool':
         await this.notification.processCandidateAddedToTalentPool(
           payload as {
             talentPoolCandidateId: string;
@@ -463,7 +499,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       // Posts domain — Phase 6
-      case "PostCreated":
+      case 'PostCreated':
         await this.postInteraction.processPostCreated(
           payload as {
             postId: string;
@@ -471,18 +507,26 @@ export class OutboxProcessor implements OnApplicationShutdown {
             visibility: string;
           },
         );
-        await this.postSearchIndex.processPostCreated(payload as { postId: string });
+        await this.postSearchIndex.processPostCreated(
+          payload as { postId: string },
+        );
         return;
-      case "PostUpdated":
-        await this.postSearchIndex.processPostUpdated(payload as { postId: string });
+      case 'PostUpdated':
+        await this.postSearchIndex.processPostUpdated(
+          payload as { postId: string },
+        );
         return;
-      case "PostContentChanged":
-        await this.postSearchIndex.processPostUpdated(payload as { postId: string });
+      case 'PostContentChanged':
+        await this.postSearchIndex.processPostUpdated(
+          payload as { postId: string },
+        );
         return;
-      case "PostDeleted":
-        await this.postSearchIndex.processPostDeleted(payload as { postId: string });
+      case 'PostDeleted':
+        await this.postSearchIndex.processPostDeleted(
+          payload as { postId: string },
+        );
         return;
-      case "CommentAdded":
+      case 'CommentAdded':
         await this.postInteraction.processCommentAdded(
           payload as {
             commentId: string;
@@ -491,7 +535,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ReactionAdded":
+      case 'ReactionAdded':
         await this.postInteraction.processReactionAdded(
           payload as {
             reactionId: string;
@@ -501,7 +545,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "MentionCreated":
+      case 'MentionCreated':
         await this.postInteraction.processMentionCreated(
           payload as {
             postId: string;
@@ -510,7 +554,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "MentionRemoved":
+      case 'MentionRemoved':
         await this.postInteraction.processMentionRemoved(
           payload as {
             postId: string;
@@ -520,27 +564,29 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ShareCreated":
+      case 'ShareCreated':
         this.logger.debug(
           `ShareCreated: post ${(payload as { postId: string }).postId} shared by ${(payload as { authorId: string }).authorId}`,
         );
         return;
       // Moderation domain — Phase B (T4)
-      case "ProfileRemoved":
-        await this.profileSearchIndex.processProfileRemoved(payload as { profileId: string });
+      case 'ProfileRemoved':
+        await this.profileSearchIndex.processProfileRemoved(
+          payload as { profileId: string },
+        );
         return;
-      case "CompanyRemoved":
+      case 'CompanyRemoved':
         this.logger.debug(
           `CompanyRemoved: company ${(payload as { companyId: string }).companyId} removed (no consumer — deferred)`,
         );
         return;
-      case "MessageRemoved":
+      case 'MessageRemoved':
         this.logger.debug(
           `MessageRemoved: message ${(payload as { messageId: string }).messageId} removed (no consumer — deferred)`,
         );
         return;
       // Messaging domain — Phase 7
-      case "MessageSent":
+      case 'MessageSent':
         await this.messagingProcessor.processMessageSent(
           payload as {
             messageId: string;
@@ -550,7 +596,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "MessageEdited":
+      case 'MessageEdited':
         await this.messagingProcessor.processMessageEdited(
           payload as {
             messageId: string;
@@ -559,7 +605,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "MessageDeleted":
+      case 'MessageDeleted':
         await this.messagingProcessor.processMessageDeleted(
           payload as {
             messageId: string;
@@ -568,7 +614,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ConversationCreated": {
+      case 'ConversationCreated': {
         const convPayload = payload as {
           conversationId: string;
           participantIds: string[];
@@ -577,22 +623,25 @@ export class OutboxProcessor implements OnApplicationShutdown {
         for (const participantId of convPayload.participantIds) {
           const notificationEvent: NotificationEventDto = {
             id: convPayload.conversationId,
-            type: "ConversationCreated",
-            title: "New conversation",
-            body: "A new conversation has been created",
+            type: 'ConversationCreated',
+            title: 'New conversation',
+            body: 'A new conversation has been created',
             actionUrl: `/conversations/${convPayload.conversationId}`,
             createdAt: new Date(),
           };
-          this.realtimeGateway.pushNotification(participantId, notificationEvent);
+          this.realtimeGateway.pushNotification(
+            participantId,
+            notificationEvent,
+          );
         }
         this.logger.debug(
           `ConversationCreated: conv=${convPayload.conversationId} participants=${convPayload.participantIds.length}`,
         );
         return;
       }
-      // Phase E — T4 billing events
-      case "SubscriptionUpgraded":
-        await this.billingAdvancedProcessor.processSubscriptionUpgraded(
+      // Phase E — T4 billing events (handlers are sync logging-only)
+      case 'SubscriptionUpgraded':
+        this.billingAdvancedProcessor.processSubscriptionUpgraded(
           payload as {
             subscriptionId: string;
             companyId: string;
@@ -601,8 +650,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "SubscriptionDowngraded":
-        await this.billingAdvancedProcessor.processSubscriptionDowngraded(
+      case 'SubscriptionDowngraded':
+        this.billingAdvancedProcessor.processSubscriptionDowngraded(
           payload as {
             subscriptionId: string;
             companyId: string;
@@ -612,8 +661,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "SubscriptionStatusChanged":
-        await this.billingAdvancedProcessor.processSubscriptionStatusChanged(
+      case 'SubscriptionStatusChanged':
+        this.billingAdvancedProcessor.processSubscriptionStatusChanged(
           payload as {
             subscriptionId: string;
             companyId: string;
@@ -622,8 +671,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "InvoiceCreated":
-        await this.billingAdvancedProcessor.processInvoiceCreated(
+      case 'InvoiceCreated':
+        this.billingAdvancedProcessor.processInvoiceCreated(
           payload as {
             invoiceId: string;
             companyId: string;
@@ -631,8 +680,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "InvoicePaymentFailed":
-        await this.billingAdvancedProcessor.processInvoicePaymentFailed(
+      case 'InvoicePaymentFailed':
+        this.billingAdvancedProcessor.processInvoicePaymentFailed(
           payload as {
             invoiceId: string;
             companyId: string;
@@ -640,8 +689,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "PaymentMethodAdded":
-        await this.billingAdvancedProcessor.processPaymentMethodAdded(
+      case 'PaymentMethodAdded':
+        this.billingAdvancedProcessor.processPaymentMethodAdded(
           payload as {
             paymentMethodId: string;
             companyId: string;
@@ -650,13 +699,13 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "PaymentMethodRemoved":
-        await this.billingAdvancedProcessor.processPaymentMethodRemoved(
+      case 'PaymentMethodRemoved':
+        this.billingAdvancedProcessor.processPaymentMethodRemoved(
           payload as { paymentMethodId: string; companyId: string },
         );
         return;
-      case "UsageThresholdReached":
-        await this.billingAdvancedProcessor.processUsageThresholdReached(
+      case 'UsageThresholdReached':
+        this.billingAdvancedProcessor.processUsageThresholdReached(
           payload as {
             companyId: string;
             meterEventName: string;
@@ -665,13 +714,13 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "PaymentProviderEventReceived":
+      case 'PaymentProviderEventReceived':
         await this.billingProcessor.processPaymentProviderEvent(
           (payload as { eventId: string }).eventId,
         );
         return;
       // Recruiting domain — Phase C (W3-T2)
-      case "InterviewScheduled":
+      case 'InterviewScheduled':
         await this.recruitingProcessor.processInterviewScheduled(
           payload as {
             interviewId: string;
@@ -682,7 +731,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "InterviewCompleted":
+      case 'InterviewCompleted':
         await this.recruitingProcessor.processInterviewCompleted(
           payload as {
             interviewId: string;
@@ -691,7 +740,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ScorecardSubmitted":
+      case 'ScorecardSubmitted':
         await this.recruitingProcessor.processScorecardSubmitted(
           payload as {
             scorecardId: string;
@@ -702,7 +751,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "OfferSent":
+      case 'OfferSent':
         await this.recruitingProcessor.processOfferSent(
           payload as {
             offerId: string;
@@ -711,7 +760,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "OfferResponded":
+      case 'OfferResponded':
         void this.recruitingProcessor.processOfferResponded(
           payload as {
             offerId: string;
@@ -721,7 +770,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
-      case "ExperimentImpression":
+      case 'ExperimentImpression':
         await this.experimentTrackingProcessor.process(
           payload as {
             experimentId: string;
@@ -732,7 +781,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       // Push notifications — Phase D (T4)
-      case "PushNotificationRequired":
+      case 'PushNotificationRequired':
         await this.pushNotificationProcessor.process(
           payload as {
             userId: string;
@@ -743,9 +792,33 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
+      // Phase E — T1 GDPR events
+      case 'UserDataExportRequested':
+        await this.gdprExportProcessor.processUserDataExportRequested(
+          payload as {
+            exportId: string;
+            userId: string;
+            requestedBy: string;
+            requestedAt: string;
+          },
+        );
+        return;
+      case 'UserDataDeleted':
+        await this.gdprDeletionProcessor.processUserDataDeleted(
+          payload as {
+            userId: string;
+            requestId: string;
+            deletedBy: string;
+            reason?: string;
+            deletedAt: string;
+          },
+        );
+        return;
       default:
         // No handler registered yet — treat as no-op (will be marked processed).
-        this.logger.debug(`No handler for event type ${event.eventType} (id=${event.id})`);
+        this.logger.debug(
+          `No handler for event type ${event.eventType} (id=${event.id})`,
+        );
         return;
     }
   }
@@ -761,7 +834,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
           AND locked_at < NOW() - INTERVAL '1 millisecond' * ${this.leaseTimeoutMs}
       `;
     } catch (err) {
-      this.logger.error("Stale lock recovery failed: %s", err);
+      this.logger.error('Stale lock recovery failed: %s', err);
     }
   }
 
@@ -769,7 +842,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
     await this.prisma.outboxEvent.update({
       where: { id: eventId },
       data: {
-        status: "PROCESSED",
+        status: 'PROCESSED',
         processedAt: new Date(),
         lockedAt: null,
         lockedBy: null,
@@ -777,12 +850,15 @@ export class OutboxProcessor implements OnApplicationShutdown {
     });
   }
 
-  private async requeueWithBackoff(eventId: string, attempts: number): Promise<void> {
+  private async requeueWithBackoff(
+    eventId: string,
+    attempts: number,
+  ): Promise<void> {
     const backoffMs = this.calculateBackoff(attempts);
     await this.prisma.outboxEvent.update({
       where: { id: eventId },
       data: {
-        status: "PENDING",
+        status: 'PENDING',
         availableAt: new Date(Date.now() + backoffMs),
         lockedAt: null,
         lockedBy: null,

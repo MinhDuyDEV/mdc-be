@@ -824,4 +824,20 @@ export class MessagingService {
       meta: { nextCursor, hasNextPage, limit },
     };
   }
+
+  async anonymizeForUser(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    // Replace message content with [deleted] marker (preserve conversation structure)
+    await tx.message.updateMany({
+      where: { senderId: userId, deletedAt: null },
+      data: { content: '[deleted]', deletedAt: new Date() },
+    });
+    // Remove from conversations
+    await tx.conversationParticipant.updateMany({
+      where: { userId },
+      data: { leftAt: new Date() },
+    });
+  }
 }

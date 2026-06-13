@@ -69,6 +69,15 @@ export class SearchIndexService {
   }
 
   /**
+   * Delete all search documents for a user across all indices.
+   */
+  async deleteByUser(userId: string): Promise<void> {
+    await this.deleteByQuery('posts', { term: { authorId: userId } });
+    await this.deleteByQuery('comments', { term: { authorId: userId } });
+    await this.deleteByQuery('profiles', { term: { userId } });
+  }
+
+  /**
    * Create a search index with entity-specific mappings, index settings,
    * and atomic read/write alias assignment.
    *

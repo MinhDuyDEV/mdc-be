@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConnectionStatus, FollowStatus, Prisma } from '@prisma/client';
+import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -527,6 +528,21 @@ export class ConnectionsService {
 
     await this.prisma.block.delete({
       where: { id: block.id },
+    });
+  }
+
+  async anonymizeForUser(tx: PrismaTransaction, userId: string): Promise<void> {
+    // Mark all connections as INACTIVE (preserve graph structure)
+    await tx.connection.updateMany({
+      where: { OR: [{ requesterId: userId }, { addresseeId: userId }] },
+      data: { status: 'INACTIVE' as ConnectionStatus, deletedAt: new Date() },
+    });
+    await tx.follow.updateMany({
+      where: { OR: [{ followerId: userId }, { followeeId: userId }] },
+      data: { status: 'INACTIVE', deletedAt: new Date() },
+    });
+    await tx.block.deleteMany({
+      where: { OR: [{ blockerId: userId }, { blockedId: userId }] },
     });
   }
 }

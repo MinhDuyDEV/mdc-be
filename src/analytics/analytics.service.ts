@@ -358,4 +358,13 @@ export class AnalyticsService {
       conversionRates: formattedConversionRates,
     };
   }
+
+  async anonymizeForUser(userId: string): Promise<void> {
+    await this.prisma
+      .$executeRaw`UPDATE profile_views SET viewer_user_id = NULL WHERE viewer_user_id = ${userId}`;
+    await this.prisma
+      .$executeRaw`UPDATE company_views SET viewer_user_id = NULL WHERE viewer_user_id = ${userId}`;
+    await this.prisma
+      .$executeRaw`UPDATE post_impressions SET user_id = NULL WHERE user_id = ${userId}`;
+  }
 }

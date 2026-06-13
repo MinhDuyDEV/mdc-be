@@ -324,6 +324,8 @@ model User {
   handle                      String?                  @unique
   displayName                 String?                  @map("display_name")
   status                      UserStatus               @default(ACTIVE)
+  anonymizedAt                DateTime?                @map("anonymized_at") @db.Timestamptz(3)
+  anonymizedEmail             String?                  @map("anonymized_email") @db.VarChar(320)
   createdAt                   DateTime                 @default(now()) @map("created_at")
   updatedAt                   DateTime                 @updatedAt @map("updated_at")
   refreshTokens               RefreshToken[]
@@ -387,7 +389,9 @@ model User {
   emailConsent             EmailConsent?
   emailTrackingEvents      EmailTrackingEvent[]
   experimentImpressions    ExperimentImpression[]
+  deletionRequests         DeletionRequest[]
 
+  @@index([anonymizedAt])
   @@map("users")
 }
 
@@ -779,10 +783,12 @@ model Experience {
   endDate     DateTime? @map("end_date") @db.Date
   isCurrent   Boolean   @default(false) @map("is_current")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([deletedAt])
   @@map("experiences")
 }
 
@@ -797,10 +803,12 @@ model Education {
   grade        String?   @db.VarChar(50)
   activities   String?   @db.Text
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([deletedAt])
   @@map("educations")
 }
 
@@ -814,10 +822,12 @@ model Certification {
   credentialId        String?   @map("credential_id") @db.VarChar(200)
   credentialUrl       String?   @map("credential_url") @db.VarChar(500)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([deletedAt])
   @@map("certifications")
 }
 
@@ -1317,6 +1327,7 @@ model Application {
   submittedAt        DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
   withdrawnAt        DateTime?         @map("withdrawn_at") @db.Timestamptz(3)
+  deletedAt          DateTime?         @map("deleted_at") @db.Timestamptz(3)
 
   job              Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
   user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1331,6 +1342,7 @@ model Application {
 
   @@index([jobId, status, submittedAt(sort: Desc)])
   @@index([userId, submittedAt(sort: Desc)])
+  @@index([deletedAt])
   @@map("applications")
 }
 
@@ -1341,11 +1353,13 @@ model ApplicationAnswer {
   question      String   @db.Text
   answer        String   @db.Text
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@unique([applicationId, questionId])
   @@index([applicationId])
+  @@index([deletedAt])
   @@map("application_answers")
 }
 
@@ -1355,6 +1369,7 @@ model ApplicationAttachment {
   mediaAssetId  String   @map("media_asset_id") @db.Uuid
   kind          String   @db.VarChar(64)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   mediaAsset  MediaAsset  @relation("ApplicationAttachments", fields: [mediaAssetId], references: [id], onDelete: Restrict)
@@ -1362,6 +1377,7 @@ model ApplicationAttachment {
   @@unique([applicationId, mediaAssetId])
   @@index([applicationId])
   @@index([mediaAssetId])
+  @@index([deletedAt])
   @@map("application_attachments")
 }
 
@@ -1603,11 +1619,13 @@ model Notification {
   // Read tracking
   readAt      DateTime?        @map("read_at") @db.Timestamptz(3)
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Composite index for "feed" reads (userId + DESC by createdAt + tie-break on id).
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([deletedAt])
   // Partial index notifications_unread_idx lives in raw SQL (Prisma can't express WHERE predicates).
   @@map("notifications")
 }
@@ -1619,6 +1637,7 @@ model Connection {
   status      ConnectionStatus @default(PENDING)
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(3)
 
   requester User @relation("ConnectionsAsRequester", fields: [requesterId], references: [id], onDelete: Cascade)
   addressee User @relation("ConnectionsAsAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
@@ -1627,6 +1646,7 @@ model Connection {
   @@index([requesterId])
   @@index([addresseeId])
   @@index([status])
+  @@index([deletedAt])
   @@map("connections")
 }
 
@@ -1637,6 +1657,7 @@ model Follow {
   status     FollowStatus @default(ACTIVE)
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
   follower User @relation("FollowsAsFollower", fields: [followerId], references: [id], onDelete: Cascade)
   followee User @relation("FollowsAsFollowee", fields: [followeeId], references: [id], onDelete: Cascade)
@@ -1645,6 +1666,7 @@ model Follow {
   @@index([followerId])
   @@index([followeeId])
   @@index([status])
+  @@index([deletedAt])
   @@map("follows")
 }
 
@@ -1653,6 +1675,7 @@ model Block {
   blockerId String   @map("blocker_id") @db.Uuid
   blockedId String   @map("blocked_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   blocker User @relation("BlocksAsBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
   blocked User @relation("BlocksAsBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
@@ -1660,6 +1683,7 @@ model Block {
   @@unique([blockerId, blockedId], name: "unique_block")
   @@index([blockerId])
   @@index([blockedId])
+  @@index([deletedAt])
   @@map("blocks")
 }
 
@@ -1731,6 +1755,7 @@ model Reaction {
   authorId  String       @map("author_id") @db.Uuid
   type      ReactionType
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   author User @relation("ReactionsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
@@ -1738,6 +1763,7 @@ model Reaction {
   @@unique([postId, authorId, type])
   @@index([postId])
   @@index([authorId])
+  @@index([deletedAt])
   @@map("reactions")
 }
 
@@ -1833,6 +1859,7 @@ model Mention {
   mentionedUserId String   @map("mentioned_user_id") @db.Uuid
   mentionerUserId String   @map("mentioner_user_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   post          Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
   comment       Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
@@ -1842,6 +1869,7 @@ model Mention {
   @@index([mentionedUserId])
   @@index([postId])
   @@index([commentId])
+  @@index([deletedAt])
   @@map("mentions")
 }
 
@@ -2167,6 +2195,92 @@ model ExperimentImpression {
   @@index([experimentId])
   @@index([userId])
   @@map("experiment_impressions")
+}
+
+// region: GDPR / Data deletion and export
+
+enum DeletionRequestStatus {
+  PENDING_ERASURE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+enum DeletionOperation {
+  SEARCH_INDEX_DELETE
+  ANALYTICS_ANONYMIZE
+  MEDIA_S3_CLEANUP
+  SESSION_REVOKE
+  REALTIME_DISCONNECT
+}
+
+enum DeletionOutboxStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  DEAD_LETTERED
+}
+
+model DeletionRequest {
+  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String                @map("user_id") @db.Uuid
+  requestedBy     String                @map("requested_by") @db.Uuid
+  reason          String?               @db.Text
+  status          DeletionRequestStatus @default(PENDING_ERASURE)
+  scheduledFor    DateTime              @map("scheduled_for") @db.Timestamptz(3)
+  dueBy           DateTime              @map("due_by") @db.Timestamptz(3)
+  completedAt     DateTime?             @map("completed_at") @db.Timestamptz(3)
+  cancelledAt     DateTime?             @map("cancelled_at") @db.Timestamptz(3)
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audit         DeletionAudit[]
+  outboxEntries DeletionOutbox[]
+
+  @@index([userId, status])
+  @@index([status, dueBy])
+  @@index([scheduledFor])
+  @@map("deletion_requests")
+}
+
+model DeletionAudit {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId       String   @map("request_id") @db.Uuid
+  userId          String   @map("user_id") @db.Uuid
+  action          String   @db.VarChar(50)
+  metadata        Json?    @db.JsonB
+  previousHash    String?  @map("previous_hash") @db.VarChar(64)
+  entryHash       String   @map("entry_hash") @db.VarChar(64)
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  request DeletionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId, createdAt])
+  @@index([userId])
+  @@map("deletion_audits")
+}
+
+model DeletionOutbox {
+  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId       String              @map("request_id") @db.Uuid
+  operation       DeletionOperation
+  payload         Json                @db.JsonB
+  status          DeletionOutboxStatus @default(PENDING)
+  attempts        Int                 @default(0)
+  lastError       String?             @map("last_error") @db.Text
+  availableAt     DateTime            @default(now()) @map("available_at") @db.Timestamptz(3)
+  processedAt     DateTime?           @map("processed_at") @db.Timestamptz(3)
+  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  request DeletionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([status, availableAt])
+  @@index([requestId])
+  @@map("deletion_outbox")
 }
 
 // endregion
