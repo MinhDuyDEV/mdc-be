@@ -727,6 +727,7 @@ model Company {
   interviews        Interview[]
   scorecards        Scorecard[]
   offers            Offer[]
+  paymentMethods    PaymentMethod[]
 
   @@index([slug])
   @@index([industry])
@@ -995,7 +996,8 @@ model BillingPlan {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  subscriptions Subscription[]
+  subscriptions   Subscription[]
+  scheduledFor    Subscription[] @relation("ScheduledPlan")
 
   @@index([slug])
   @@index([isActive, isPublic])
@@ -1013,11 +1015,14 @@ model Subscription {
   canceledAt             DateTime? @map("canceled_at") @db.Timestamptz(3)
   providerCustomerId     String?   @map("provider_customer_id") @db.VarChar(255)
   providerSubscriptionId String?   @map("provider_subscription_id") @db.VarChar(255)
+  providerPaymentMethodId String?  @map("provider_payment_method_id") @db.VarChar(255)
+  scheduledPlanId        String?   @map("scheduled_plan_id") @db.Uuid
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   plan              BillingPlan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  scheduledPlan     BillingPlan?        @relation("ScheduledPlan", fields: [scheduledPlanId], references: [id], onDelete: SetNull)
   invoices          Invoice[]
   entitlementGrants EntitlementGrant[]
 
@@ -1122,6 +1127,40 @@ model PaymentProviderEvent {
   @@index([eventType])
   @@index([processedAt])
   @@map("payment_provider_events")
+}
+
+model PaymentMethod {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  provider          String    @default("stripe") @db.VarChar(20)
+  providerMethodId  String    @unique @map("provider_method_id") @db.VarChar(255)
+  type              String    @db.VarChar(50)
+  last4             String?   @db.VarChar(4)
+  brand             String?   @db.VarChar(50)
+  expMonth          Int?      @map("exp_month")
+  expYear           Int?      @map("exp_year")
+  isDefault         Boolean   @default(false) @map("is_default")
+  status            String    @default("active") @db.VarChar(20)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isDefault])
+  @@index([companyId, status])
+  @@map("payment_methods")
+}
+
+model WebhookEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider      String    @db.VarChar(20)
+  stripeEventId String    @unique @map("stripe_event_id") @db.VarChar(255)
+  eventType     String    @map("event_type") @db.VarChar(100)
+  processedAt   DateTime? @map("processed_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([eventType])
+  @@map("webhook_events")
 }
 
 // endregion

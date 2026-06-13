@@ -29,6 +29,19 @@ export class BillingProcessor {
       case 'invoice.paid':
         handled = await this.handleInvoicePaid(event.id, payload);
         break;
+      case 'invoice.created':
+      case 'invoice.finalized':
+        handled = await this.handleInvoiceCreated(event.id, payload);
+        break;
+      case 'invoice.payment_failed':
+        handled = await this.handleInvoicePaymentFailed(event.id, payload);
+        break;
+      case 'payment_intent.succeeded':
+        handled = this.handlePaymentIntentSucceeded(event.id, payload);
+        break;
+      case 'payment_intent.payment_failed':
+        handled = this.handlePaymentIntentFailed(event.id, payload);
+        break;
       case 'customer.subscription.updated':
         handled = await this.handleSubscriptionUpdated(event.id, payload);
         break;
@@ -94,6 +107,110 @@ export class BillingProcessor {
       },
     });
 
+    return true;
+  }
+
+  private async handleInvoiceCreated(
+    eventId: string,
+    payload: Record<string, unknown>,
+  ): Promise<boolean> {
+    const data = (payload as { data?: { object?: Record<string, unknown> } })
+      .data;
+    const obj = data?.object;
+    const providerInvoiceId = obj?.id as string | undefined;
+    if (!providerInvoiceId) return false;
+
+    const subscriptionId = obj?.subscription as string | undefined;
+    const subscription = subscriptionId
+      ? await this.prisma.subscription.findFirst({
+          where: { providerSubscriptionId: subscriptionId },
+        })
+      : null;
+
+    await this.prisma.invoice.upsert({
+      where: { providerInvoiceId },
+      create: {
+        subscriptionId:
+          subscription?.id ?? '00000000-0000-0000-0000-000000000000',
+        companyId:
+          subscription?.companyId ?? '00000000-0000-0000-0000-000000000000',
+        status: obj?.status === 'paid' ? 'paid' : 'open',
+        amountDue: (obj?.amount_due as number) ?? 0,
+        amountPaid: (obj?.amount_paid as number) ?? 0,
+        currency: (obj?.currency as string) ?? 'usd',
+        periodStart: new Date(((obj?.period_start as number) ?? 0) * 1000),
+        periodEnd: new Date(((obj?.period_end as number) ?? 0) * 1000),
+        providerInvoiceId,
+      },
+      update: {},
+    });
+
+    return true;
+  }
+
+  private async handleInvoicePaymentFailed(
+    eventId: string,
+    payload: Record<string, unknown>,
+  ): Promise<boolean> {
+    const data = (payload as { data?: { object?: Record<string, unknown> } })
+      .data;
+    const obj = data?.object;
+    const providerInvoiceId = obj?.id as string | undefined;
+    if (!providerInvoiceId) return false;
+
+    const attemptNumber = (obj?.attempt_count as number) ?? 1;
+
+    await this.prisma.invoice.update({
+      where: { providerInvoiceId },
+      data: { status: 'past_due' },
+    });
+
+    const subscriptionId = obj?.subscription as string | undefined;
+    const subscription = subscriptionId
+      ? await this.prisma.subscription.findFirst({
+          where: { providerSubscriptionId: subscriptionId },
+        })
+      : null;
+
+    if (subscription) {
+      await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { status: 'past_due' },
+      });
+    }
+
+    this.logger.warn(
+      `Invoice ${providerInvoiceId} payment failed (attempt ${attemptNumber})`,
+    );
+
+    return true;
+  }
+
+  private handlePaymentIntentSucceeded(
+    eventId: string,
+    payload: Record<string, unknown>,
+  ): boolean {
+    const data = (payload as { data?: { object?: Record<string, unknown> } })
+      .data;
+    const obj = data?.object;
+    const paymentIntentId = obj?.id as string | undefined;
+    if (!paymentIntentId) return false;
+
+    this.logger.log(`PaymentIntent ${paymentIntentId} succeeded`);
+    return true;
+  }
+
+  private handlePaymentIntentFailed(
+    eventId: string,
+    payload: Record<string, unknown>,
+  ): boolean {
+    const data = (payload as { data?: { object?: Record<string, unknown> } })
+      .data;
+    const obj = data?.object;
+    const paymentIntentId = obj?.id as string | undefined;
+    if (!paymentIntentId) return false;
+
+    this.logger.warn(`PaymentIntent ${paymentIntentId} failed`);
     return true;
   }
 

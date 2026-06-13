@@ -1,7 +1,7 @@
-export type ProcessRole = 'api' | 'worker' | 'realtime' | 'all';
+export type ProcessRole = "api" | "worker" | "realtime" | "all";
 
 export interface AppConfig {
-  nodeEnv: 'development' | 'test' | 'production';
+  nodeEnv: "development" | "test" | "production";
   port: number;
   corsOrigins: string[];
   bodyJsonLimit: string;
@@ -50,7 +50,7 @@ export interface AppConfig {
   // Cookie Configuration
   cookieSecret: string;
   cookieSecure: boolean;
-  cookieSameSite: 'strict' | 'lax' | 'none';
+  cookieSameSite: "strict" | "lax" | "none";
   // Rate Limiting
   throttleLoginLimit: number;
   throttleLoginTtl: number;
@@ -87,6 +87,11 @@ export interface AppConfig {
   billingProvider: string;
   billingWebhookSecret: string;
   billingDefaultFreePlanSlug: string;
+  // Stripe
+  stripeEnabled: boolean;
+  stripeSecretKey: string;
+  stripeWebhookSecret: string;
+  stripeApiVersion: string;
   // Push Notifications (FCM)
   fcmEnabled: boolean;
   fcmServiceAccountPath: string;

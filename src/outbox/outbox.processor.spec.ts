@@ -90,6 +90,16 @@ describe("OutboxProcessor", () => {
     const mockBillingProcessor = {
       processPaymentProviderEvent: jest.fn().mockResolvedValue(undefined),
     };
+    const mockBillingAdvancedProcessor = {
+      processSubscriptionUpgraded: jest.fn().mockResolvedValue(undefined),
+      processSubscriptionDowngraded: jest.fn().mockResolvedValue(undefined),
+      processSubscriptionStatusChanged: jest.fn().mockResolvedValue(undefined),
+      processInvoiceCreated: jest.fn().mockResolvedValue(undefined),
+      processInvoicePaymentFailed: jest.fn().mockResolvedValue(undefined),
+      processPaymentMethodAdded: jest.fn().mockResolvedValue(undefined),
+      processPaymentMethodRemoved: jest.fn().mockResolvedValue(undefined),
+      processUsageThresholdReached: jest.fn().mockResolvedValue(undefined),
+    };
     const mockSubscriptionProcessor = {
       createFreeSubscription: jest.fn().mockResolvedValue(undefined),
     };
@@ -139,6 +149,7 @@ describe("OutboxProcessor", () => {
       mockPostSearchIndex as any,
       mockProfileCreation as any,
       mockProfileSearchIndex as any,
+      mockBillingAdvancedProcessor as any,
       mockBillingProcessor as any,
       mockSubscriptionProcessor as any,
       mockRecruitingProcessor as any,

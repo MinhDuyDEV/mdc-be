@@ -69,4 +69,45 @@ export class WebhookService {
       return { processed: true, eventId: event.id };
     });
   }
+
+  async processStripeWebhook(event: {
+    type: string;
+    data: { object: unknown };
+    id: string;
+  }): Promise<{ processed: boolean; reason?: string }> {
+    // Layer 2 idempotency via WebhookEvent table
+    const existing = await this.prisma.webhookEvent.findUnique({
+      where: { stripeEventId: event.id },
+    });
+    if (existing?.processedAt) {
+      return { processed: false, reason: 'duplicate' };
+    }
+
+    // Upsert webhook event tracking
+    await this.prisma.webhookEvent.upsert({
+      where: { stripeEventId: event.id },
+      create: {
+        provider: 'stripe',
+        stripeEventId: event.id,
+        eventType: event.type,
+      },
+      update: {},
+    });
+
+    // Route to existing webhook processing pipeline
+    const result = await this.processWebhook('stripe', event.id, event.type, {
+      data: event.data,
+      type: event.type,
+    });
+
+    // Mark as processed
+    if (result.processed) {
+      await this.prisma.webhookEvent.update({
+        where: { stripeEventId: event.id },
+        data: { processedAt: new Date() },
+      });
+    }
+
+    return result;
+  }
 }

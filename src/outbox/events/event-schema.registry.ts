@@ -1,5 +1,5 @@
-import type { Prisma } from '@prisma/client';
-import { z } from 'zod';
+import type { Prisma } from "@prisma/client";
+import { z } from "zod";
 
 const payload = z.object({}).passthrough();
 const stringArray = z.array(z.string());
@@ -336,13 +336,57 @@ export const outboxEventSchemas = {
     ownerId: z.string(),
     sizes: z.array(z.object({ width: z.number(), s3Key: z.string() })),
   }),
+  // Phase E — T4 billing events
+  SubscriptionUpgraded: payload.extend({
+    subscriptionId: z.string(),
+    companyId: z.string(),
+    fromPlanId: z.string(),
+    toPlanId: z.string(),
+  }),
+  SubscriptionDowngraded: payload.extend({
+    subscriptionId: z.string(),
+    companyId: z.string(),
+    fromPlanId: z.string(),
+    toPlanId: z.string(),
+    effectiveAt: z.string(),
+  }),
+  SubscriptionStatusChanged: payload.extend({
+    subscriptionId: z.string(),
+    companyId: z.string(),
+    fromStatus: z.string(),
+    toStatus: z.string(),
+  }),
+  InvoiceCreated: payload.extend({
+    invoiceId: z.string(),
+    companyId: z.string(),
+    amountDue: z.number(),
+  }),
+  InvoicePaymentFailed: payload.extend({
+    invoiceId: z.string(),
+    companyId: z.string(),
+    attemptNumber: z.number(),
+  }),
+  PaymentMethodAdded: payload.extend({
+    paymentMethodId: z.string(),
+    companyId: z.string(),
+    type: z.string(),
+    isDefault: z.boolean(),
+  }),
+  PaymentMethodRemoved: payload.extend({
+    paymentMethodId: z.string(),
+    companyId: z.string(),
+  }),
+  UsageThresholdReached: payload.extend({
+    companyId: z.string(),
+    meterEventName: z.string(),
+    currentValue: z.number(),
+    threshold: z.number(),
+  }),
 } as const;
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;
 
-export function isOutboxEventType(
-  eventType: string,
-): eventType is OutboxEventType {
+export function isOutboxEventType(eventType: string): eventType is OutboxEventType {
   return eventType in outboxEventSchemas;
 }
 
@@ -356,9 +400,7 @@ export function validateOutboxPayload(
 
   const result = outboxEventSchemas[eventType].safeParse(payloadValue);
   if (!result.success) {
-    throw new Error(
-      `Invalid outbox payload for ${eventType}: ${result.error.message}`,
-    );
+    throw new Error(`Invalid outbox payload for ${eventType}: ${result.error.message}`);
   }
 
   return result.data as Prisma.InputJsonValue;
