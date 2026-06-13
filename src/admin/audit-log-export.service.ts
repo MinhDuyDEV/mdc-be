@@ -15,6 +15,12 @@ const CSV_COLUMNS: ReadonlyArray<keyof AuditLogRow> = [
   'createdAt',
 ];
 
+/** Maximum rows per page fetch. Keeps each query bounded. */
+const PAGE_SIZE = 1000;
+
+/** Hard cap on total exported rows. Beyond this we emit a warning header. */
+const MAX_ROWS = 100_000;
+
 export interface AuditLogRow {
   id: string;
   actorUserId: string | null;
@@ -27,10 +33,20 @@ export interface AuditLogRow {
   createdAt: Date;
 }
 
+/** Cursor type for the compound (createdAt, id) cursor used in pagination. */
+interface CursorLike {
+  createdAt: Date;
+  id: string;
+}
+
 interface PrismaLike {
   auditLog: {
     findMany: (args: {
       where: Record<string, unknown>;
+      take: number;
+      orderBy: Record<string, string>[];
+      cursor?: { id: string; createdAt?: Date };
+      skip?: number;
     }) => Promise<AuditLogRow[]>;
     findFirst: (args: {
       where: Record<string, unknown>;
@@ -44,16 +60,24 @@ export class AuditLogExportService {
 
   /**
    * Streams matching audit log rows as CSV. The first line is the header.
-   * The stream is fully self-contained: a downstream consumer can pipe it
-   * directly to an HTTP response.
+   * If the export is truncated by the hard cap, a warning comment is emitted
+   * as the second line.
    */
   exportCsv(query: AuditLogQueryDto): Readable {
     const rows = this.fetchAllRows(query);
     return Readable.from(
       (async function* (): AsyncGenerator<string> {
         yield CSV_COLUMNS.join(',') + '\n';
+        let totalEmitted = 0;
         for await (const row of rows) {
+          if (totalEmitted === 0 && row === null) {
+            // First yielded null is the truncation signal
+            yield '# WARNING: Export truncated at ' + MAX_ROWS + ' rows\n';
+            continue;
+          }
+          if (row === null) break; // truncation signal already handled
           yield CSV_COLUMNS.map((c) => formatCsvValue(row[c])).join(',') + '\n';
+          totalEmitted++;
         }
       })(),
     );
@@ -71,6 +95,15 @@ export class AuditLogExportService {
         let isFirst = true;
         yield '[';
         for await (const row of rows) {
+          if (row === null) {
+            yield isFirst
+              ? ''
+              : ',' +
+                JSON.stringify({
+                  warning: 'Export truncated at ' + MAX_ROWS + ' rows',
+                });
+            break;
+          }
           yield (isFirst ? '' : ',') + JSON.stringify(row);
           isFirst = false;
         }
@@ -88,6 +121,12 @@ export class AuditLogExportService {
     return Readable.from(
       (async function* (): AsyncGenerator<string> {
         for await (const row of rows) {
+          if (row === null) {
+            yield JSON.stringify({
+              warning: 'Export truncated at ' + MAX_ROWS + ' rows',
+            }) + '\n';
+            break;
+          }
           yield JSON.stringify(row) + '\n';
         }
       })(),
@@ -108,20 +147,54 @@ export class AuditLogExportService {
       ...this.buildWhere(query),
       metadata: { path: [key], equals: value },
     };
-    const rows = await this.prisma.auditLog.findMany({ where });
+    const rows = await this.prisma.auditLog.findMany({
+      where,
+      take: PAGE_SIZE + 1,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    });
+    const truncated = rows.slice(0, PAGE_SIZE);
     return {
-      data: rows,
-      meta: { hasNextPage: false },
+      data: truncated,
+      meta: { hasNextPage: rows.length > PAGE_SIZE },
     };
   }
 
+  /**
+   * Generator that yields rows in cursor-based batches of PAGE_SIZE.
+   * Uses a compound (createdAt, id) cursor for efficient pagination.
+   * Yields `null` as the truncation signal when the hard cap (MAX_ROWS)
+   * is reached.
+   */
   private async *fetchAllRows(
     query: AuditLogQueryDto,
-  ): AsyncGenerator<AuditLogRow> {
+  ): AsyncGenerator<AuditLogRow | null> {
     const where = this.buildWhere(query);
-    const rows = await this.prisma.auditLog.findMany({ where });
-    for (const row of rows) {
-      yield row;
+    let cursor: CursorLike | undefined;
+    let totalFetched = 0;
+
+    while (true) {
+      const page = await this.prisma.auditLog.findMany({
+        where,
+        take: PAGE_SIZE,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        ...(cursor
+          ? { cursor: { id: cursor.id, createdAt: cursor.createdAt }, skip: 1 }
+          : {}),
+      });
+
+      if (page.length === 0) break;
+
+      for (const row of page) {
+        if (totalFetched >= MAX_ROWS) {
+          yield null; // truncation signal
+          return;
+        }
+        yield row;
+        totalFetched++;
+      }
+
+      const last = page[page.length - 1];
+      cursor = { createdAt: last.createdAt, id: last.id };
     }
   }
 

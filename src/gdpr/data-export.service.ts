@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { PutObjectCommand } from '@aws-sdk/client-s3';
 import * as archiver from 'archiver';
-import { PassThrough } from 'stream';
+import { PassThrough, Readable } from 'stream';
 
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma/prisma.service';
+import { STORAGE_CLIENT } from '../infra/storage/storage.constants';
+import { Inject } from '@nestjs/common';
+import type { S3Client } from '@aws-sdk/client-s3';
 import { StorageService } from '../infra/storage/storage.service';
 import { OutboxService } from '../outbox/outbox.service';
 
@@ -15,6 +19,7 @@ export class DataExportService {
     private readonly storage: StorageService,
     private readonly outboxService: OutboxService,
     private readonly configService: ConfigService<AppConfig, true>,
+    @Inject(STORAGE_CLIENT) private readonly s3: S3Client,
   ) {}
 
   async exportUserData(
@@ -73,10 +78,7 @@ export class DataExportService {
 
     const json = JSON.stringify(exportData, null, 2);
 
-    // Build ZIP
-    const zip = await this.createZip(json);
-
-    // Upload to S3 with configurable retention
+    // Retention config
     const retentionDays = this.configService.get('gdprExportRetentionDays', {
       infer: true,
     });
@@ -85,9 +87,16 @@ export class DataExportService {
       Date.now() + retentionDays * 24 * 60 * 60 * 1000,
     );
 
-    await this.storage.putObject('gdpr-exports', s3Key, zip, {
-      contentType: 'application/zip',
-    });
+    // Stream ZIP directly to S3 — no full in-memory buffer
+    const zipStream = this.createZipStream(json);
+    await this.s3.send(
+      new PutObjectCommand({
+        Bucket: 'gdpr-exports',
+        Key: s3Key,
+        Body: zipStream,
+        ContentType: 'application/zip',
+      }),
+    );
 
     const downloadUrl = await this.storage.generatePresignedDownloadUrl(
       'gdpr-exports',
@@ -112,20 +121,22 @@ export class DataExportService {
     };
   }
 
-  private async createZip(json: string): Promise<Buffer> {
-    return new Promise<Buffer>((resolve, reject) => {
-      const archive = archiver.create('zip', { zlib: { level: 9 } });
-      const buffers: Buffer[] = [];
-      const passThrough = new PassThrough();
+  /**
+   * Creates a Readable stream that yields a ZIP archive containing data.json.
+   * The archive is streamed directly rather than buffered in memory.
+   */
+  private createZipStream(json: string): Readable {
+    const archive = archiver.create('zip', { zlib: { level: 9 } });
+    const passThrough = new PassThrough();
 
-      archive.append(json, { name: 'data.json' });
-      archive.pipe(passThrough);
+    archive.append(json, { name: 'data.json' });
+    archive.pipe(passThrough);
 
-      passThrough.on('data', (chunk: Buffer) => buffers.push(chunk));
-      passThrough.on('end', () => resolve(Buffer.concat(buffers)));
-      passThrough.on('error', (err: Error) => reject(err));
+    // Forward archiver errors to the stream so PutObjectCommand rejects properly
+    archive.on('error', (err: Error) => passThrough.destroy(err));
 
-      void archive.finalize();
-    });
+    void archive.finalize();
+
+    return passThrough;
   }
 }

@@ -127,13 +127,18 @@ export class BillingProcessor {
         })
       : null;
 
+    if (!subscription) {
+      this.logger.warn(
+        `Invoice ${providerInvoiceId} has no matching subscription (provider ID: ${subscriptionId}) — skipping. Will be re-processed once subscription syncs.`,
+      );
+      return false;
+    }
+
     await this.prisma.invoice.upsert({
       where: { providerInvoiceId },
       create: {
-        subscriptionId:
-          subscription?.id ?? '00000000-0000-0000-0000-000000000000',
-        companyId:
-          subscription?.companyId ?? '00000000-0000-0000-0000-000000000000',
+        subscriptionId: subscription.id,
+        companyId: subscription.companyId,
         status: obj?.status === 'paid' ? 'paid' : 'open',
         amountDue: (obj?.amount_due as number) ?? 0,
         amountPaid: (obj?.amount_paid as number) ?? 0,

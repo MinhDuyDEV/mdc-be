@@ -16,16 +16,25 @@ export interface ThumbnailResult {
 
 interface SharpLike {
   (input: Buffer | string): {
+    limitInputPixels: (pixels: number) => SharpLikeInternal;
     resize: (
       width: number,
       height: number | null,
       options?: Record<string, unknown>,
-    ) => SharpLike & {
-      webp: (options?: Record<string, unknown>) => SharpLike & {
-        toBuffer: (options?: Record<string, unknown>) => Promise<Buffer>;
-      };
-    };
+    ) => SharpLikeInternal;
   };
+}
+
+interface SharpLikeInternal {
+  resize: (
+    width: number,
+    height: number | null,
+    options?: Record<string, unknown>,
+  ) => SharpLikeInternal;
+  webp: (options?: Record<string, unknown>) => SharpLikeInternal & {
+    toBuffer: (options?: Record<string, unknown>) => Promise<Buffer>;
+  };
+  toBuffer: (options?: Record<string, unknown>) => Promise<Buffer>;
 }
 
 export interface ThumbnailableAsset {
@@ -72,6 +81,7 @@ export class ImageProcessingService {
     for (const width of THUMB_WIDTHS) {
       const key = `thumbnails/${asset.id}/${width}w.webp`;
       const webpBuffer = await this.sharpFn(buffer)
+        .limitInputPixels(50_000_000)
         .resize(width, null, { withoutEnlargement: true })
         .webp({ quality: 80 })
         .toBuffer();

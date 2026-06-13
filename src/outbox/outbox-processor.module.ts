@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { EmailModule } from '../email/email.module';
 import { InfraModule } from '../infra';
 import { PushModule } from '../infra/push/push.module';
+import { ObservabilityModule } from '../observability/observability.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SearchModule } from '../search';
 import { OutboxCoreModule } from './outbox-core.module';
@@ -30,6 +31,7 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
 @Module({
   imports: [
     InfraModule,
+    ObservabilityModule,
     OutboxCoreModule,
     RealtimeModule,
     SearchModule,

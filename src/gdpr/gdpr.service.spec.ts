@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
+import { PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
@@ -31,6 +32,14 @@ describe('GdprService', () => {
   let messagingService: { anonymizeForUser: jest.Mock };
   let analyticsService: { anonymizeForUser: jest.Mock };
   let searchIndex: { deleteByUser: jest.Mock };
+
+  const mockPinoLogger = {
+    info: jest.fn(),
+    error: jest.fn(),
+    warn: jest.fn(),
+    debug: jest.fn(),
+    setContext: jest.fn(),
+  };
 
   const mockRequest = {
     id: 'req-1',
@@ -122,6 +131,7 @@ describe('GdprService', () => {
           useValue: deletionRequestService,
         },
         { provide: DataExportService, useValue: {} },
+        { provide: PinoLogger, useValue: mockPinoLogger },
       ],
     }).compile();
 

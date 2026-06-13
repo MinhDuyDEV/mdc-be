@@ -120,12 +120,23 @@ export class BillingController {
     @Param('companyId', ParseUUIDPipe) companyId: string,
     @Body() dto: ChangePlanDto,
   ) {
-    const idempotencyKey = `${companyId}:${dto.planId}:${dto.atPeriodEnd ?? true}`;
-    if (dto.atPeriodEnd === false) {
+    // Resolve proration behavior: explicit value wins, then legacy atPeriodEnd
+    const prorationBehavior =
+      dto.prorationBehavior ??
+      (dto.atPeriodEnd === false ? 'always_invoice' : 'none');
+    const idempotencyKey = `${companyId}:${dto.planId}:${prorationBehavior}`;
+
+    // always_invoice / create_prorations → upgrade (immediate charge)
+    // none → downgrade (scheduled at period end)
+    if (
+      prorationBehavior === 'always_invoice' ||
+      prorationBehavior === 'create_prorations'
+    ) {
       return this.stripeProrationService.upgrade(
         companyId,
         dto.planId,
         idempotencyKey,
+        prorationBehavior,
       );
     }
     return this.stripeProrationService.downgrade(

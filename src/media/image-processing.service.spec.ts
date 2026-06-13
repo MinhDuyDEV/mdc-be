@@ -5,6 +5,7 @@ import type { PrismaService } from '../infra/prisma/prisma.service';
 describe('ImageProcessingService', () => {
   let service: ImageProcessingService;
   let sharpMock: {
+    limitInputPixels: jest.Mock;
     resize: jest.Mock;
     webp: jest.Mock;
     toBuffer: jest.Mock;
@@ -15,6 +16,7 @@ describe('ImageProcessingService', () => {
 
   beforeEach(() => {
     sharpMock = {
+      limitInputPixels: jest.fn().mockReturnThis(),
       resize: jest.fn().mockReturnThis(),
       webp: jest.fn().mockReturnThis(),
       toBuffer: jest.fn().mockResolvedValue(Buffer.from('webp-bytes')),

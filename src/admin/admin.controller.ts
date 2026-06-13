@@ -12,6 +12,7 @@ import {
   StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
@@ -108,6 +109,7 @@ export class AdminController {
 
   @Get('audit-logs/export/csv')
   @Permissions('MANAGE_USERS')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @Header('Content-Type', 'text/csv')
   @Header('Content-Disposition', 'attachment; filename="audit-logs.csv"')
   exportAuditLogsCsv(@Query() query: AuditLogQueryDto): StreamableFile {
@@ -117,6 +119,7 @@ export class AdminController {
 
   @Get('audit-logs/export/json')
   @Permissions('MANAGE_USERS')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @Header('Content-Type', 'application/json')
   exportAuditLogsJson(@Query() query: AuditLogQueryDto): StreamableFile {
     const stream = this.auditLogExport.exportJson(query);
@@ -125,6 +128,7 @@ export class AdminController {
 
   @Get('audit-logs/export/ndjson')
   @Permissions('MANAGE_USERS')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
   @Header('Content-Type', 'application/x-ndjson')
   exportAuditLogsNdjson(@Query() query: AuditLogQueryDto): StreamableFile {
     const stream = this.auditLogExport.exportNdjson(query);

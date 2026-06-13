@@ -195,14 +195,36 @@ export class StripeService implements StripePort, OnModuleInit {
     value: number;
     timestamp?: number;
   }): Promise<{ id: string }> {
-    const record = await this.stripe.subscriptionItems.createUsageRecord(
-      input.meterEventName,
-      {
-        quantity: input.value,
-        timestamp: input.timestamp ?? Math.floor(Date.now() / 1000),
-        action: 'increment',
+    // Use the Stripe Meter Events API (v2 billing). The port's
+    // meterEventName + customerId fields map directly to
+    // event_name + stripe_customer_id in the payload.
+    // NOTE: caller MUST pass a Stripe customer ID (cus_xxx), not a
+    // DB company UUID, as customerId.
+    // The Stripe Meter Events API is not yet surfaced in the public
+    // TypeScript types for the SDK we depend on, so we narrow the
+    // surface to just the method we need.
+    type MeterEventCreateParams = {
+      event_name: string;
+      payload: Record<string, string>;
+    };
+    type MeterEventRecord = { id: string };
+    const meterEvents = (
+      this.stripe as unknown as {
+        meterEvents: {
+          create: (params: MeterEventCreateParams) => Promise<MeterEventRecord>;
+        };
+      }
+    ).meterEvents;
+    const record = await meterEvents.create({
+      event_name: input.meterEventName,
+      payload: {
+        value: String(input.value),
+        stripe_customer_id: input.customerId,
+        // timestamp is not needed by the Meter Events API — Stripe
+        // records the event time server-side. The input field is
+        // retained in the port for forward compatibility.
       },
-    );
+    });
     return { id: record.id };
   }
 

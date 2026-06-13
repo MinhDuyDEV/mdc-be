@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import { PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma';
+import { MetricsService } from '../observability/metrics.service';
 import { NotificationEventDto } from '../realtime/dto/notification-event.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { DeadLetterService } from './dead-letter.service';
@@ -95,6 +96,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     @Inject(PushNotificationProcessor)
     private readonly pushNotificationProcessor: PushNotificationProcessor,
     @Inject(OutboxMetrics) private readonly metrics: OutboxMetrics,
+    @Inject(MetricsService)
+    private readonly metricsService: MetricsService,
     @Inject(RealtimeGateway)
     private readonly realtimeGateway: RealtimeGateway,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
@@ -115,6 +118,26 @@ export class OutboxProcessor implements OnApplicationShutdown {
           where: { status: 'PENDING' },
         }),
       (err) => this.logger.error('Outbox pending metric failed: %s', err),
+    );
+    this.metrics.registerPendingByEventTypeGauge(
+      async () => {
+        const rows: Array<{ event_type: string; count: bigint }> = await this
+          .prisma.$queryRaw`
+            SELECT event_type, COUNT(*)::bigint as count
+            FROM outbox_events
+            WHERE status = 'PENDING'::"OutboxEventStatus"
+            GROUP BY event_type
+          `;
+        return rows.map((r) => ({
+          eventType: r.event_type,
+          count: Number(r.count),
+        }));
+      },
+      (err) =>
+        this.logger.error(
+          'Outbox pending-by-event-type metric failed: %s',
+          err,
+        ),
     );
   }
 
@@ -246,6 +269,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
       dispatchRecorded = true;
       await this.markProcessed(event.id);
       this.metrics.recordProcessed(event.eventType);
+      this.metricsService.recordOutboxEvent(event.eventType, 'processed');
       this.logger.debug(
         'Event %s (%s) marked as processed',
         event.id,
@@ -262,6 +286,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
       }
       this.metrics.recordFailed(event.eventType, attempts);
+      this.metricsService.recordOutboxEvent(event.eventType, 'failed');
 
       if (attempts >= this.maxRetries) {
         await this.deadLetter.moveToDeadLetter(
@@ -273,12 +298,18 @@ export class OutboxProcessor implements OnApplicationShutdown {
           error,
         );
         this.metrics.recordDeadLettered(event.eventType);
+        this.metricsService.recordOutboxEvent(event.eventType, 'dead_lettered');
         this.logger.warn(
           'Event %s moved to dead letter after %d attempts',
           event.id,
           attempts,
         );
       } else {
+        // Record retry latency: wall-clock time since dispatch started
+        this.metrics.recordRetryLatency(
+          event.eventType,
+          (Date.now() - dispatchStartedAt) / 1000,
+        );
         await this.requeueWithBackoff(event.id, attempts);
         this.logger.debug(
           'Event %s requeued with backoff (attempt %d/%d)',
@@ -639,7 +670,12 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       }
-      // Phase E — T4 billing events (handlers are sync logging-only)
+      // Phase E — T4 billing events. The handlers on
+      // BillingAdvancedProcessor are intentionally fire-and-forget:
+      // they are sync logging stubs today and do not affect the
+      // transactional outcome of event processing. If/when they
+      // become async (e.g. dunning emails), wrap the calls in
+      // `void this.x.y(...).catch(err => this.logger.error(err))`.
       case 'SubscriptionUpgraded':
         this.billingAdvancedProcessor.processSubscriptionUpgraded(
           payload as {
@@ -761,7 +797,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'OfferResponded':
-        void this.recruitingProcessor.processOfferResponded(
+        await this.recruitingProcessor.processOfferResponded(
           payload as {
             offerId: string;
             applicationId: string;

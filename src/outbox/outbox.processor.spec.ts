@@ -130,8 +130,19 @@ describe('OutboxProcessor', () => {
       recordFailed: jest.fn(),
       recordDeadLettered: jest.fn(),
       recordDispatchDuration: jest.fn(),
+      recordRetryLatency: jest.fn(),
       registerPendingGauge: jest.fn(),
       unregisterPendingGauge: jest.fn(),
+      registerPendingByEventTypeGauge: jest.fn(),
+      unregisterPendingByEventTypeGauge: jest.fn(),
+    };
+    const mockMetricsService = {
+      recordHttpRequest: jest.fn(),
+      recordOutboxEvent: jest.fn(),
+      recordSubscriptionChange: jest.fn(),
+      recordMediaUpload: jest.fn(),
+      recordDsrRequest: jest.fn(),
+      recordAuditLogEntry: jest.fn(),
     };
     const mockLogger = {
       setContext: jest.fn(),
@@ -164,6 +175,7 @@ describe('OutboxProcessor', () => {
       mockExperimentTrackingProcessor as any,
       mockPushNotificationProcessor as any,
       mockMetrics as any,
+      mockMetricsService as any,
       mockRealtimeGateway as any,
       mockLogger as any,
     );

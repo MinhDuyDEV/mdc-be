@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import * as crypto from 'node:crypto';
+import { PinoLogger } from 'nestjs-pino';
 
 import type { Prisma } from '@prisma/client';
 import type { AppConfig } from '../infra/config';
@@ -109,7 +110,10 @@ export class GdprService {
     private readonly searchIndex: SearchIndexService,
     private readonly deletionRequestService: DeletionRequestService,
     private readonly dataExportService: DataExportService,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(GdprService.name);
+  }
 
   // Self-service: user requests their own deletion
   async requestOwnDeletion(userId: string, reason?: string) {
@@ -239,6 +243,53 @@ export class GdprService {
           data: { deletedAt: anonymizedAt },
         });
 
+        // GDPR cascade: additional child tables not covered by service modules.
+        // Each operation is best-effort — if the model doesn't have the expected
+        // field we log a warning and skip rather than throw.
+        try {
+          await tx.application.updateMany({
+            where: { userId },
+            data: { coverLetter: null, deletedAt: anonymizedAt },
+          });
+        } catch {
+          this.logger.warn(
+            'Skipping application cascade — model/field mismatch',
+          );
+        }
+        try {
+          await tx.notification.updateMany({
+            where: { userId },
+            data: { deletedAt: anonymizedAt },
+          });
+        } catch {
+          this.logger.warn(
+            'Skipping notification cascade — model/field mismatch',
+          );
+        }
+        // EmailDelivery has no userId field in the schema — skip.
+        this.logger.warn(
+          'Skipping emailDelivery cascade — model has no userId field',
+        );
+        try {
+          await tx.emailTrackingEvent.updateMany({
+            where: { userId },
+            data: { ipAddress: null, userAgent: null },
+          });
+        } catch {
+          this.logger.warn(
+            'Skipping emailTrackingEvent cascade — model/field mismatch',
+          );
+        }
+        try {
+          await tx.userDevice.deleteMany({
+            where: { userId },
+          });
+        } catch {
+          this.logger.warn(
+            'Skipping userDevice cascade — model/field mismatch',
+          );
+        }
+
         // Anonymize connections/follows/blocks
         await this.connectionsService.anonymizeForUser(tx, userId);
 
@@ -310,17 +361,14 @@ export class GdprService {
     } catch (err) {
       // Auth revocation is best-effort; the user is already anonymized.
 
-      console.error(
-        `[gdpr] revokeAllUserSessions failed for user ${userId}:`,
-        err,
-      );
+      this.logger.error({ userId, err }, 'revokeAllUserSessions failed');
     }
     try {
       await this.realtimeGateway.disconnectUser(userId);
     } catch (err) {
-      console.error(
-        `[gdpr] realtimeGateway.disconnectUser failed for user ${userId}:`,
-        err,
+      this.logger.error(
+        { userId, err },
+        'realtimeGateway.disconnectUser failed',
       );
     }
 

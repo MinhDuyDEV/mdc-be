@@ -14,10 +14,19 @@ interface AuditLogRow {
   createdAt: Date;
 }
 
+/**
+ * Creates a Prisma mock where findMany returns the given rows on the
+ * first call and empty on subsequent calls. This simulates cursor-based
+ * pagination reaching the end of the dataset after the initial fetch.
+ */
 function buildPrisma(rows: AuditLogRow[]): {
   auditLog: { findMany: jest.Mock; findFirst: jest.Mock };
 } {
-  const findMany = jest.fn().mockImplementation(async () => rows);
+  let calls = 0;
+  const findMany = jest.fn().mockImplementation(async () => {
+    calls++;
+    return calls === 1 ? rows : [];
+  });
   const findFirst = jest.fn().mockImplementation(async () => rows[0] ?? null);
   return { auditLog: { findMany, findFirst } };
 }

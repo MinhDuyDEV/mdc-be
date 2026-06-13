@@ -4,6 +4,7 @@ import {
   HeadBucketCommand,
   HeadObjectCommand,
   PutObjectCommand,
+  PutObjectTaggingCommand,
   type S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
@@ -124,7 +125,11 @@ export class StorageService implements OnApplicationShutdown {
     bucket: string,
     key: string,
     body: Buffer,
-    options: { contentType?: string; metadata?: Record<string, string> } = {},
+    options: {
+      contentType?: string;
+      metadata?: Record<string, string>;
+      tagging?: string;
+    } = {},
   ): Promise<void> {
     const command = new PutObjectCommand({
       Bucket: bucket,
@@ -132,6 +137,25 @@ export class StorageService implements OnApplicationShutdown {
       Body: body,
       ...(options.contentType ? { ContentType: options.contentType } : {}),
       ...(options.metadata ? { Metadata: options.metadata } : {}),
+      ...(options.tagging ? { Tagging: options.tagging } : {}),
+    });
+    await this.s3.send(command);
+  }
+
+  /**
+   * Sets S3 object tags on an already-uploaded object.
+   * Tags are a URL-query-string formatted set of key=value pairs,
+   * e.g. "scan-status=clean&scanned-by=pompelmi".
+   */
+  async setObjectTagging(
+    bucket: string,
+    key: string,
+    tagging: string,
+  ): Promise<void> {
+    const command = new PutObjectTaggingCommand({
+      Bucket: bucket,
+      Key: key,
+      Tagging: { TagSet: parseTagging(tagging) },
     });
     await this.s3.send(command);
   }
@@ -147,4 +171,20 @@ async function streamToBuffer(stream: NodeJS.ReadableStream): Promise<Buffer> {
     chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
   }
   return Buffer.concat(chunks);
+}
+
+/**
+ * Parses a URL-query-string formatted tagging string (e.g.,
+ * "scan-status=clean&scanned-by=pompelmi") into the array of
+ * `{ Key, Value }` objects expected by the S3 Tagging API.
+ */
+function parseTagging(tagging: string): Array<{ Key: string; Value: string }> {
+  return tagging.split('&').map((pair) => {
+    const eq = pair.indexOf('=');
+    if (eq === -1) return { Key: pair, Value: '' };
+    return {
+      Key: decodeURIComponent(pair.slice(0, eq)),
+      Value: decodeURIComponent(pair.slice(eq + 1)),
+    };
+  });
 }

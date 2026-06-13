@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { PinoLogger } from 'nestjs-pino';
 
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma/prisma.service';
@@ -26,7 +27,10 @@ export class GdprGraceExpiryProcessor {
     private readonly leaderLock: LeaderLockService,
     private readonly gdprService: GdprService,
     private readonly deletionRequestService: DeletionRequestService,
-  ) {}
+    private readonly logger: PinoLogger,
+  ) {
+    this.logger.setContext(GdprGraceExpiryProcessor.name);
+  }
 
   @Cron(CronExpression.EVERY_5_MINUTES, {
     name: 'gdpr-grace-expiry',
@@ -79,10 +83,7 @@ export class GdprGraceExpiryProcessor {
           /* swallow */
         });
 
-      console.error(
-        `[gdpr-grace-expiry] anonymizeUser failed for request ${requestId}:`,
-        err,
-      );
+      this.logger.error({ requestId, err }, 'anonymizeUser failed for request');
     }
   }
 }
