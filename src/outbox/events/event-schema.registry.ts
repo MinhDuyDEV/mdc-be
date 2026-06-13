@@ -411,6 +411,12 @@ export const outboxEventSchemas = {
     anonymizedAt: z.string(),
     anonymizedFields: z.array(z.string()),
   }),
+  DeletionSlaBreached: payload.extend({
+    requestId: z.string(),
+    userId: z.string(),
+    dueBy: z.string(),
+    status: z.string(),
+  }),
 } as const;
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;

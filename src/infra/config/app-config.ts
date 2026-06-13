@@ -114,4 +114,5 @@ export interface AppConfig {
   gdprExportRetentionDays: number;
   gdprGracePeriodDays: number;
   gdprSlaDays: number;
+  gdprGraceExpiryEnabled: boolean;
 }

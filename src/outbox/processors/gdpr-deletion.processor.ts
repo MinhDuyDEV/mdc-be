@@ -1,13 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { AnalyticsService } from '../../analytics/analytics.service';
-import { GdprService } from '../../gdpr/gdpr.service';
 import { RealtimeGateway } from '../../realtime/realtime.gateway';
 import { SearchIndexService } from '../../search/search-index.service';
 
+/**
+ * Async cascade handler for `UserDataDeleted` events. Performs the
+ * post-anonymization side effects that are not safe to run inside the
+ * primary GDPR transaction (external services, search index, analytics).
+ *
+ * Note: realtime disconnect and session revocation are also attempted
+ * inside `anonymizeUser` (post-commit) for defense in depth; this processor
+ * is the durable async path that survives a worker crash.
+ */
 @Injectable()
 export class GdprDeletionProcessor {
   constructor(
-    private readonly gdprService: GdprService,
     private readonly realtimeGateway: RealtimeGateway,
     private readonly searchIndex: SearchIndexService,
     private readonly analyticsService: AnalyticsService,
@@ -20,11 +27,10 @@ export class GdprDeletionProcessor {
     reason?: string;
     deletedAt: string;
   }): Promise<void> {
-    // Disconnect realtime sockets
+    // Order matters: disconnect realtime first (so the user doesn't see
+    // further events), then drop from search index, then anonymize analytics.
     await this.realtimeGateway.disconnectUser(payload.userId);
-    // Delete from search index
     await this.searchIndex.deleteByUser(payload.userId);
-    // Anonymize analytics events
     await this.analyticsService.anonymizeForUser(payload.userId);
   }
 }

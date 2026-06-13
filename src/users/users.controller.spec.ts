@@ -1,4 +1,7 @@
+import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { AuthGuard } from '../auth/auth.guard';
 import { GdprService } from '../gdpr/gdpr.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { UsersController } from './users.controller';
@@ -38,6 +41,12 @@ describe('UsersController', () => {
             }),
           },
         },
+        {
+          provide: AuthGuard,
+          useValue: { canActivate: jest.fn().mockReturnValue(true) },
+        },
+        { provide: JwtService, useValue: {} },
+        { provide: Reflector, useValue: {} },
       ],
     }).compile();
 

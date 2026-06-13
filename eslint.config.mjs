@@ -76,7 +76,7 @@ const DOMAIN_IMPORT_ALLOWLIST = {
   recommendations: ["auth"],
   recruiting: ["billing", "connections", "outbox"],
   search: ["auth"],
-  users: ["gdpr", "profiles"],
+  users: ["auth", "gdpr", "profiles"],
 };
 
 function restrictedDomainImportPatterns(domain, extraAllowedDomains) {

@@ -11,6 +11,7 @@ import { SearchModule } from '../search';
 import { DataExportService } from './data-export.service';
 import { DeletionRequestService } from './deletion-request.service';
 import { GdprController } from './gdpr.controller';
+import { GdprGraceExpiryProcessor } from './gdpr-grace-expiry.processor';
 import { GdprService } from './gdpr.service';
 import { GdprSlaMonitorService } from './gdpr-sla-monitor.service';
 
@@ -32,6 +33,7 @@ import { GdprSlaMonitorService } from './gdpr-sla-monitor.service';
     DeletionRequestService,
     DataExportService,
     GdprSlaMonitorService,
+    GdprGraceExpiryProcessor,
   ],
   exports: [GdprService, DeletionRequestService],
 })

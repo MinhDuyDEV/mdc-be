@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { DeletionRequestService } from './deletion-request.service';
@@ -40,6 +41,16 @@ describe('DeletionRequestService', () => {
       providers: [
         DeletionRequestService,
         { provide: PrismaService, useValue: prisma },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: jest
+              .fn()
+              .mockImplementation((key: string) =>
+                key === 'gdprSlaDays' ? 30 : 7,
+              ),
+          },
+        },
       ],
     }).compile();
 

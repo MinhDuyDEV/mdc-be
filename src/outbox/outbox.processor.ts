@@ -814,6 +814,20 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
+      // Phase E — T1 GDPR completion events (no-op for now; reserved for
+      // future email-notification / S3-cleanup / cache-invalidation handlers).
+      case 'UserDataAnonymized':
+      case 'UserDataExported':
+        this.logger.debug(
+          `GDPR event ${event.eventType} (id=${event.id}) acknowledged; no async handler registered.`,
+        );
+        return;
+      // Phase E — T1 GDPR SLA breach alerting
+      case 'DeletionSlaBreached':
+        this.logger.warn(
+          `DeletionSlaBreached (id=${event.id}) — see alert pipeline.`,
+        );
+        return;
       default:
         // No handler registered yet — treat as no-op (will be marked processed).
         this.logger.debug(

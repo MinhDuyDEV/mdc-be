@@ -396,6 +396,7 @@ export function validateEnv(env: RawEnv): AppConfig {
       7,
     ),
     gdprSlaDays: parseOptionalPositiveInteger(env, 'GDPR_SLA_DAYS', 30),
+    gdprGraceExpiryEnabled: env['GDPR_GRACE_EXPIRY_ENABLED'] === 'true',
     // Email tracking (CNIL)
     emailTrackingBaseUrl:
       parseOptionalString(env, 'EMAIL_TRACKING_BASE_URL') ||

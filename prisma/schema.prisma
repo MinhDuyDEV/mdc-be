@@ -2207,38 +2207,24 @@ enum DeletionRequestStatus {
   FAILED
 }
 
-enum DeletionOperation {
-  SEARCH_INDEX_DELETE
-  ANALYTICS_ANONYMIZE
-  MEDIA_S3_CLEANUP
-  SESSION_REVOKE
-  REALTIME_DISCONNECT
-}
-
-enum DeletionOutboxStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  DEAD_LETTERED
-}
-
 model DeletionRequest {
-  id              String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId          String                @map("user_id") @db.Uuid
-  requestedBy     String                @map("requested_by") @db.Uuid
-  reason          String?               @db.Text
-  status          DeletionRequestStatus @default(PENDING_ERASURE)
-  scheduledFor    DateTime              @map("scheduled_for") @db.Timestamptz(3)
-  dueBy           DateTime              @map("due_by") @db.Timestamptz(3)
-  completedAt     DateTime?             @map("completed_at") @db.Timestamptz(3)
-  cancelledAt     DateTime?             @map("cancelled_at") @db.Timestamptz(3)
-  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String                @map("user_id") @db.Uuid
+  requestedBy  String                @map("requested_by") @db.Uuid
+  reason       String?               @db.Text
+  status       DeletionRequestStatus @default(PENDING_ERASURE)
+  scheduledFor DateTime              @map("scheduled_for") @db.Timestamptz(3)
+  dueBy        DateTime              @map("due_by") @db.Timestamptz(3)
+  completedAt  DateTime?             @map("completed_at") @db.Timestamptz(3)
+  cancelledAt  DateTime?             @map("cancelled_at") @db.Timestamptz(3)
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  audit         DeletionAudit[]
-  outboxEntries DeletionOutbox[]
+  // CASCADE on userId is intentional: when a user is hard-deleted (e.g. GDPR purge
+  // beyond anonymization), the request row is removed. Audits (DeletionAudit) are
+  // RESTRICTED to prevent silent loss of the compliance trail.
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audit DeletionAudit[]
 
   @@index([userId, status])
   @@index([status, dueBy])
@@ -2247,40 +2233,24 @@ model DeletionRequest {
 }
 
 model DeletionAudit {
-  id              String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  requestId       String   @map("request_id") @db.Uuid
-  userId          String   @map("user_id") @db.Uuid
-  action          String   @db.VarChar(50)
-  metadata        Json?    @db.JsonB
-  previousHash    String?  @map("previous_hash") @db.VarChar(64)
-  entryHash       String   @map("entry_hash") @db.VarChar(64)
-  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId    String   @map("request_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  action       String   @db.VarChar(50)
+  metadata     Json?    @db.JsonB
+  sequence     Int
+  previousHash String?  @map("previous_hash") @db.VarChar(64)
+  entryHash    String   @unique @map("entry_hash") @db.VarChar(64)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
 
-  request DeletionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  // RESTRICT prevents accidental loss of compliance trail. If a DeletionRequest
+  // must be removed, application code must explicitly delete audits first.
+  // No FK on userId by design: audits must outlive the user.
+  request DeletionRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
 
   @@index([requestId, createdAt])
   @@index([userId])
   @@map("deletion_audits")
-}
-
-model DeletionOutbox {
-  id              String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  requestId       String              @map("request_id") @db.Uuid
-  operation       DeletionOperation
-  payload         Json                @db.JsonB
-  status          DeletionOutboxStatus @default(PENDING)
-  attempts        Int                 @default(0)
-  lastError       String?             @map("last_error") @db.Text
-  availableAt     DateTime            @default(now()) @map("available_at") @db.Timestamptz(3)
-  processedAt     DateTime?           @map("processed_at") @db.Timestamptz(3)
-  createdAt       DateTime            @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt       DateTime            @updatedAt @map("updated_at") @db.Timestamptz(3)
-
-  request DeletionRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
-
-  @@index([status, availableAt])
-  @@index([requestId])
-  @@map("deletion_outbox")
 }
 
 // endregion

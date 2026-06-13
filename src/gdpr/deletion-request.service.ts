@@ -5,7 +5,9 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 
+import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 
 export type DeletionRequestStatus =
@@ -17,7 +19,10 @@ export type DeletionRequestStatus =
 
 @Injectable()
 export class DeletionRequestService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly config: ConfigService<AppConfig, true>,
+  ) {}
 
   // FSM: PENDING_ERASURE -> IN_PROGRESS -> COMPLETED | CANCELLED | FAILED
   async createDeletionRequest(
@@ -40,8 +45,10 @@ export class DeletionRequestService {
       );
     }
 
-    const gracePeriodDays = 7; // configurable via env
-    const slaDays = 30;
+    const gracePeriodDays = this.config.get('gdprGracePeriodDays', {
+      infer: true,
+    });
+    const slaDays = this.config.get('gdprSlaDays', { infer: true });
     const now = new Date();
     const scheduledFor = new Date(
       now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000,
@@ -109,13 +116,32 @@ export class DeletionRequestService {
     return this.prisma.deletionRequest.findUnique({ where: { id } });
   }
 
+  /**
+   * Requests whose grace period has expired and which still need anonymization.
+   * Used by gdpr-grace-expiry.processor to drive the PENDING_ERASURE → IN_PROGRESS
+   * transition. Backed by the partial index `deletion_requests_active_due_by_idx`.
+   */
+  async findDueForAnonymization(limit = 100) {
+    return this.prisma.deletionRequest.findMany({
+      where: {
+        status: 'PENDING_ERASURE',
+        scheduledFor: { lte: new Date() },
+      },
+      take: limit,
+      orderBy: { scheduledFor: 'asc' },
+    });
+  }
+
+  /**
+   * Requests whose 30-day SLA deadline has passed and which are not yet
+   * completed/cancelled. Backed by the partial index
+   * `deletion_requests_active_due_by_idx`.
+   */
   async findOverdueRequests() {
     return this.prisma.deletionRequest.findMany({
       where: {
         dueBy: { lt: new Date() },
-        status: {
-          notIn: ['COMPLETED', 'CANCELLED'],
-        },
+        status: { in: ['PENDING_ERASURE', 'IN_PROGRESS', 'FAILED'] },
       },
     });
   }

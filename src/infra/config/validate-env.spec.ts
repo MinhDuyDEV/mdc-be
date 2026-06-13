@@ -145,6 +145,7 @@ describe('validateEnv', () => {
       gdprExportRetentionDays: 7,
       gdprGracePeriodDays: 7,
       gdprSlaDays: 30,
+      gdprGraceExpiryEnabled: false,
     });
   });
 
