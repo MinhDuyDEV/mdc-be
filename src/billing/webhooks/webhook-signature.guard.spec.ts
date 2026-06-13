@@ -36,7 +36,17 @@ describe('WebhookSignatureGuard', () => {
     webhookService = {
       verifySignature: jest.fn().mockReturnValue(true),
     };
-    guard = new WebhookSignatureGuard(webhookService as WebhookService);
+    // The legacy HMAC path exercised by these tests does not call
+    // constructWebhookEvent or read any config value, so minimal stubs suffice.
+    const stripePort = { constructWebhookEvent: jest.fn() };
+    const configService = { get: jest.fn() };
+    guard = new WebhookSignatureGuard(
+      webhookService as WebhookService,
+
+      stripePort as any,
+
+      configService as any,
+    );
   });
 
   it('verifies signatures using buffer rawBody bytes', () => {

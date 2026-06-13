@@ -1,18 +1,18 @@
-import { Injectable } from "@nestjs/common";
-import { Readable } from "node:stream";
-import type { PrismaService } from "../infra/prisma/prisma.service";
-import type { AuditLogQueryDto } from "./dto/audit-log-query.dto";
+import { Injectable } from '@nestjs/common';
+import { Readable } from 'node:stream';
+import type { PrismaService } from '../infra/prisma/prisma.service';
+import type { AuditLogQueryDto } from './dto/audit-log-query.dto';
 
 const CSV_COLUMNS: ReadonlyArray<keyof AuditLogRow> = [
-  "id",
-  "actorUserId",
-  "action",
-  "entityType",
-  "entityId",
-  "ip",
-  "userAgent",
-  "metadata",
-  "createdAt",
+  'id',
+  'actorUserId',
+  'action',
+  'entityType',
+  'entityId',
+  'ip',
+  'userAgent',
+  'metadata',
+  'createdAt',
 ];
 
 export interface AuditLogRow {
@@ -29,8 +29,12 @@ export interface AuditLogRow {
 
 interface PrismaLike {
   auditLog: {
-    findMany: (args: { where: Record<string, unknown> }) => Promise<AuditLogRow[]>;
-    findFirst: (args: { where: Record<string, unknown> }) => Promise<AuditLogRow | null>;
+    findMany: (args: {
+      where: Record<string, unknown>;
+    }) => Promise<AuditLogRow[]>;
+    findFirst: (args: {
+      where: Record<string, unknown>;
+    }) => Promise<AuditLogRow | null>;
   };
 }
 
@@ -47,9 +51,9 @@ export class AuditLogExportService {
     const rows = this.fetchAllRows(query);
     return Readable.from(
       (async function* (): AsyncGenerator<string> {
-        yield CSV_COLUMNS.join(",") + "\n";
+        yield CSV_COLUMNS.join(',') + '\n';
         for await (const row of rows) {
-          yield CSV_COLUMNS.map((c) => formatCsvValue(row[c])).join(",") + "\n";
+          yield CSV_COLUMNS.map((c) => formatCsvValue(row[c])).join(',') + '\n';
         }
       })(),
     );
@@ -65,12 +69,12 @@ export class AuditLogExportService {
     return Readable.from(
       (async function* (): AsyncGenerator<string> {
         let isFirst = true;
-        yield "[";
+        yield '[';
         for await (const row of rows) {
-          yield (isFirst ? "" : ",") + JSON.stringify(row);
+          yield (isFirst ? '' : ',') + JSON.stringify(row);
           isFirst = false;
         }
-        yield "]";
+        yield ']';
       })(),
     );
   }
@@ -84,7 +88,7 @@ export class AuditLogExportService {
     return Readable.from(
       (async function* (): AsyncGenerator<string> {
         for await (const row of rows) {
-          yield JSON.stringify(row) + "\n";
+          yield JSON.stringify(row) + '\n';
         }
       })(),
     );
@@ -111,7 +115,9 @@ export class AuditLogExportService {
     };
   }
 
-  private async *fetchAllRows(query: AuditLogQueryDto): AsyncGenerator<AuditLogRow> {
+  private async *fetchAllRows(
+    query: AuditLogQueryDto,
+  ): AsyncGenerator<AuditLogRow> {
     const where = this.buildWhere(query);
     const rows = await this.prisma.auditLog.findMany({ where });
     for (const row of rows) {
@@ -131,24 +137,24 @@ export class AuditLogExportService {
 
 function formatCsvValue(value: unknown): string {
   if (value === null || value === undefined) {
-    return "";
+    return '';
   }
   let text: string;
   if (value instanceof Date) {
     text = value.toISOString();
-  } else if (typeof value === "object") {
+  } else if (typeof value === 'object') {
     text = JSON.stringify(value);
-  } else if (typeof value === "string") {
+  } else if (typeof value === 'string') {
     text = value;
-  } else if (typeof value === "number" || typeof value === "boolean") {
+  } else if (typeof value === 'number' || typeof value === 'boolean') {
     text = String(value);
   } else {
     // Unreachable for the audit log columns (bigint/symbol are not used);
     // return an empty cell rather than rely on Object.prototype
     // stringification.
-    text = "";
+    text = '';
   }
-  if (text.includes(",") || text.includes('"') || text.includes("\n")) {
+  if (text.includes(',') || text.includes('"') || text.includes('\n')) {
     return `"${text.replace(/"/g, '""')}"`;
   }
   return text;

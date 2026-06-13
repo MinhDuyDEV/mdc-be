@@ -17,7 +17,7 @@ import { GdprService } from './gdpr.service';
 
 describe('GdprService', () => {
   let service: GdprService;
-  let prisma: Record<string, Record<string, jest.Mock>>;
+  let prisma: Record<string, any>;
   let deletionRequestService: {
     createDeletionRequest: jest.Mock;
     cancelRequest: jest.Mock;

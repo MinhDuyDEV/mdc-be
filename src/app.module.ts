@@ -1,49 +1,49 @@
-import { ThrottlerStorageRedisService } from "@nest-lab/throttler-storage-redis";
-import { Module } from "@nestjs/common";
-import { ConfigService } from "@nestjs/config";
-import { ScheduleModule } from "@nestjs/schedule";
-import { ThrottlerModule } from "@nestjs/throttler";
-import { AdminModule } from "./admin";
-import { AnalyticsModule } from "./analytics";
-import { AppController } from "./app.controller";
-import { AppService } from "./app.service";
-import { ApplicationsModule } from "./applications/applications.module";
-import { AuthModule } from "./auth/auth.module";
-import { BillingModule } from "./billing/billing.module";
-import { CommonModule } from "./common";
-import { CompaniesModule } from "./companies/companies.module";
-import { ConnectionsModule } from "./connections/connections.module";
-import { EmailModule } from "./email/email.module";
-import { ExperimentsModule } from "./experiments/experiments.module";
-import { GdprModule } from "./gdpr/gdpr.module";
-import { FeedModule } from "./feed/feed.module";
-import { FeatureFlagsModule } from "./infra/feature-flags/feature-flags.module";
-import { InfraModule } from "./infra";
-import type { AppConfig } from "./infra/config";
-import { PushModule } from "./infra/push/push.module";
-import { REDIS_CLIENT } from "./infra/redis/redis.constants";
-import { JobsModule } from "./jobs/jobs.module";
-import { MediaModule } from "./media/media.module";
-import { MessagingModule } from "./messaging/messaging.module";
-import { ModerationModule } from "./moderation";
-import { NotificationsModule } from "./notifications/notifications.module";
-import { ObservabilityModule } from "./observability/observability.module";
+import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin';
+import { AnalyticsModule } from './analytics';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { ApplicationsModule } from './applications/applications.module';
+import { AuthModule } from './auth/auth.module';
+import { BillingModule } from './billing/billing.module';
+import { CommonModule } from './common';
+import { CompaniesModule } from './companies/companies.module';
+import { ConnectionsModule } from './connections/connections.module';
+import { EmailModule } from './email/email.module';
+import { ExperimentsModule } from './experiments/experiments.module';
+import { GdprModule } from './gdpr/gdpr.module';
+import { FeedModule } from './feed/feed.module';
+import { FeatureFlagsModule } from './infra/feature-flags/feature-flags.module';
+import { InfraModule } from './infra';
+import type { AppConfig } from './infra/config';
+import { PushModule } from './infra/push/push.module';
+import { REDIS_CLIENT } from './infra/redis/redis.constants';
+import { JobsModule } from './jobs/jobs.module';
+import { MediaModule } from './media/media.module';
+import { MessagingModule } from './messaging/messaging.module';
+import { ModerationModule } from './moderation';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ObservabilityModule } from './observability/observability.module';
 // Direct import (not via './outbox' barrel) — see src/outbox/index.ts
-import { OutboxProcessorModule } from "./outbox/outbox-processor.module";
-import { PostsModule } from "./posts/posts.module";
-import { ProfilesModule } from "./profiles/profiles.module";
-import { RealtimeModule } from "./realtime/realtime.module";
-import { RecommendationsModule } from "./recommendations";
-import { RecruitingModule } from "./recruiting/recruiting.module";
-import { SearchModule } from "./search";
-import { UsersModule } from "./users/users.module";
+import { OutboxProcessorModule } from './outbox/outbox-processor.module';
+import { PostsModule } from './posts/posts.module';
+import { ProfilesModule } from './profiles/profiles.module';
+import { RealtimeModule } from './realtime/realtime.module';
+import { RecommendationsModule } from './recommendations';
+import { RecruitingModule } from './recruiting/recruiting.module';
+import { SearchModule } from './search';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
     ThrottlerModule.forRootAsync({
       imports: [InfraModule],
       inject: [REDIS_CLIENT],
-      useFactory: (redisClient: import("ioredis").Redis) => ({
+      useFactory: (redisClient: import('ioredis').Redis) => ({
         throttlers: [{ limit: 300, ttl: 60000 }],
         storage: new ThrottlerStorageRedisService(redisClient),
       }),
@@ -51,8 +51,8 @@ import { UsersModule } from "./users/users.module";
     ScheduleModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<AppConfig, true>) => {
-        const role = config.get("appProcessRole", { infer: true });
-        const isWorker = role === "worker" || role === "all";
+        const role = config.get('appProcessRole', { infer: true });
+        const isWorker = role === 'worker' || role === 'all';
         return {
           cronJobs: isWorker,
           intervals: isWorker,
