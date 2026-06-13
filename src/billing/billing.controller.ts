@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseBoolPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -22,14 +23,19 @@ import { CompanyRoleGuard } from '../common/guards/company-role.guard';
 import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { BillingService } from './billing.service';
+import { ChangePlanDto } from './dto/change-plan.dto';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { CreateSubscriptionDto } from './dto/create-subscription.dto';
 import { ListInvoicesDto } from './dto/list-invoices.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { StripeProrationService } from './proration/stripe-proration.service';
 
 @Controller()
 export class BillingController {
-  constructor(private readonly billingService: BillingService) {}
+  constructor(
+    private readonly billingService: BillingService,
+    private readonly stripeProrationService: StripeProrationService,
+  ) {}
 
   // ── Plans ────────────────────────────────────────────────────────────
 
@@ -96,8 +102,48 @@ export class BillingController {
   @HttpCode(HttpStatus.OK)
   async cancelSubscription(
     @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Query('atPeriodEnd', new ParseBoolPipe({ optional: true }))
+    atPeriodEnd?: boolean,
   ) {
-    return this.billingService.cancelSubscription(companyId);
+    return this.billingService.cancelSubscription(
+      companyId,
+      atPeriodEnd ?? true,
+    );
+  }
+
+  @Post('companies/:companyId/subscription/change-plan')
+  @UseGuards(CompanyRoleGuard, EmailVerifiedGuard)
+  @CompanyRole('OWNER')
+  @VerifiedEmail()
+  @HttpCode(HttpStatus.OK)
+  async changePlan(
+    @Param('companyId', ParseUUIDPipe) companyId: string,
+    @Body() dto: ChangePlanDto,
+  ) {
+    // Resolve proration behavior: explicit value wins, then legacy atPeriodEnd
+    const prorationBehavior =
+      dto.prorationBehavior ??
+      (dto.atPeriodEnd === false ? 'always_invoice' : 'none');
+    const idempotencyKey = `${companyId}:${dto.planId}:${prorationBehavior}`;
+
+    // always_invoice / create_prorations → upgrade (immediate charge)
+    // none → downgrade (scheduled at period end)
+    if (
+      prorationBehavior === 'always_invoice' ||
+      prorationBehavior === 'create_prorations'
+    ) {
+      return this.stripeProrationService.upgrade(
+        companyId,
+        dto.planId,
+        idempotencyKey,
+        prorationBehavior,
+      );
+    }
+    return this.stripeProrationService.downgrade(
+      companyId,
+      dto.planId,
+      idempotencyKey,
+    );
   }
 
   // ── Invoices ─────────────────────────────────────────────────────────

@@ -2,12 +2,14 @@ import { Module } from '@nestjs/common';
 import { EmailModule } from '../email/email.module';
 import { InfraModule } from '../infra';
 import { PushModule } from '../infra/push/push.module';
+import { ObservabilityModule } from '../observability/observability.module';
 import { RealtimeModule } from '../realtime/realtime.module';
 import { SearchModule } from '../search';
 import { OutboxCoreModule } from './outbox-core.module';
 import { OutboxMetrics } from './outbox.metrics';
 import { OutboxProcessor } from './outbox.processor';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { BillingAdvancedProcessor } from './processors/billing-advanced.processor';
 import { BillingProcessor } from './processors/billing.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import { JobAlertProcessor } from './processors/job-alert.processor';
@@ -19,6 +21,9 @@ import { PostSearchIndexProcessor } from './processors/post-search-index.process
 import { ProfileCreationProcessor } from './processors/profile-creation.processor';
 import { ProfileSearchIndexProcessor } from './processors/profile-search-index.processor';
 import { ExperimentTrackingProcessor } from './processors/experiment-tracking.processor';
+import { GdprDeletionProcessor } from './processors/gdpr-deletion.processor';
+import { GdprExportProcessor } from './processors/gdpr-export.processor';
+import { MediaScanProcessor } from './processors/media-scan.processor';
 import { PushNotificationProcessor } from './processors/push-notification.processor';
 import { RecruitingProcessor } from './processors/recruiting.processor';
 import { SubscriptionProcessor } from './processors/subscription.processor';
@@ -26,6 +31,7 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
 @Module({
   imports: [
     InfraModule,
+    ObservabilityModule,
     OutboxCoreModule,
     RealtimeModule,
     SearchModule,
@@ -47,9 +53,13 @@ import { SubscriptionProcessor } from './processors/subscription.processor';
     MessagingProcessor,
     PushNotificationProcessor,
     ApplicationEmailProcessor,
+    BillingAdvancedProcessor,
     BillingProcessor,
     SubscriptionProcessor,
     RecruitingProcessor,
+    GdprDeletionProcessor,
+    GdprExportProcessor,
+    MediaScanProcessor,
   ],
 })
 export class OutboxProcessorModule {}

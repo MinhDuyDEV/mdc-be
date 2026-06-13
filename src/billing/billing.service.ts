@@ -150,12 +150,16 @@ export class BillingService {
     return subscription;
   }
 
-  async cancelSubscription(companyId: string) {
+  async cancelSubscription(companyId: string, atPeriodEnd = true) {
     await this.getSubscription(companyId); // throws NotFoundException if missing
     return this.prisma.$transaction(async (tx) => {
+      const updateData: Record<string, unknown> = atPeriodEnd
+        ? { cancelAtPeriodEnd: true, canceledAt: new Date() }
+        : { status: 'canceled', canceledAt: new Date() };
+
       const subscription = await tx.subscription.update({
         where: { companyId },
-        data: { cancelAtPeriodEnd: true, canceledAt: new Date() },
+        data: updateData,
       });
 
       await this.outboxService.emit(tx, {

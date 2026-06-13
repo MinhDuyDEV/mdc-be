@@ -343,6 +343,28 @@ export function validateEnv(env: RawEnv): AppConfig {
     billingWebhookSecret: requireString(env, 'BILLING_WEBHOOK_SECRET'),
     billingDefaultFreePlanSlug:
       parseOptionalString(env, 'BILLING_DEFAULT_FREE_PLAN_SLUG') || 'free',
+    // Stripe
+    stripeEnabled: parseOptionalString(env, 'STRIPE_ENABLED') === 'true',
+    stripeSecretKey: (() => {
+      const val = parseOptionalString(env, 'STRIPE_SECRET_KEY');
+      if (env.STRIPE_ENABLED === 'true' && !val) {
+        throw new Error(
+          'STRIPE_SECRET_KEY is required when STRIPE_ENABLED=true',
+        );
+      }
+      return val;
+    })(),
+    stripeWebhookSecret: (() => {
+      const val = parseOptionalString(env, 'STRIPE_WEBHOOK_SECRET');
+      if (env.STRIPE_ENABLED === 'true' && !val) {
+        throw new Error(
+          'STRIPE_WEBHOOK_SECRET is required when STRIPE_ENABLED=true',
+        );
+      }
+      return val;
+    })(),
+    stripeApiVersion:
+      parseOptionalString(env, 'STRIPE_API_VERSION') || '2024-12-18.acacia',
     // Push notifications (FCM/APNs) — all optional, disabled by default
     fcmEnabled: parseOptionalString(env, 'FCM_ENABLED') === 'true',
     fcmServiceAccountPath: parseOptionalString(env, 'FCM_SERVICE_ACCOUNT_PATH'),
@@ -358,6 +380,23 @@ export function validateEnv(env: RawEnv): AppConfig {
       parseOptionalString(env, 'UNLEASH_URL') || 'http://localhost:4242/api',
     unleashApiToken: parseOptionalString(env, 'UNLEASH_API_TOKEN') ?? '',
     unleashAppName: parseOptionalString(env, 'UNLEASH_APP_NAME') || 'mdc-be',
+    // Virus scan (Phase E T2) — optional, disabled by default
+    virusScanEnabled: parseOptionalString(env, 'VIRUS_SCAN_ENABLED') === 'true',
+    clamavHost: parseOptionalString(env, 'CLAMAV_HOST') ?? 'localhost',
+    clamavPort: parseOptionalPositiveInteger(env, 'CLAMAV_PORT', 3310),
+    // GDPR
+    gdprExportRetentionDays: parseOptionalPositiveInteger(
+      env,
+      'GDPR_EXPORT_RETENTION_DAYS',
+      7,
+    ),
+    gdprGracePeriodDays: parseOptionalPositiveInteger(
+      env,
+      'GDPR_GRACE_PERIOD_DAYS',
+      7,
+    ),
+    gdprSlaDays: parseOptionalPositiveInteger(env, 'GDPR_SLA_DAYS', 30),
+    gdprGraceExpiryEnabled: env['GDPR_GRACE_EXPIRY_ENABLED'] === 'true',
     // Email tracking (CNIL)
     emailTrackingBaseUrl:
       parseOptionalString(env, 'EMAIL_TRACKING_BASE_URL') ||

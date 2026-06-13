@@ -38,6 +38,16 @@ describe('OutboxProcessor', () => {
     const mockJobAlertProcessor = {
       processJobPublished: jest.fn().mockResolvedValue(undefined),
     };
+    const mockGdprExportProcessor = {
+      processUserDataExportRequested: jest.fn().mockResolvedValue(undefined),
+    };
+    const mockGdprDeletionProcessor = {
+      processUserDataDeleted: jest.fn().mockResolvedValue(undefined),
+    };
+    const mockMediaScanProcessor = {
+      onVirusScanned: jest.fn().mockResolvedValue(undefined),
+      onThumbnailsGenerated: jest.fn().mockResolvedValue(undefined),
+    };
     const mockJobSearchIndex = {
       processJobCreated: jest.fn().mockResolvedValue(undefined),
       processJobUpdated: jest.fn().mockResolvedValue(undefined),
@@ -86,6 +96,16 @@ describe('OutboxProcessor', () => {
     const mockBillingProcessor = {
       processPaymentProviderEvent: jest.fn().mockResolvedValue(undefined),
     };
+    const mockBillingAdvancedProcessor = {
+      processSubscriptionUpgraded: jest.fn().mockResolvedValue(undefined),
+      processSubscriptionDowngraded: jest.fn().mockResolvedValue(undefined),
+      processSubscriptionStatusChanged: jest.fn().mockResolvedValue(undefined),
+      processInvoiceCreated: jest.fn().mockResolvedValue(undefined),
+      processInvoicePaymentFailed: jest.fn().mockResolvedValue(undefined),
+      processPaymentMethodAdded: jest.fn().mockResolvedValue(undefined),
+      processPaymentMethodRemoved: jest.fn().mockResolvedValue(undefined),
+      processUsageThresholdReached: jest.fn().mockResolvedValue(undefined),
+    };
     const mockSubscriptionProcessor = {
       createFreeSubscription: jest.fn().mockResolvedValue(undefined),
     };
@@ -110,8 +130,19 @@ describe('OutboxProcessor', () => {
       recordFailed: jest.fn(),
       recordDeadLettered: jest.fn(),
       recordDispatchDuration: jest.fn(),
+      recordRetryLatency: jest.fn(),
       registerPendingGauge: jest.fn(),
       unregisterPendingGauge: jest.fn(),
+      registerPendingByEventTypeGauge: jest.fn(),
+      unregisterPendingByEventTypeGauge: jest.fn(),
+    };
+    const mockMetricsService = {
+      recordHttpRequest: jest.fn(),
+      recordOutboxEvent: jest.fn(),
+      recordSubscriptionChange: jest.fn(),
+      recordMediaUpload: jest.fn(),
+      recordDsrRequest: jest.fn(),
+      recordAuditLogEntry: jest.fn(),
     };
     const mockLogger = {
       setContext: jest.fn(),
@@ -126,6 +157,9 @@ describe('OutboxProcessor', () => {
       mockDeadLetter as any,
       mockCompanySearchIndex as any,
       mockJobAlertProcessor as any,
+      mockGdprExportProcessor as any,
+      mockGdprDeletionProcessor as any,
+      mockMediaScanProcessor as any,
       mockJobSearchIndex as any,
       mockApplicationEmail as any,
       mockNotification as any,
@@ -134,12 +168,14 @@ describe('OutboxProcessor', () => {
       mockPostSearchIndex as any,
       mockProfileCreation as any,
       mockProfileSearchIndex as any,
+      mockBillingAdvancedProcessor as any,
       mockBillingProcessor as any,
       mockSubscriptionProcessor as any,
       mockRecruitingProcessor as any,
       mockExperimentTrackingProcessor as any,
       mockPushNotificationProcessor as any,
       mockMetrics as any,
+      mockMetricsService as any,
       mockRealtimeGateway as any,
       mockLogger as any,
     );

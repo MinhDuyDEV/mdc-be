@@ -1,23 +1,29 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   Patch,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
+import { GdprService } from '../gdpr/gdpr.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { UsersService } from './users.service';
 
 @Controller('users')
+@UseGuards(AuthGuard)
 export class UsersController {
   constructor(
     private readonly usersService: UsersService,
     private readonly profilesService: ProfilesService,
+    private readonly gdprService: GdprService,
   ) {}
 
   @Get('me')
@@ -41,6 +47,24 @@ export class UsersController {
    * profile will 404 here, which is the expected behavior for a profile-aware
    * public endpoint.
    */
+  @Delete('me')
+  @HttpCode(HttpStatus.ACCEPTED)
+  async deleteMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() _dto: { reason?: string },
+  ) {
+    const request = await this.gdprService.requestOwnDeletion(
+      user.id,
+      _dto.reason,
+    );
+    return {
+      id: request.id,
+      status: request.status,
+      scheduledFor: request.scheduledFor,
+      dueBy: request.dueBy,
+    };
+  }
+
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async getUser(

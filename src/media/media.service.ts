@@ -2,7 +2,9 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ConnectionStatus, MediaVisibility } from '@prisma/client';
@@ -12,15 +14,21 @@ import type { AppConfig } from '../infra/config/app-config';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { StorageService } from '../infra/storage/storage.service';
 import { OutboxService } from '../outbox/outbox.service';
+import { ImageProcessingService } from './image-processing.service';
 import type { InitiateUploadDto } from './dto/initiate-upload.dto';
+import { VirusScanService } from './virus-scan.service';
 
 @Injectable()
 export class MediaService {
+  private readonly logger = new Logger(MediaService.name);
+
   constructor(
     private readonly config: ConfigService<AppConfig, true>,
     private readonly prisma: PrismaService,
     private readonly storage: StorageService,
     private readonly outboxService: OutboxService,
+    @Optional() private readonly virusScanner?: VirusScanService,
+    @Optional() private readonly imageProcessor?: ImageProcessingService,
   ) {}
 
   async initiateUpload(user: AuthenticatedUser, dto: InitiateUploadDto) {
@@ -111,8 +119,31 @@ export class MediaService {
       throw new BadRequestException('File size exceeds maximum allowed');
     }
 
-    // Atomic: update status + emit event in one transaction
+    // Optional virus scan. Only runs when the service is registered AND
+    // the operator has enabled the feature flag. Failures bubble up so
+    // the caller sees a 5xx and the asset is not flipped to READY.
+    const virusScanEnabled =
+      this.config.get('virusScanEnabled', { infer: true }) ?? false;
+
+    // Atomic: update status + write scan status + emit event in one transaction
     const updated = await this.prisma.$transaction(async (tx) => {
+      // Run scan inside the tx so the scanStatus write is atomic with READY.
+      // The scan (external network call) happens first, then the DB writes
+      // use the same tx. If the scan times out the tx rolls back cleanly.
+      if (virusScanEnabled && this.virusScanner) {
+        const buffer = await this.storage.getObject(
+          asset.s3Bucket,
+          asset.s3Key,
+        );
+        const scanResult = await this.virusScanner.scanBuffer(buffer);
+        await this.virusScanner.persistScanResult(asset.id, scanResult, tx);
+        if (!scanResult.clean) {
+          throw new BadRequestException(
+            `Upload rejected: ${scanResult.threats.join(', ')}`,
+          );
+        }
+      }
+
       const result = await tx.mediaAsset.update({
         where: { id: mediaId },
         data: {
@@ -137,6 +168,44 @@ export class MediaService {
 
       return result;
     });
+
+    // H12: Tag the S3 object with scan metadata after a clean scan.
+    // Best-effort — a tagging failure does not block the upload.
+    if (virusScanEnabled) {
+      const now = new Date().toISOString();
+      this.storage
+        .setObjectTagging(
+          asset.s3Bucket,
+          asset.s3Key,
+          `scan-status=clean&scanned-by=pompelmi&scanned-at=${now}`,
+        )
+        .catch((err: Error) => {
+          this.logger.warn(
+            `Failed to tag S3 object ${asset.s3Key}: ${err.message}`,
+          );
+        });
+    }
+
+    // Optional image thumbnail generation. Runs after the transaction so
+    // a sharp failure cannot block the upload; failures are logged and
+    // the asset is still considered READY.
+    if (this.imageProcessor) {
+      try {
+        const buffer = await this.storage.getObject(
+          asset.s3Bucket,
+          asset.s3Key,
+        );
+        await this.imageProcessor.generateThumbnails(buffer, {
+          id: asset.id,
+          s3Bucket: asset.s3Bucket,
+          contentType: asset.contentType,
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Thumbnail generation failed for ${asset.id}: ${(err as Error).message}`,
+        );
+      }
+    }
 
     return updated;
   }
@@ -186,7 +255,11 @@ export class MediaService {
       throw new NotFoundException('Media asset not found');
     }
 
-    if (asset.status === 'DELETED' || asset.status === 'QUARANTINED') {
+    if (
+      asset.status === 'PENDING' ||
+      asset.status === 'DELETED' ||
+      asset.status === 'QUARANTINED'
+    ) {
       throw new NotFoundException('Media asset not found');
     }
 

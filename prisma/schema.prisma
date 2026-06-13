@@ -324,6 +324,8 @@ model User {
   handle                      String?                  @unique
   displayName                 String?                  @map("display_name")
   status                      UserStatus               @default(ACTIVE)
+  anonymizedAt                DateTime?                @map("anonymized_at") @db.Timestamptz(3)
+  anonymizedEmail             String?                  @map("anonymized_email") @db.VarChar(320)
   createdAt                   DateTime                 @default(now()) @map("created_at")
   updatedAt                   DateTime                 @updatedAt @map("updated_at")
   refreshTokens               RefreshToken[]
@@ -387,7 +389,9 @@ model User {
   emailConsent             EmailConsent?
   emailTrackingEvents      EmailTrackingEvent[]
   experimentImpressions    ExperimentImpression[]
+  deletionRequests         DeletionRequest[]
 
+  @@index([anonymizedAt])
   @@map("users")
 }
 
@@ -428,6 +432,7 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([createdAt])
+  @@index([action, createdAt(sort: Desc)], name: "audit_logs_action_created_at_idx")
   @@map("audit_logs")
 }
 
@@ -726,6 +731,7 @@ model Company {
   interviews        Interview[]
   scorecards        Scorecard[]
   offers            Offer[]
+  paymentMethods    PaymentMethod[]
 
   @@index([slug])
   @@index([industry])
@@ -777,10 +783,12 @@ model Experience {
   endDate     DateTime? @map("end_date") @db.Date
   isCurrent   Boolean   @default(false) @map("is_current")
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([deletedAt])
   @@map("experiences")
 }
 
@@ -795,10 +803,12 @@ model Education {
   grade        String?   @db.VarChar(50)
   activities   String?   @db.Text
   createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt    DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([deletedAt])
   @@map("educations")
 }
 
@@ -812,10 +822,12 @@ model Certification {
   credentialId        String?   @map("credential_id") @db.VarChar(200)
   credentialUrl       String?   @map("credential_url") @db.VarChar(500)
   createdAt           DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt           DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   profile Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId])
+  @@index([deletedAt])
   @@map("certifications")
 }
 
@@ -849,19 +861,24 @@ model Endorsement {
 }
 
 model MediaAsset {
-  id          String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  ownerId     String      @map("owner_id") @db.Uuid
-  purpose     String      @db.VarChar(50)
-  filename    String      @db.VarChar(500)
-  s3Key       String      @unique @map("s3_key") @db.VarChar(500)
-  s3Bucket    String      @map("s3_bucket") @db.VarChar(200)
-    contentType String      @map("content_type") @db.VarChar(200)
-    sizeBytes   Int?        @map("size_bytes")
-    status      MediaStatus @default(PENDING)
-    visibility  MediaVisibility @default(PRIVATE)
-    etag        String?     @db.VarChar(200)
-    createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(3)
-    updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(3)
+  id                String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId           String      @map("owner_id") @db.Uuid
+  purpose           String      @db.VarChar(50)
+  filename          String      @db.VarChar(500)
+  s3Key             String      @unique @map("s3_key") @db.VarChar(500)
+  s3Bucket          String      @map("s3_bucket") @db.VarChar(200)
+  contentType       String      @map("content_type") @db.VarChar(200)
+  sizeBytes         Int?        @map("size_bytes")
+  status            MediaStatus @default(PENDING)
+  visibility        MediaVisibility @default(PRIVATE)
+  etag              String?     @db.VarChar(200)
+  scanStatus        String      @default("PENDING") @map("scan_status")
+  scanResult        Json?       @map("scan_result")
+  scannedAt         DateTime?   @map("scanned_at")
+  thumbS3Key        String?     @map("thumb_s3_key")
+  thumbGeneratedAt  DateTime?   @map("thumb_generated_at")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
 
   owner                  User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   companyLogos           Company[]               @relation("CompanyLogo")
@@ -871,10 +888,11 @@ model MediaAsset {
   postMedia              PostMedia[]
   messageAttachments     MessageAttachment[]
 
-    @@index([ownerId, status])
-    @@index([visibility, status])
-    @@map("media_assets")
-  }
+  @@index([ownerId, status])
+  @@index([visibility, status])
+  @@index([scanStatus])
+  @@map("media_assets")
+}
 
 model CompanyMember {
   id        String      @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
@@ -988,7 +1006,8 @@ model BillingPlan {
   createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  subscriptions Subscription[]
+  subscriptions   Subscription[]
+  scheduledFor    Subscription[] @relation("ScheduledPlan")
 
   @@index([slug])
   @@index([isActive, isPublic])
@@ -1006,11 +1025,14 @@ model Subscription {
   canceledAt             DateTime? @map("canceled_at") @db.Timestamptz(3)
   providerCustomerId     String?   @map("provider_customer_id") @db.VarChar(255)
   providerSubscriptionId String?   @map("provider_subscription_id") @db.VarChar(255)
+  providerPaymentMethodId String?  @map("provider_payment_method_id") @db.VarChar(255)
+  scheduledPlanId        String?   @map("scheduled_plan_id") @db.Uuid
   createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt              DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   company           Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
   plan              BillingPlan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+  scheduledPlan     BillingPlan?        @relation("ScheduledPlan", fields: [scheduledPlanId], references: [id], onDelete: SetNull)
   invoices          Invoice[]
   entitlementGrants EntitlementGrant[]
 
@@ -1115,6 +1137,40 @@ model PaymentProviderEvent {
   @@index([eventType])
   @@index([processedAt])
   @@map("payment_provider_events")
+}
+
+model PaymentMethod {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  companyId         String    @map("company_id") @db.Uuid
+  provider          String    @default("stripe") @db.VarChar(20)
+  providerMethodId  String    @unique @map("provider_method_id") @db.VarChar(255)
+  type              String    @db.VarChar(50)
+  last4             String?   @db.VarChar(4)
+  brand             String?   @db.VarChar(50)
+  expMonth          Int?      @map("exp_month")
+  expYear           Int?      @map("exp_year")
+  isDefault         Boolean   @default(false) @map("is_default")
+  status            String    @default("active") @db.VarChar(20)
+  createdAt         DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  company Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, isDefault])
+  @@index([companyId, status])
+  @@map("payment_methods")
+}
+
+model WebhookEvent {
+  id            String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  provider      String    @db.VarChar(20)
+  stripeEventId String    @unique @map("stripe_event_id") @db.VarChar(255)
+  eventType     String    @map("event_type") @db.VarChar(100)
+  processedAt   DateTime? @map("processed_at") @db.Timestamptz(3)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  @@index([eventType])
+  @@map("webhook_events")
 }
 
 // endregion
@@ -1271,6 +1327,7 @@ model Application {
   submittedAt        DateTime          @default(now()) @map("submitted_at") @db.Timestamptz(3)
   updatedAt          DateTime          @updatedAt @map("updated_at") @db.Timestamptz(3)
   withdrawnAt        DateTime?         @map("withdrawn_at") @db.Timestamptz(3)
+  deletedAt          DateTime?         @map("deleted_at") @db.Timestamptz(3)
 
   job              Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
   user             User        @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -1285,6 +1342,7 @@ model Application {
 
   @@index([jobId, status, submittedAt(sort: Desc)])
   @@index([userId, submittedAt(sort: Desc)])
+  @@index([deletedAt])
   @@map("applications")
 }
 
@@ -1295,11 +1353,13 @@ model ApplicationAnswer {
   question      String   @db.Text
   answer        String   @db.Text
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@unique([applicationId, questionId])
   @@index([applicationId])
+  @@index([deletedAt])
   @@map("application_answers")
 }
 
@@ -1309,6 +1369,7 @@ model ApplicationAttachment {
   mediaAssetId  String   @map("media_asset_id") @db.Uuid
   kind          String   @db.VarChar(64)
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
   mediaAsset  MediaAsset  @relation("ApplicationAttachments", fields: [mediaAssetId], references: [id], onDelete: Restrict)
@@ -1316,6 +1377,7 @@ model ApplicationAttachment {
   @@unique([applicationId, mediaAssetId])
   @@index([applicationId])
   @@index([mediaAssetId])
+  @@index([deletedAt])
   @@map("application_attachments")
 }
 
@@ -1557,11 +1619,13 @@ model Notification {
   // Read tracking
   readAt      DateTime?        @map("read_at") @db.Timestamptz(3)
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(3)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Composite index for "feed" reads (userId + DESC by createdAt + tie-break on id).
   @@index([userId, createdAt(sort: Desc), id(sort: Desc)])
+  @@index([deletedAt])
   // Partial index notifications_unread_idx lives in raw SQL (Prisma can't express WHERE predicates).
   @@map("notifications")
 }
@@ -1573,6 +1637,7 @@ model Connection {
   status      ConnectionStatus @default(PENDING)
   createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt   DateTime?        @map("deleted_at") @db.Timestamptz(3)
 
   requester User @relation("ConnectionsAsRequester", fields: [requesterId], references: [id], onDelete: Cascade)
   addressee User @relation("ConnectionsAsAddressee", fields: [addresseeId], references: [id], onDelete: Cascade)
@@ -1581,6 +1646,7 @@ model Connection {
   @@index([requesterId])
   @@index([addresseeId])
   @@index([status])
+  @@index([deletedAt])
   @@map("connections")
 }
 
@@ -1591,6 +1657,7 @@ model Follow {
   status     FollowStatus @default(ACTIVE)
   createdAt  DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt  DateTime     @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt  DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
   follower User @relation("FollowsAsFollower", fields: [followerId], references: [id], onDelete: Cascade)
   followee User @relation("FollowsAsFollowee", fields: [followeeId], references: [id], onDelete: Cascade)
@@ -1599,6 +1666,7 @@ model Follow {
   @@index([followerId])
   @@index([followeeId])
   @@index([status])
+  @@index([deletedAt])
   @@map("follows")
 }
 
@@ -1607,6 +1675,7 @@ model Block {
   blockerId String   @map("blocker_id") @db.Uuid
   blockedId String   @map("blocked_id") @db.Uuid
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   blocker User @relation("BlocksAsBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
   blocked User @relation("BlocksAsBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
@@ -1614,6 +1683,7 @@ model Block {
   @@unique([blockerId, blockedId], name: "unique_block")
   @@index([blockerId])
   @@index([blockedId])
+  @@index([deletedAt])
   @@map("blocks")
 }
 
@@ -1685,6 +1755,7 @@ model Reaction {
   authorId  String       @map("author_id") @db.Uuid
   type      ReactionType
   createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt DateTime?    @map("deleted_at") @db.Timestamptz(3)
 
   post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
   author User @relation("ReactionsAsAuthor", fields: [authorId], references: [id], onDelete: Cascade)
@@ -1692,6 +1763,7 @@ model Reaction {
   @@unique([postId, authorId, type])
   @@index([postId])
   @@index([authorId])
+  @@index([deletedAt])
   @@map("reactions")
 }
 
@@ -1787,6 +1859,7 @@ model Mention {
   mentionedUserId String   @map("mentioned_user_id") @db.Uuid
   mentionerUserId String   @map("mentioner_user_id") @db.Uuid
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(3)
 
   post          Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
   comment       Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
@@ -1796,6 +1869,7 @@ model Mention {
   @@index([mentionedUserId])
   @@index([postId])
   @@index([commentId])
+  @@index([deletedAt])
   @@map("mentions")
 }
 
@@ -2121,6 +2195,62 @@ model ExperimentImpression {
   @@index([experimentId])
   @@index([userId])
   @@map("experiment_impressions")
+}
+
+// region: GDPR / Data deletion and export
+
+enum DeletionRequestStatus {
+  PENDING_ERASURE
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  FAILED
+}
+
+model DeletionRequest {
+  id           String                @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId       String                @map("user_id") @db.Uuid
+  requestedBy  String                @map("requested_by") @db.Uuid
+  reason       String?               @db.Text
+  status       DeletionRequestStatus @default(PENDING_ERASURE)
+  scheduledFor DateTime              @map("scheduled_for") @db.Timestamptz(3)
+  dueBy        DateTime              @map("due_by") @db.Timestamptz(3)
+  completedAt  DateTime?             @map("completed_at") @db.Timestamptz(3)
+  cancelledAt  DateTime?             @map("cancelled_at") @db.Timestamptz(3)
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // CASCADE on userId is intentional: when a user is hard-deleted (e.g. GDPR purge
+  // beyond anonymization), the request row is removed. Audits (DeletionAudit) are
+  // RESTRICTED to prevent silent loss of the compliance trail.
+  user  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  audit DeletionAudit[]
+
+  @@index([userId, status])
+  @@index([status, dueBy])
+  @@index([scheduledFor])
+  @@map("deletion_requests")
+}
+
+model DeletionAudit {
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  requestId    String   @map("request_id") @db.Uuid
+  userId       String   @map("user_id") @db.Uuid
+  action       String   @db.VarChar(50)
+  metadata     Json?    @db.JsonB
+  sequence     Int
+  previousHash String?  @map("previous_hash") @db.VarChar(64)
+  entryHash    String   @unique @map("entry_hash") @db.VarChar(64)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // RESTRICT prevents accidental loss of compliance trail. If a DeletionRequest
+  // must be removed, application code must explicitly delete audits first.
+  // No FK on userId by design: audits must outlive the user.
+  request DeletionRequest @relation(fields: [requestId], references: [id], onDelete: Restrict)
+
+  @@index([requestId, createdAt])
+  @@index([userId])
+  @@map("deletion_audits")
 }
 
 // endregion

@@ -3,18 +3,22 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { AuthGuard } from '../auth/auth.guard';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import { Permissions } from '../common/decorators/permissions.decorator';
 import { Roles } from '../common/decorators/roles.decorator';
 import { RolesGuard } from '../common/guards/roles.guard';
+import { AuditLogExportService } from './audit-log-export.service';
 import { AdminService } from './admin.service';
 import {
   AdminCompanyQueryDto,
@@ -32,7 +36,10 @@ import {
 @UseGuards(AuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminController {
-  constructor(private readonly service: AdminService) {}
+  constructor(
+    private readonly service: AdminService,
+    private readonly auditLogExport: AuditLogExportService,
+  ) {}
 
   @Get('users')
   @Permissions('MANAGE_USERS')
@@ -98,6 +105,48 @@ export class AdminController {
   @Permissions('MANAGE_USERS')
   async listAuditLogs(@Query() query: AuditLogQueryDto) {
     return this.service.listAuditLogs(query);
+  }
+
+  @Get('audit-logs/export/csv')
+  @Permissions('MANAGE_USERS')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @Header('Content-Type', 'text/csv')
+  @Header('Content-Disposition', 'attachment; filename="audit-logs.csv"')
+  exportAuditLogsCsv(@Query() query: AuditLogQueryDto): StreamableFile {
+    const stream = this.auditLogExport.exportCsv(query);
+    return new StreamableFile(stream);
+  }
+
+  @Get('audit-logs/export/json')
+  @Permissions('MANAGE_USERS')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @Header('Content-Type', 'application/json')
+  exportAuditLogsJson(@Query() query: AuditLogQueryDto): StreamableFile {
+    const stream = this.auditLogExport.exportJson(query);
+    return new StreamableFile(stream);
+  }
+
+  @Get('audit-logs/export/ndjson')
+  @Permissions('MANAGE_USERS')
+  @Throttle({ default: { limit: 5, ttl: 3_600_000 } })
+  @Header('Content-Type', 'application/x-ndjson')
+  exportAuditLogsNdjson(@Query() query: AuditLogQueryDto): StreamableFile {
+    const stream = this.auditLogExport.exportNdjson(query);
+    return new StreamableFile(stream);
+  }
+
+  @Get('audit-logs/search')
+  @Permissions('MANAGE_USERS')
+  async searchAuditLogsByMetadata(
+    @Query('metadataKey') metadataKey: string,
+    @Query('metadataValue') metadataValue: string,
+    @Query() query: AuditLogQueryDto,
+  ) {
+    return this.auditLogExport.searchByMetadata(
+      metadataKey,
+      metadataValue,
+      query,
+    );
   }
 
   // ---------------------------------------------------------------------------

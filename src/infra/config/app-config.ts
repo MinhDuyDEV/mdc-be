@@ -79,10 +79,19 @@ export interface AppConfig {
   mediaAvatarMaxSizeBytes: number;
   mediaResumeMaxSizeBytes: number;
   mediaAllowedContentTypes: string[];
+  // Virus scan (Phase E T2)
+  virusScanEnabled: boolean;
+  clamavHost: string;
+  clamavPort: number;
   // Billing
   billingProvider: string;
   billingWebhookSecret: string;
   billingDefaultFreePlanSlug: string;
+  // Stripe
+  stripeEnabled: boolean;
+  stripeSecretKey: string;
+  stripeWebhookSecret: string;
+  stripeApiVersion: string;
   // Push Notifications (FCM)
   fcmEnabled: boolean;
   fcmServiceAccountPath: string;
@@ -101,4 +110,9 @@ export interface AppConfig {
   // Email tracking
   emailTrackingBaseUrl: string;
   emailUnsubscribeSecret: string;
+  // GDPR
+  gdprExportRetentionDays: number;
+  gdprGracePeriodDays: number;
+  gdprSlaDays: number;
+  gdprGraceExpiryEnabled: boolean;
 }

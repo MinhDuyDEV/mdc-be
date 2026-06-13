@@ -15,6 +15,7 @@ import { CompaniesModule } from './companies/companies.module';
 import { ConnectionsModule } from './connections/connections.module';
 import { EmailModule } from './email/email.module';
 import { ExperimentsModule } from './experiments/experiments.module';
+import { GdprModule } from './gdpr/gdpr.module';
 import { FeedModule } from './feed/feed.module';
 import { FeatureFlagsModule } from './infra/feature-flags/feature-flags.module';
 import { InfraModule } from './infra';
@@ -26,6 +27,7 @@ import { MediaModule } from './media/media.module';
 import { MessagingModule } from './messaging/messaging.module';
 import { ModerationModule } from './moderation';
 import { NotificationsModule } from './notifications/notifications.module';
+import { ObservabilityModule } from './observability/observability.module';
 // Direct import (not via './outbox' barrel) — see src/outbox/index.ts
 import { OutboxProcessorModule } from './outbox/outbox-processor.module';
 import { PostsModule } from './posts/posts.module';
@@ -70,9 +72,11 @@ import { UsersModule } from './users/users.module';
     CompaniesModule,
     EmailModule,
     ExperimentsModule,
+    GdprModule,
     JobsModule,
     MediaModule,
     NotificationsModule,
+    ObservabilityModule,
     OutboxProcessorModule,
     PostsModule,
     ProfilesModule,

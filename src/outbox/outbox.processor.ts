@@ -6,15 +6,20 @@ import { randomUUID } from 'crypto';
 import { PinoLogger } from 'nestjs-pino';
 import type { AppConfig } from '../infra/config';
 import { PrismaService } from '../infra/prisma';
+import { MetricsService } from '../observability/metrics.service';
 import { NotificationEventDto } from '../realtime/dto/notification-event.dto';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
 import { DeadLetterService } from './dead-letter.service';
 import { validateOutboxPayload } from './events';
 import { OutboxMetrics } from './outbox.metrics';
 import { ApplicationEmailProcessor } from './processors/application-email.processor';
+import { BillingAdvancedProcessor } from './processors/billing-advanced.processor';
 import { BillingProcessor } from './processors/billing.processor';
 import { CompanySearchIndexProcessor } from './processors/company-search-index.processor';
 import { JobAlertProcessor } from './processors/job-alert.processor';
+import { GdprDeletionProcessor } from './processors/gdpr-deletion.processor';
+import { GdprExportProcessor } from './processors/gdpr-export.processor';
+import { MediaScanProcessor } from './processors/media-scan.processor';
 import { JobSearchIndexProcessor } from './processors/job-search-index.processor';
 import { MessagingProcessor } from './processors/messaging.processor';
 import { NotificationProcessor } from './processors/notification.processor';
@@ -56,6 +61,12 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly companySearchIndex: CompanySearchIndexProcessor,
     @Inject(JobAlertProcessor)
     private readonly jobAlertProcessor: JobAlertProcessor,
+    @Inject(GdprExportProcessor)
+    private readonly gdprExportProcessor: GdprExportProcessor,
+    @Inject(GdprDeletionProcessor)
+    private readonly gdprDeletionProcessor: GdprDeletionProcessor,
+    @Inject(MediaScanProcessor)
+    private readonly mediaScanProcessor: MediaScanProcessor,
     @Inject(JobSearchIndexProcessor)
     private readonly jobSearchIndex: JobSearchIndexProcessor,
     @Inject(ApplicationEmailProcessor)
@@ -72,6 +83,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     private readonly profileCreation: ProfileCreationProcessor,
     @Inject(ProfileSearchIndexProcessor)
     private readonly profileSearchIndex: ProfileSearchIndexProcessor,
+    @Inject(BillingAdvancedProcessor)
+    private readonly billingAdvancedProcessor: BillingAdvancedProcessor,
     @Inject(BillingProcessor)
     private readonly billingProcessor: BillingProcessor,
     @Inject(SubscriptionProcessor)
@@ -83,6 +96,8 @@ export class OutboxProcessor implements OnApplicationShutdown {
     @Inject(PushNotificationProcessor)
     private readonly pushNotificationProcessor: PushNotificationProcessor,
     @Inject(OutboxMetrics) private readonly metrics: OutboxMetrics,
+    @Inject(MetricsService)
+    private readonly metricsService: MetricsService,
     @Inject(RealtimeGateway)
     private readonly realtimeGateway: RealtimeGateway,
     @Inject(PinoLogger) private readonly logger: PinoLogger,
@@ -103,6 +118,26 @@ export class OutboxProcessor implements OnApplicationShutdown {
           where: { status: 'PENDING' },
         }),
       (err) => this.logger.error('Outbox pending metric failed: %s', err),
+    );
+    this.metrics.registerPendingByEventTypeGauge(
+      async () => {
+        const rows: Array<{ event_type: string; count: bigint }> = await this
+          .prisma.$queryRaw`
+            SELECT event_type, COUNT(*)::bigint as count
+            FROM outbox_events
+            WHERE status = 'PENDING'::"OutboxEventStatus"
+            GROUP BY event_type
+          `;
+        return rows.map((r) => ({
+          eventType: r.event_type,
+          count: Number(r.count),
+        }));
+      },
+      (err) =>
+        this.logger.error(
+          'Outbox pending-by-event-type metric failed: %s',
+          err,
+        ),
     );
   }
 
@@ -234,6 +269,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
       dispatchRecorded = true;
       await this.markProcessed(event.id);
       this.metrics.recordProcessed(event.eventType);
+      this.metricsService.recordOutboxEvent(event.eventType, 'processed');
       this.logger.debug(
         'Event %s (%s) marked as processed',
         event.id,
@@ -250,6 +286,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
       }
       this.metrics.recordFailed(event.eventType, attempts);
+      this.metricsService.recordOutboxEvent(event.eventType, 'failed');
 
       if (attempts >= this.maxRetries) {
         await this.deadLetter.moveToDeadLetter(
@@ -261,12 +298,18 @@ export class OutboxProcessor implements OnApplicationShutdown {
           error,
         );
         this.metrics.recordDeadLettered(event.eventType);
+        this.metricsService.recordOutboxEvent(event.eventType, 'dead_lettered');
         this.logger.warn(
           'Event %s moved to dead letter after %d attempts',
           event.id,
           attempts,
         );
       } else {
+        // Record retry latency: wall-clock time since dispatch started
+        this.metrics.recordRetryLatency(
+          event.eventType,
+          (Date.now() - dispatchStartedAt) / 1000,
+        );
         await this.requeueWithBackoff(event.id, attempts);
         this.logger.debug(
           'Event %s requeued with backoff (attempt %d/%d)',
@@ -627,6 +670,86 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       }
+      // Phase E — T4 billing events. The handlers on
+      // BillingAdvancedProcessor are intentionally fire-and-forget:
+      // they are sync logging stubs today and do not affect the
+      // transactional outcome of event processing. If/when they
+      // become async (e.g. dunning emails), wrap the calls in
+      // `void this.x.y(...).catch(err => this.logger.error(err))`.
+      case 'SubscriptionUpgraded':
+        this.billingAdvancedProcessor.processSubscriptionUpgraded(
+          payload as {
+            subscriptionId: string;
+            companyId: string;
+            fromPlanId: string;
+            toPlanId: string;
+          },
+        );
+        return;
+      case 'SubscriptionDowngraded':
+        this.billingAdvancedProcessor.processSubscriptionDowngraded(
+          payload as {
+            subscriptionId: string;
+            companyId: string;
+            fromPlanId: string;
+            toPlanId: string;
+            effectiveAt: string;
+          },
+        );
+        return;
+      case 'SubscriptionStatusChanged':
+        this.billingAdvancedProcessor.processSubscriptionStatusChanged(
+          payload as {
+            subscriptionId: string;
+            companyId: string;
+            fromStatus: string;
+            toStatus: string;
+          },
+        );
+        return;
+      case 'InvoiceCreated':
+        this.billingAdvancedProcessor.processInvoiceCreated(
+          payload as {
+            invoiceId: string;
+            companyId: string;
+            amountDue: number;
+          },
+        );
+        return;
+      case 'InvoicePaymentFailed':
+        this.billingAdvancedProcessor.processInvoicePaymentFailed(
+          payload as {
+            invoiceId: string;
+            companyId: string;
+            attemptNumber: number;
+          },
+        );
+        return;
+      case 'PaymentMethodAdded':
+        this.billingAdvancedProcessor.processPaymentMethodAdded(
+          payload as {
+            paymentMethodId: string;
+            companyId: string;
+            type: string;
+            isDefault: boolean;
+          },
+        );
+        return;
+      case 'PaymentMethodRemoved':
+        this.billingAdvancedProcessor.processPaymentMethodRemoved(
+          payload as { paymentMethodId: string; companyId: string },
+        );
+        return;
+      case 'UsageThresholdReached':
+        this.billingAdvancedProcessor.processUsageThresholdReached(
+          payload as {
+            companyId: string;
+            meterEventName: string;
+            currentValue: number;
+            threshold: number;
+          },
+        );
+        return;
       case 'PaymentProviderEventReceived':
         await this.billingProcessor.processPaymentProviderEvent(
           (payload as { eventId: string }).eventId,
@@ -674,7 +797,7 @@ export class OutboxProcessor implements OnApplicationShutdown {
         );
         return;
       case 'OfferResponded':
-        void this.recruitingProcessor.processOfferResponded(
+        await this.recruitingProcessor.processOfferResponded(
           payload as {
             offerId: string;
             applicationId: string;
@@ -703,6 +826,42 @@ export class OutboxProcessor implements OnApplicationShutdown {
             body: string;
             data?: Record<string, string>;
           },
+        );
+        return;
+      // Phase E — T1 GDPR events
+      case 'UserDataExportRequested':
+        await this.gdprExportProcessor.processUserDataExportRequested(
+          payload as {
+            exportId: string;
+            userId: string;
+            requestedBy: string;
+            requestedAt: string;
+          },
+        );
+        return;
+      case 'UserDataDeleted':
+        await this.gdprDeletionProcessor.processUserDataDeleted(
+          payload as {
+            userId: string;
+            requestId: string;
+            deletedBy: string;
+            reason?: string;
+            deletedAt: string;
+          },
+        );
+        return;
+      // Phase E — T1 GDPR completion events (no-op for now; reserved for
+      // future email-notification / S3-cleanup / cache-invalidation handlers).
+      case 'UserDataAnonymized':
+      case 'UserDataExported':
+        this.logger.debug(
+          `GDPR event ${event.eventType} (id=${event.id}) acknowledged; no async handler registered.`,
+        );
+        return;
+      // Phase E — T1 GDPR SLA breach alerting
+      case 'DeletionSlaBreached':
+        this.logger.warn(
+          `DeletionSlaBreached (id=${event.id}) — see alert pipeline.`,
         );
         return;
       default:

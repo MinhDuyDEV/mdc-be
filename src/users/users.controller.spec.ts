@@ -1,4 +1,8 @@
+import { Reflector } from '@nestjs/core';
+import { JwtService } from '@nestjs/jwt';
 import { Test, TestingModule } from '@nestjs/testing';
+import { AuthGuard } from '../auth/auth.guard';
+import { GdprService } from '../gdpr/gdpr.service';
 import { ProfilesService } from '../profiles/profiles.service';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
@@ -7,6 +11,7 @@ describe('UsersController', () => {
   let controller: UsersController;
   let usersService: UsersService;
   let profilesService: ProfilesService;
+  let gdprService: GdprService;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -25,12 +30,30 @@ describe('UsersController', () => {
             getPublicProfile: jest.fn(),
           },
         },
+        {
+          provide: GdprService,
+          useValue: {
+            requestOwnDeletion: jest.fn().mockResolvedValue({
+              id: 'deletion-123',
+              status: 'PENDING_ERASURE',
+              scheduledFor: new Date(),
+              dueBy: new Date(),
+            }),
+          },
+        },
+        {
+          provide: AuthGuard,
+          useValue: { canActivate: jest.fn().mockReturnValue(true) },
+        },
+        { provide: JwtService, useValue: {} },
+        { provide: Reflector, useValue: {} },
       ],
     }).compile();
 
     controller = module.get<UsersController>(UsersController);
     usersService = module.get<UsersService>(UsersService);
     profilesService = module.get<ProfilesService>(ProfilesService);
+    gdprService = module.get<GdprService>(GdprService);
   });
 
   it('should be defined', () => {
@@ -58,6 +81,26 @@ describe('UsersController', () => {
 
       await controller.updateMe(user, dto);
       expect(usersService.updateOwnProfile).toHaveBeenCalledWith(user, dto);
+    });
+  });
+
+  describe('DELETE /users/me', () => {
+    it('should call gdprService.requestOwnDeletion', async () => {
+      const user = { id: 'user-123', email: 'test@example.com' };
+      jest.spyOn(gdprService, 'requestOwnDeletion').mockResolvedValue({
+        id: 'deletion-123',
+        status: 'PENDING_ERASURE',
+        scheduledFor: new Date(),
+        dueBy: new Date(),
+      } as any);
+
+      const result = await controller.deleteMe(user, { reason: 'test' });
+      expect(gdprService.requestOwnDeletion).toHaveBeenCalledWith(
+        'user-123',
+        'test',
+      );
+      expect(result).toHaveProperty('id', 'deletion-123');
+      expect(result).toHaveProperty('status', 'PENDING_ERASURE');
     });
   });
 

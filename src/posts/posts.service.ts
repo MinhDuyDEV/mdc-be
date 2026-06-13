@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PostStatus, PostVisibility } from '@prisma/client';
+import type { PrismaTransaction } from '../infra/prisma';
 import { PrismaService } from '../infra/prisma/prisma.service';
 import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
@@ -666,6 +667,29 @@ export class PostsService {
   async unhidePost(userId: string, postId: string): Promise<void> {
     await this.prisma.hiddenPost.deleteMany({
       where: { userId, postId },
+    });
+  }
+
+  async anonymizeForUser(tx: PrismaTransaction, userId: string): Promise<void> {
+    // Replace post/comment content with [deleted] marker
+    await tx.post.updateMany({
+      where: { authorId: userId, deletedAt: null },
+      data: { deletedAt: new Date(), visibility: 'PRIVATE' },
+    });
+    await tx.comment.updateMany({
+      where: { authorId: userId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    await tx.reaction.updateMany({
+      where: { authorId: userId, deletedAt: null },
+      data: { deletedAt: new Date() },
+    });
+    await tx.mention.updateMany({
+      where: {
+        OR: [{ mentionerUserId: userId }, { mentionedUserId: userId }],
+        deletedAt: null,
+      },
+      data: { deletedAt: new Date() },
     });
   }
 }

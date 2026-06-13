@@ -112,4 +112,13 @@ export class RealtimeGateway
   pushNotification(userId: string, notification: NotificationEventDto) {
     this.server.to(`user:${userId}`).emit('notification:new', notification);
   }
+
+  // Called by GdprDeletionProcessor to disconnect all active sockets for a user
+  async disconnectUser(userId: string): Promise<void> {
+    const sockets = await this.server.in(`user:${userId}`).fetchSockets();
+    for (const socket of sockets) {
+      socket.disconnect(true);
+    }
+    await this.realtimeService.setUserOffline(userId);
+  }
 }

@@ -325,6 +325,98 @@ export const outboxEventSchemas = {
     body: z.string(),
     data: z.record(z.string(), z.string()).optional(),
   }),
+  MediaAssetVirusScanned: payload.extend({
+    mediaAssetId: z.string(),
+    ownerId: z.string(),
+    clean: z.boolean(),
+    threats: z.array(z.string()).optional(),
+  }),
+  MediaAssetThumbnailsGenerated: payload.extend({
+    mediaAssetId: z.string(),
+    ownerId: z.string(),
+    sizes: z.array(z.object({ width: z.number(), s3Key: z.string() })),
+  }),
+  // Phase E — T4 billing events
+  SubscriptionUpgraded: payload.extend({
+    subscriptionId: z.string(),
+    companyId: z.string(),
+    fromPlanId: z.string(),
+    toPlanId: z.string(),
+  }),
+  SubscriptionDowngraded: payload.extend({
+    subscriptionId: z.string(),
+    companyId: z.string(),
+    fromPlanId: z.string(),
+    toPlanId: z.string(),
+    effectiveAt: z.string(),
+  }),
+  SubscriptionStatusChanged: payload.extend({
+    subscriptionId: z.string(),
+    companyId: z.string(),
+    fromStatus: z.string(),
+    toStatus: z.string(),
+  }),
+  InvoiceCreated: payload.extend({
+    invoiceId: z.string(),
+    companyId: z.string(),
+    amountDue: z.number(),
+  }),
+  InvoicePaymentFailed: payload.extend({
+    invoiceId: z.string(),
+    companyId: z.string(),
+    attemptNumber: z.number(),
+  }),
+  PaymentMethodAdded: payload.extend({
+    paymentMethodId: z.string(),
+    companyId: z.string(),
+    type: z.string(),
+    isDefault: z.boolean(),
+  }),
+  PaymentMethodRemoved: payload.extend({
+    paymentMethodId: z.string(),
+    companyId: z.string(),
+  }),
+  UsageThresholdReached: payload.extend({
+    companyId: z.string(),
+    meterEventName: z.string(),
+    currentValue: z.number(),
+    threshold: z.number(),
+  }),
+  // Phase E — T1 GDPR events
+  UserDataExportRequested: payload.extend({
+    exportId: z.string(),
+    userId: z.string(),
+    requestedBy: z.string(),
+    requestedAt: z.string(),
+  }),
+  UserDataExported: payload.extend({
+    exportId: z.string(),
+    userId: z.string(),
+    s3Bucket: z.string(),
+    s3Key: z.string(),
+    downloadUrl: z.string().optional(),
+    expiresAt: z.string().optional(),
+    exportedAt: z.string(),
+  }),
+  UserDataDeleted: payload.extend({
+    requestId: z.string(),
+    userId: z.string(),
+    deletedBy: z.string(),
+    reason: z.string().optional(),
+    deletedAt: z.string(),
+  }),
+  UserDataAnonymized: payload.extend({
+    userId: z.string(),
+    requestId: z.string(),
+    anonymizedAt: z.string(),
+    anonymizedFields: z.array(z.string()),
+  }),
+  DeletionSlaBreached: payload.extend({
+    requestId: z.string(),
+    userId: z.string(),
+    dueBy: z.string(),
+    status: z.string(),
+  }),
 } as const;
 
 export type OutboxEventType = keyof typeof outboxEventSchemas;

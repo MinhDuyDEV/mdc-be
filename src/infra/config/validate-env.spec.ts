@@ -121,6 +121,10 @@ describe('validateEnv', () => {
       billingProvider: 'mock',
       billingWebhookSecret: 'whsec_test_secret',
       billingDefaultFreePlanSlug: 'free',
+      stripeEnabled: false,
+      stripeSecretKey: '',
+      stripeWebhookSecret: '',
+      stripeApiVersion: '2024-12-18.acacia',
       fcmEnabled: false,
       fcmServiceAccountPath: '',
       apnsEnabled: false,
@@ -133,8 +137,15 @@ describe('validateEnv', () => {
       unleashUrl: 'http://localhost:4242/api',
       unleashApiToken: '',
       unleashAppName: 'mdc-be',
+      virusScanEnabled: false,
+      clamavHost: '',
+      clamavPort: 3310,
       emailTrackingBaseUrl: 'http://localhost:3000',
       emailUnsubscribeSecret: 'dev-only-change-me-in-production',
+      gdprExportRetentionDays: 7,
+      gdprGracePeriodDays: 7,
+      gdprSlaDays: 30,
+      gdprGraceExpiryEnabled: false,
     });
   });
 
