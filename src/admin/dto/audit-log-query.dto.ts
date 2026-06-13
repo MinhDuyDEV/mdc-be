@@ -19,6 +19,18 @@ export class AuditLogQueryDto extends CursorPaginationQueryDto {
   action?: string;
 
   @IsOptional()
+  @IsString()
+  ip?: string;
+
+  @IsOptional()
+  @IsString()
+  metadataKey?: string;
+
+  @IsOptional()
+  @IsString()
+  metadataValue?: string;
+
+  @IsOptional()
   @IsDateString()
   dateFrom?: string;
 
