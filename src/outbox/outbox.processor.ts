@@ -458,6 +458,18 @@ export class OutboxProcessor implements OnApplicationShutdown {
           },
         );
         return;
+      case 'SavedSearchMatched':
+        await this.notification.processSavedSearchMatched(
+          payload as {
+            savedSearchId: string;
+            userId: string;
+            deliveryId: string;
+            jobIds: string[];
+            searchName: string | null;
+            frequency: string;
+          },
+        );
+        return;
       case 'ConnectionRequested':
         await this.notification.processConnectionRequested(
           payload as {

@@ -1,4 +1,10 @@
-import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 
 export enum AlertFrequency {
   REALTIME = 'REALTIME',
@@ -16,4 +22,8 @@ export class CreateSavedSearchDto {
 
   @IsEnum(AlertFrequency)
   frequency!: AlertFrequency;
+
+  @IsOptional()
+  @IsBoolean()
+  alertEnabled?: boolean;
 }

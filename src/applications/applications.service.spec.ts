@@ -98,6 +98,8 @@ describe('ApplicationsService', () => {
         status: JobStatus.PUBLISHED,
         applyMode: 'EXTERNAL',
         companyId: 'company-1',
+        requireResume: false,
+        screeningQuestions: [],
       });
       prisma.companyMember.findUnique.mockResolvedValue(null);
       prisma.recruiterSeat.findFirst.mockResolvedValue(null);
@@ -115,6 +117,8 @@ describe('ApplicationsService', () => {
         status: JobStatus.PUBLISHED,
         applyMode: 'INTERNAL',
         companyId: 'company-1',
+        requireResume: false,
+        screeningQuestions: [],
       });
       prisma.companyMember.findUnique.mockResolvedValue({
         role: 'OWNER',
@@ -134,6 +138,8 @@ describe('ApplicationsService', () => {
         status: JobStatus.PUBLISHED,
         applyMode: 'INTERNAL',
         companyId: 'company-1',
+        requireResume: false,
+        screeningQuestions: [],
       });
       prisma.companyMember.findUnique.mockResolvedValue(null);
       prisma.recruiterSeat.findFirst.mockResolvedValue(null);
@@ -155,6 +161,8 @@ describe('ApplicationsService', () => {
         status: JobStatus.PUBLISHED,
         applyMode: 'INTERNAL',
         companyId: 'company-1',
+        requireResume: false,
+        screeningQuestions: [],
       });
       prisma.companyMember.findUnique.mockResolvedValue(null);
       prisma.recruiterSeat.findFirst.mockResolvedValue(null);
@@ -178,6 +186,8 @@ describe('ApplicationsService', () => {
         status: JobStatus.PUBLISHED,
         applyMode: 'INTERNAL',
         companyId: 'company-1',
+        requireResume: false,
+        screeningQuestions: [],
       });
       prisma.companyMember.findUnique.mockResolvedValue(null);
       prisma.recruiterSeat.findFirst.mockResolvedValue(null);

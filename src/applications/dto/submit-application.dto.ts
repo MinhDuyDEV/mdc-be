@@ -14,9 +14,16 @@ export class ScreeningAnswerDto {
   @MaxLength(255)
   questionId!: string;
 
+  /**
+   * Optional on the wire — the backend resolves the canonical question text
+   * from the Job's `ScreeningQuestion` definition by `questionId`. When
+   * provided it is ignored (the stored `ApplicationAnswer.question` always
+   * reflects the question definition at submit time).
+   */
+  @IsOptional()
   @IsString()
   @MaxLength(2000)
-  question!: string;
+  question?: string;
 
   @IsString()
   @MaxLength(10000)

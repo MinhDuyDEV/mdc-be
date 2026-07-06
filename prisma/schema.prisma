@@ -137,6 +137,14 @@ enum WorkplaceType {
   REMOTE
 }
 
+enum ScreeningQuestionType {
+  TEXT
+  BOOLEAN
+  SINGLE_CHOICE
+  MULTI_CHOICE
+  NUMERIC
+}
+
 enum ApplicationStatus {
   SUBMITTED
   REVIEWED
@@ -169,6 +177,7 @@ enum NotificationType {
   JobPublished
   JobUpdated
   JobClosed
+  SavedSearchMatch
   // Recruiting domain
   CandidateSaved
   CandidateAddedToTalentPool
@@ -1217,6 +1226,7 @@ model Job {
   salaryMin       Decimal?                 @map("salary_min") @db.Decimal(12, 2)
   salaryMax       Decimal?                 @map("salary_max") @db.Decimal(12, 2)
   salaryCurrency  String?                  @map("salary_currency") @db.VarChar(3)
+  requireResume   Boolean                  @default(false) @map("require_resume")
   publishedAt     DateTime?                @map("published_at") @db.Timestamptz(3)
   closedAt        DateTime?                @map("closed_at") @db.Timestamptz(3)
   createdAt       DateTime                 @default(now()) @map("created_at") @db.Timestamptz(3)
@@ -1231,6 +1241,7 @@ model Job {
   savedBy      SavedJob[]
   views        JobView[]
   applications Application[]
+  screeningQuestions ScreeningQuestion[]
 
   @@index([companyId, status, deletedAt])
   @@index([status, publishedAt(sort: Desc), id(sort: Desc)])
@@ -1249,6 +1260,23 @@ model JobSkill {
   @@unique([jobId, skillId])
   @@index([skillId])
   @@map("job_skills")
+}
+
+model ScreeningQuestion {
+  id        String               @id @default(uuid()) @db.Uuid
+  jobId     String               @map("job_id") @db.Uuid
+  question  String               @db.Text
+  type      ScreeningQuestionType
+  required  Boolean              @default(false)
+  options   String[]             @default([])
+  position  Int                  @default(0)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime             @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  job Job @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@map("screening_questions")
 }
 
 model SavedJob {
@@ -1286,11 +1314,12 @@ model SavedSearch {
   id        String         @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String         @map("user_id") @db.Uuid
   name      String?        @db.VarChar(255)
-  query     Json
-  frequency AlertFrequency @default(DAILY)
-  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
-  updatedAt DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
-  deletedAt DateTime?      @map("deleted_at") @db.Timestamptz(3)
+  query        Json
+  frequency    AlertFrequency @default(DAILY)
+  alertEnabled Boolean        @default(true) @map("alert_enabled")
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(3)
+  deletedAt    DateTime?      @map("deleted_at") @db.Timestamptz(3)
 
   user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   deliveries JobAlertDelivery[]

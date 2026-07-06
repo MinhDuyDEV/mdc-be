@@ -10,15 +10,19 @@ import {
   Patch,
   Post,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { CurrentUser } from '../common/auth/current-user.decorator';
 import type { AuthenticatedUser } from '../common/auth/current-user.interface';
 import { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
+import { EmailVerifiedGuard } from '../common/guards/email-verified.guard';
+import { VerifiedEmail } from '../common/decorators/verified-email.decorator';
 import { MediaService } from '../media/media.service';
 import { ApplicationsService } from './applications.service';
 import { CreateApplicationNoteDto } from './dto/application-note.dto';
 import { SubmitApplicationDto } from './dto/submit-application.dto';
 import { UpdateApplicationStatusDto } from './dto/update-status.dto';
+import { UpdateApplicationDto } from './dto/update-application.dto';
 
 /**
  * Applications API.
@@ -40,6 +44,8 @@ export class ApplicationsController {
 
   @Post('jobs/:jobId/applications')
   @HttpCode(HttpStatus.CREATED)
+  @UseGuards(EmailVerifiedGuard)
+  @VerifiedEmail()
   async submit(
     @CurrentUser() user: AuthenticatedUser,
     @Param('jobId', ParseUUIDPipe) jobId: string,
@@ -96,6 +102,15 @@ export class ApplicationsController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.applicationsService.withdraw(user.id, id);
+  }
+
+  @Patch('applications/:id')
+  async updateApplication(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateApplicationDto,
+  ) {
+    return this.applicationsService.updateApplication(user.id, id, dto);
   }
 
   // ──────────────────────────── Notes ─────────────────────────────────────

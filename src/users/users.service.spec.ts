@@ -32,21 +32,81 @@ describe('UsersService', () => {
   });
 
   describe('getOwnProfile', () => {
-    it('should return user profile with safe fields', async () => {
+    const mockDate = new Date();
+
+    it('should return user profile with role flags and memberships', async () => {
       const user = { id: 'user-123', email: 'test@example.com' };
-      const profile = {
+      const dbProfile = {
         id: 'user-123',
         email: 'test@example.com',
+        displayName: 'Test User',
+        emailVerifiedAt: mockDate,
+        status: 'ACTIVE' as const,
+        createdAt: mockDate,
+        adminUser: {
+          role: 'ADMIN' as const,
+          permissions: [
+            { permission: 'MANAGE_USERS' as const },
+            { permission: 'MANAGE_COMPANIES' as const },
+          ],
+        },
+        companyMembers: [
+          {
+            role: 'OWNER' as const,
+            company: { id: 'c-1', name: 'Acme Inc', slug: 'acme-inc' },
+          },
+        ],
+        recruiterSeats: [],
+      };
+
+      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(dbProfile as any);
+
+      const result = await service.getOwnProfile(user);
+      expect(result).toEqual({
+        id: 'user-123',
+        email: 'test@example.com',
+        displayName: 'Test User',
+        emailVerifiedAt: mockDate,
+        status: 'ACTIVE',
+        createdAt: mockDate,
+        isSuperAdmin: false,
+        isAdmin: true,
+        isModerator: true,
+        adminPermissions: ['MANAGE_USERS', 'MANAGE_COMPANIES'],
+        companyMemberships: [
+          {
+            companyId: 'c-1',
+            companyName: 'Acme Inc',
+            companySlug: 'acme-inc',
+            role: 'OWNER',
+          },
+        ],
+        recruiterSeats: [],
+      });
+    });
+
+    it('should return falsy flags for regular user (no adminUser, no memberships)', async () => {
+      const user = { id: 'user-456', email: 'normal@example.com' };
+      const dbProfile = {
+        id: 'user-456',
+        email: 'normal@example.com',
         displayName: null,
         emailVerifiedAt: null,
         status: 'ACTIVE' as const,
-        createdAt: new Date(),
+        createdAt: mockDate,
+        adminUser: null,
+        companyMembers: [],
+        recruiterSeats: [],
       };
 
-      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(profile as any);
+      jest.spyOn(prisma.user, 'findUnique').mockResolvedValue(dbProfile as any);
 
       const result = await service.getOwnProfile(user);
-      expect(result).toEqual(profile);
+      expect(result.isSuperAdmin).toBe(false);
+      expect(result.isAdmin).toBe(false);
+      expect(result.isModerator).toBe(false);
+      expect(result.adminPermissions).toEqual([]);
+      expect(result.companyMemberships).toEqual([]);
     });
 
     it('should throw NotFoundException when user not found', async () => {

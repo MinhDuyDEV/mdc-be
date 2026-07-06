@@ -1,6 +1,9 @@
 import { ApplyMode, EmploymentType, WorkplaceType } from '@prisma/client';
+import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsEnum,
   IsNotEmpty,
   IsNumber,
@@ -11,7 +14,9 @@ import {
   Length,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { ScreeningQuestionInputDto } from './screening-question.dto';
 
 export class CreateJobDto {
   @IsString()
@@ -64,4 +69,15 @@ export class CreateJobDto {
   @IsString()
   @Length(3, 3)
   salaryCurrency?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  requireResume?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(50)
+  @ValidateNested({ each: true })
+  @Type(() => ScreeningQuestionInputDto)
+  screeningQuestions?: ScreeningQuestionInputDto[];
 }

@@ -6,7 +6,12 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { ApplyMode, JobStatus, Prisma } from '@prisma/client';
+import {
+  ApplyMode,
+  ApplicationStatus,
+  JobStatus,
+  Prisma,
+} from '@prisma/client';
 import { EntitlementsService } from '../billing/entitlements/entitlements.service';
 import type { CursorPaginationQueryDto } from '../common/pagination/cursor-pagination.dto';
 import { PrismaService } from '../infra/prisma/prisma.service';
@@ -14,7 +19,10 @@ import { IdempotencyService } from '../outbox/idempotency.service';
 import { OutboxService } from '../outbox/outbox.service';
 import type { CreateJobDto } from './dto/create-job.dto';
 import type { CreateSavedSearchDto } from './dto/create-saved-search.dto';
-import { toJobResponseDto } from './dto/job.response.dto';
+import {
+  type JobResponseEnrichment,
+  toJobResponseDto,
+} from './dto/job.response.dto';
 import type { ListJobsQueryDto } from './dto/list-jobs.query.dto';
 import type { UpdateJobDto } from './dto/update-job.dto';
 import type { UpdateSavedSearchDto } from './dto/update-saved-search.dto';
@@ -42,7 +50,12 @@ function validateApplyMode(
   }
 }
 
-const JOB_INCLUDES = { skills: true } as const;
+const JOB_INCLUDES = {
+  skills: true,
+  screeningQuestions: { orderBy: { position: 'asc' } },
+} as const;
+
+type JobWithIncludes = Prisma.JobGetPayload<{ include: typeof JOB_INCLUDES }>;
 
 interface FtsCursorPayload {
   rank: number;
@@ -134,6 +147,85 @@ export class JobsService {
     return job;
   }
 
+  /**
+   * Enrichment for a single job view (detail). Screening questions are
+   * already loaded via `JOB_INCLUDES`; this only resolves the caller's
+   * saved / applied state. Anonymous callers (`userId` undefined) get the
+   * questions only — both flags resolve to `null` downstream.
+   */
+  private async enrichForUser(
+    job: JobWithIncludes,
+    userId?: string,
+  ): Promise<JobResponseEnrichment> {
+    if (!userId) {
+      return { screeningQuestions: job.screeningQuestions };
+    }
+    const [saved, applied] = await Promise.all([
+      this.prisma.savedJob.findFirst({
+        where: { userId, jobId: job.id, deletedAt: null },
+        select: { id: true },
+      }),
+      this.prisma.application.findFirst({
+        where: {
+          userId,
+          jobId: job.id,
+          status: {
+            notIn: [ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED],
+          },
+        },
+        select: { id: true },
+      }),
+    ]);
+    return {
+      screeningQuestions: job.screeningQuestions,
+      isSaved: saved !== null,
+      isApplied: applied !== null,
+    };
+  }
+
+  /**
+   * Batch enrichment for list endpoints — avoids N+1 by fetching saved /
+   * applied job-id sets for the whole page in two queries.
+   */
+  private async enrichBatchForUser(
+    jobs: JobWithIncludes[],
+    userId?: string,
+  ): Promise<Map<string, JobResponseEnrichment>> {
+    const ids = jobs.map((j) => j.id);
+    const result = new Map<string, JobResponseEnrichment>();
+    for (const j of jobs) {
+      result.set(j.id, { screeningQuestions: j.screeningQuestions });
+    }
+    if (!userId || ids.length === 0) return result;
+
+    const [saved, applied] = await Promise.all([
+      this.prisma.savedJob.findMany({
+        where: { userId, jobId: { in: ids }, deletedAt: null },
+        select: { jobId: true },
+      }),
+      this.prisma.application.findMany({
+        where: {
+          userId,
+          jobId: { in: ids },
+          status: {
+            notIn: [ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED],
+          },
+        },
+        select: { jobId: true },
+      }),
+    ]);
+    const savedSet = new Set(saved.map((s) => s.jobId));
+    const appliedSet = new Set(applied.map((a) => a.jobId));
+    for (const j of jobs) {
+      result.set(j.id, {
+        screeningQuestions: j.screeningQuestions,
+        isSaved: savedSet.has(j.id),
+        isApplied: appliedSet.has(j.id),
+      });
+    }
+    return result;
+  }
+
   async createJob(userId: string, dto: CreateJobDto) {
     validateApplyMode(dto.applyMode, dto.applyUrl);
 
@@ -165,11 +257,25 @@ export class JobsService {
           salaryMin: dto.salaryMin ?? null,
           salaryMax: dto.salaryMax ?? null,
           salaryCurrency: dto.salaryCurrency ?? null,
+          requireResume: dto.requireResume ?? false,
           createdByUserId: userId,
           ...(dto.skillIds?.length
             ? {
                 skills: {
                   create: dto.skillIds.map((skillId) => ({ skillId })),
+                },
+              }
+            : {}),
+          ...(dto.screeningQuestions?.length
+            ? {
+                screeningQuestions: {
+                  create: dto.screeningQuestions.map((q) => ({
+                    question: q.question,
+                    type: q.type,
+                    required: q.required ?? false,
+                    options: q.options ?? [],
+                    position: q.position ?? 0,
+                  })),
                 },
               }
             : {}),
@@ -198,7 +304,9 @@ export class JobsService {
         },
       });
 
-      return toJobResponseDto(job);
+      return toJobResponseDto(job, {
+        screeningQuestions: job.screeningQuestions,
+      });
     });
   }
 
@@ -219,6 +327,22 @@ export class JobsService {
           await tx.jobSkill.createMany({
             data: dto.skillIds.map((skillId) => ({ jobId, skillId })),
             skipDuplicates: true,
+          });
+        }
+      }
+
+      if (dto.screeningQuestions !== undefined) {
+        await tx.screeningQuestion.deleteMany({ where: { jobId } });
+        if (dto.screeningQuestions.length > 0) {
+          await tx.screeningQuestion.createMany({
+            data: dto.screeningQuestions.map((q) => ({
+              jobId,
+              question: q.question,
+              type: q.type,
+              required: q.required ?? false,
+              options: q.options ?? [],
+              position: q.position ?? 0,
+            })),
           });
         }
       }
@@ -244,6 +368,9 @@ export class JobsService {
           ...(dto.salaryCurrency !== undefined && {
             salaryCurrency: dto.salaryCurrency,
           }),
+          ...(dto.requireResume !== undefined && {
+            requireResume: dto.requireResume,
+          }),
         },
         include: JOB_INCLUDES,
       });
@@ -265,7 +392,9 @@ export class JobsService {
         payload: { jobId, companyId: updated.companyId, changes },
       });
 
-      return toJobResponseDto(updated);
+      return toJobResponseDto(updated, {
+        screeningQuestions: updated.screeningQuestions,
+      });
     });
   }
 
@@ -277,7 +406,7 @@ export class JobsService {
     if (!job) throw new NotFoundException('JOB_NOT_FOUND');
 
     if (job.status === JobStatus.PUBLISHED) {
-      return toJobResponseDto(job);
+      return toJobResponseDto(job, await this.enrichForUser(job, userId));
     }
 
     // Non-published jobs require active membership in the owning company.
@@ -290,7 +419,7 @@ export class JobsService {
       throw new NotFoundException('JOB_NOT_FOUND');
     }
 
-    return toJobResponseDto(job);
+    return toJobResponseDto(job, await this.enrichForUser(job, userId));
   }
 
   async listJobs(query: ListJobsQueryDto, userId?: string) {
@@ -347,8 +476,10 @@ export class JobsService {
 
     const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
+    const enrichment = await this.enrichBatchForUser(items, userId);
+
     return {
-      data: items.map(toJobResponseDto),
+      data: items.map((job) => toJobResponseDto(job, enrichment.get(job.id))),
       meta: { nextCursor, hasNextPage, limit },
     };
   }
@@ -443,8 +574,10 @@ export class JobsService {
       .map((id) => byId.get(id))
       .filter((j): j is NonNullable<typeof j> => j !== undefined);
 
+    const enrichment = await this.enrichBatchForUser(ordered, userId);
+
     return {
-      data: ordered.map(toJobResponseDto),
+      data: ordered.map((job) => toJobResponseDto(job, enrichment.get(job.id))),
       meta: { nextCursor, hasMore },
     };
   }
@@ -490,7 +623,9 @@ export class JobsService {
         payload: { jobId, companyId: updated.companyId },
       });
 
-      return toJobResponseDto(updated);
+      return toJobResponseDto(updated, {
+        screeningQuestions: updated.screeningQuestions,
+      });
     });
   }
 
@@ -524,7 +659,9 @@ export class JobsService {
         payload: { jobId, companyId: updated.companyId },
       });
 
-      return toJobResponseDto(updated);
+      return toJobResponseDto(updated, {
+        screeningQuestions: updated.screeningQuestions,
+      });
     });
   }
 
@@ -614,11 +751,29 @@ export class JobsService {
 
     const { items, nextCursor, hasNextPage } = paginateRows(rows, limit);
 
+    // These are the caller's saved jobs — `isSaved` is always true. Resolve
+    // `isApplied` per job for the caller.
+    const appliedRows = await this.prisma.application.findMany({
+      where: {
+        userId,
+        jobId: { in: items.map((row) => row.job.id) },
+        status: {
+          notIn: [ApplicationStatus.WITHDRAWN, ApplicationStatus.REJECTED],
+        },
+      },
+      select: { jobId: true },
+    });
+    const appliedSet = new Set(appliedRows.map((a) => a.jobId));
+
     return {
       data: items.map((row) => ({
         savedJobId: row.id,
         savedAt: row.createdAt,
-        job: toJobResponseDto(row.job),
+        job: toJobResponseDto(row.job, {
+          screeningQuestions: row.job.screeningQuestions,
+          isSaved: true,
+          isApplied: appliedSet.has(row.job.id),
+        }),
       })),
       meta: { nextCursor, hasNextPage, limit },
     };
@@ -638,6 +793,7 @@ export class JobsService {
         name: dto.name ?? null,
         query: dto.query as Prisma.InputJsonValue,
         frequency: dto.frequency,
+        alertEnabled: dto.alertEnabled ?? true,
       },
     });
   }
@@ -674,6 +830,9 @@ export class JobsService {
           query: dto.query as Prisma.InputJsonValue,
         }),
         ...(dto.frequency !== undefined && { frequency: dto.frequency }),
+        ...(dto.alertEnabled !== undefined && {
+          alertEnabled: dto.alertEnabled,
+        }),
       },
     });
   }

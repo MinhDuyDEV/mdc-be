@@ -151,6 +151,14 @@ export const outboxEventSchemas = {
     jobId: z.string(),
     companyId: z.string(),
   }),
+  SavedSearchMatched: payload.extend({
+    savedSearchId: z.string(),
+    userId: z.string(),
+    deliveryId: z.string(),
+    jobIds: stringArray,
+    searchName: z.string().nullable().optional(),
+    frequency: z.string(),
+  }),
   JobUpdated: payload.extend({
     jobId: z.string(),
     companyId: z.string(),

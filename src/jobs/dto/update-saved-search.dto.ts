@@ -1,4 +1,10 @@
-import { IsEnum, IsObject, IsOptional, IsString } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsObject,
+  IsOptional,
+  IsString,
+} from 'class-validator';
 import { AlertFrequency } from './create-saved-search.dto';
 
 export class UpdateSavedSearchDto {
@@ -13,4 +19,8 @@ export class UpdateSavedSearchDto {
   @IsOptional()
   @IsEnum(AlertFrequency)
   frequency?: AlertFrequency;
+
+  @IsOptional()
+  @IsBoolean()
+  alertEnabled?: boolean;
 }

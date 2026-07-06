@@ -66,6 +66,15 @@ interface CandidateAddedToTalentPoolPayload {
   candidateUserId: string;
 }
 
+interface SavedSearchMatchedPayload {
+  savedSearchId: string;
+  userId: string;
+  deliveryId: string;
+  jobIds: string[];
+  searchName: string | null;
+  frequency: string;
+}
+
 type PrismaForRecipients = Pick<
   PrismaService,
   'companyMember' | 'recruiterSeat'
@@ -122,6 +131,7 @@ export class NotificationProcessor {
     ApplicationSubmitted: 'application_status_change',
     ConnectionRequested: 'connection_request',
     ConnectionAccepted: 'connection_accepted',
+    SavedSearchMatch: 'saved_search_match',
   };
 
   constructor(
@@ -366,6 +376,38 @@ export class NotificationProcessor {
 
     this.logger.debug(
       `CandidateAddedToTalentPool: ${created ? 'inserted' : 'skipped (duplicate)'} notification for candidate=${payload.candidateUserId}`,
+    );
+  }
+
+  /**
+   * In-app + push notification for a saved-search alert delivery. One
+   * notification per delivery (deduped by `deliveryId`), summarising the
+   * batch of matching jobs. Email is sent separately by `JobAlertProcessor`.
+   */
+  async processSavedSearchMatched(
+    payload: SavedSearchMatchedPayload,
+  ): Promise<void> {
+    const count = payload.jobIds.length;
+    if (count === 0) return;
+
+    const searchLabel = payload.searchName ?? 'your saved search';
+    const created = await this.insertNotification({
+      recipientUserId: payload.userId,
+      eventType: 'SavedSearchMatched',
+      aggregateId: payload.deliveryId,
+      type: 'SavedSearchMatch',
+      payloadJson: payload as unknown as Record<string, unknown>,
+      title:
+        count === 1
+          ? '1 new job matches your saved search'
+          : `${count} new jobs match your saved search`,
+      body: `${count} new job${count === 1 ? '' : 's'} matching "${searchLabel}" (${payload.frequency.toLowerCase()})`,
+      actionUrl: `/jobs?savedSearchId=${payload.savedSearchId}`,
+      aggregateIdJsonField: 'deliveryId',
+    });
+
+    this.logger.debug(
+      `SavedSearchMatched: ${created ? 'inserted' : 'skipped (duplicate)'} notification for user=${payload.userId} search=${payload.savedSearchId} jobs=${count}`,
     );
   }
 

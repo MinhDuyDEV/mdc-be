@@ -59,7 +59,7 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 .opencode/*
 .opencode.*
 .beads/*
-
+.pi/*
 # bv (beads viewer) local config and caches
 .bv/
 .fallow/
