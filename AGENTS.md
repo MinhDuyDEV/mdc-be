@@ -1,10 +1,10 @@
-<!-- Generated: 2026-05-27 | Updated: 2026-05-27 -->
+<!-- Generated: 2026-05-27 | Updated: 2026-07-06 -->
 
 # mdc-be
 
 ## Purpose
 
-Professional networking and jobs platform backend built as a NestJS 11 modular monolith. The application features 19 domain modules with strict architectural boundaries enforced via ESLint, a transactional outbox pattern for cross-domain events, and runtime role separation (api/worker/realtime/all) for horizontal scaling. The platform supports user profiles, connections, job postings, applications, messaging, real-time notifications, content moderation, and analytics.
+Professional networking and jobs platform backend built as a NestJS 11 modular monolith. The application features 24 domain modules with strict architectural boundaries enforced via ESLint, a transactional outbox pattern for cross-domain events, and runtime role separation (api/worker/realtime/all) for horizontal scaling. The platform supports user profiles, connections, job postings, applications, recruiting, messaging, real-time notifications, content moderation, analytics, billing, GDPR/CCPA compliance, observability, and A/B experiments.
 
 ## Key Files
 
@@ -14,7 +14,7 @@ Professional networking and jobs platform backend built as a NestJS 11 modular m
 | `tsconfig.json`       | Strict TypeScript configuration with ES2023 target and nodenext modules      |
 | `nest-cli.json`       | NestJS CLI configuration with sourceRoot pointing to src/                    |
 | `.env.example`        | Environment variable template with role-specific database pool limits        |
-| `eslint.config.mjs`   | Domain boundary enforcement via DOMAIN_IMPORT_ALLOWLIST (19 modules)         |
+| `eslint.config.mjs`   | Domain boundary enforcement via DOMAIN_MODULES + DOMAIN_IMPORT_ALLOWLIST (24 modules)         |
 | `.prettierrc`         | Code formatting rules (single quotes, trailing commas)                       |
 | `docker-compose.yml`  | Local infrastructure (PostgreSQL 16, Redis 7, MinIO, Elasticsearch 8.17)     |
 | `Dockerfile`          | Multi-stage production build configuration                                   |
@@ -27,12 +27,10 @@ Professional networking and jobs platform backend built as a NestJS 11 modular m
 
 | Directory   | Purpose                                                                                                    |
 | ----------- | ---------------------------------------------------------------------------------------------------------- |
-| `src/`      | Application source code with 21 domain modules, common utilities, and infrastructure (see `src/AGENTS.md`) |
+| `src/`      | Application source code with 24 domain modules, common utilities, and infrastructure (see `src/AGENTS.md`) |
 | `prisma/`   | Database schema and migrations for PostgreSQL (see `prisma/AGENTS.md`)                                     |
 | `test/`     | E2E test suite with Testcontainers support (see `test/AGENTS.md`)                                          |
 | `docs/`     | Architecture documentation, ADRs, runbooks, and frontend specs (see `docs/AGENTS.md`)                      |
-| `.claude/`  | Claude Code project instructions and configuration                                                         |
-| `.omc/`     | oh-my-claudecode state, memory, and session data                                                           |
 | `.github/`  | GitHub Actions CI/CD workflows (see `.github/AGENTS.md`)                                                   |
 | `.beads/`   | Beads issue tracking database (git-tracked)                                                                |
 | `coverage/` | Jest coverage reports (generated, not committed)                                                           |
@@ -52,7 +50,8 @@ Professional networking and jobs platform backend built as a NestJS 11 modular m
 
 **Domain Boundaries:**
 
-- 21 domain modules: admin, analytics, applications, auth, billing, companies, connections, email, feed, jobs, media, messaging, moderation, notifications, outbox, posts, profiles, realtime, recommendations, recruiting, search, users
+- 24 domain modules (enforced by `DOMAIN_MODULES` in `eslint.config.mjs`): admin, analytics, applications, auth, billing, companies, connections, email, feed, gdpr, jobs, media, messaging, moderation, notifications, observability, outbox, posts, profiles, realtime, recommendations, recruiting, search, users
+- Note: `experiments` is a 25th module with `DOMAIN_IMPORT_ALLOWLIST` entries but is not yet in `DOMAIN_MODULES` (cross-domain imports into `experiments` are not currently restricted)
 - Cross-domain imports require explicit allowlist entries in `eslint.config.mjs`
 - Violations fail lint with actionable error message
 - Test files are exempt from boundary checks
@@ -196,7 +195,7 @@ npx prisma validate   # Validate schema integrity
 
 - `@nestjs/core` 11.x - NestJS framework
 - `@nestjs/common` 11.x - Common utilities
-- `@nestjs/config` 11.x - Configuration management
+- `@nestjs/config` 4.x - Configuration management
 - `@nestjs/platform-express` 11.x - Express adapter
 - `@nestjs/platform-socket.io` 11.x - WebSocket support
 - `socket.io` ^4.8.3 - WebSocket transport layer
@@ -236,20 +235,20 @@ npx prisma validate   # Validate schema integrity
 
 **Validation:**
 
-- `class-validator` 0.14.x - Decorator-based validation
+- `class-validator` 0.15.x - Decorator-based validation
 - `class-transformer` 0.5.x - Object transformation
 - `zod` 4.x - Schema validation
 
 **Email:**
 
-- `nodemailer` 6.x - Email sending
+- `nodemailer` 8.x - Email sending
 - `handlebars` 4.x - Email templates
 
 **Logging:**
 
 - `nestjs-pino` 4.x - Pino integration
-- `pino` 9.x - Fast JSON logger
-- `pino-http` 10.x - HTTP request logging
+- `pino` 10.x - Fast JSON logger
+- `pino-http` 11.x - HTTP request logging
 
 **Observability:**
 
@@ -258,11 +257,34 @@ npx prisma validate   # Validate schema integrity
 - `@opentelemetry/exporter-metrics-otlp-http` 0.x - Metrics exporter
 - `@opentelemetry/exporter-trace-otlp-http` 0.x - Trace exporter
 - `@opentelemetry/sdk-node` 0.x - Node SDK
+- `prom-client` 15.x - Prometheus metrics registry, counters, histograms (observability module)
 
 **Security:**
 
 - `helmet` 8.x - Security headers
 - `cookie-parser` 1.x - Cookie parsing
+
+**Payments:**
+
+- `stripe` 17.x - Stripe payment processing and webhooks (billing module)
+
+**Push Notifications:**
+
+- `firebase-admin` 14.x - Firebase Cloud Messaging (FCM) for Android/iOS push (infra/push)
+- `apns2` 12.x - Apple Push Notification service (APNs) for iOS push (infra/push)
+
+**Feature Flags:**
+
+- `unleash-client` 6.x - Unleash server-side feature flag evaluation (infra/feature-flags, experiments module)
+
+**Media Processing & Virus Scanning:**
+
+- `sharp` 0.35.x - Image resizing/transformation (media module)
+- `@pompelmi/nestjs` 1.x / `pompelmi` 1.20.x - ClamAV virus scanning for uploaded media (media virus-scan service)
+
+**Compliance:**
+
+- `archiver` 7.x - GDPR data export ZIP archive generation (gdpr module)
 
 **Development:**
 
