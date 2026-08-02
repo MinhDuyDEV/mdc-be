@@ -1,5 +1,5 @@
 # Builder stage
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ FROM builder AS production-deps
 RUN npm prune --omit=dev && npm cache clean --force
 
 # Runtime stage
-FROM node:20-alpine AS runtime
+FROM node:25-alpine AS runtime
 
 WORKDIR /app
 
